@@ -50,11 +50,11 @@ int ltntstools_scr(uint8_t *pkt, uint64_t *scr)
 	return 0;
 }
 
-int ltntstools_contains_pes_header(uint8_t *pkt, int len)
+int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes)
 {
 	const char pattern[] = { 0x00, 0x00, 0x01 };
-	for (int i = 0; i < len - 4; i++) {
-		if (memcmp(pkt + i, pattern, sizeof(pattern)) == 0)
+	for (int i = 0; i < lengthBytes - 4; i++) {
+		if (memcmp(buf + i, pattern, sizeof(pattern)) == 0)
 			return i;
 	}
 

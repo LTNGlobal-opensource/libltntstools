@@ -52,7 +52,13 @@ __inline__ uint8_t ltntstools_continuity_counter(const uint8_t *pkt)
 
 int ltntstools_scr(uint8_t *pkt, uint64_t *scr);
 
-/* -1 if not found, else return byte index into pkt where 0000001 begins. */
-int ltntstools_contains_pes_header(uint8_t *pkt, int byteCount);
+/**
+ * @brief       Search buffer for the byte sequence 000001, a PES header signature.
+ * @param[in]   uint8_t *buf - Buffer of data, possibly containing a TS packet or a PES packet.
+ * @param[in]   int lengthBytes - Buffer length in bytes.
+ * @return      >= 0 - Success, return byte index into buf where 0000001 begins.
+ * @return      < 0 - Error
+ */
+int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes);
 
 #endif /* TS_H */
