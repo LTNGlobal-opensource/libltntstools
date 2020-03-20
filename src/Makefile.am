@@ -1,0 +1,39 @@
+
+AUTOMAKE_OPTIONS = foreign
+
+lib_LTLIBRARIES = libltntstools.la
+
+libltntstools_la_SOURCES  = klbitstream_readwriter.h
+libltntstools_la_SOURCES += xorg-list.h
+libltntstools_la_SOURCES += ts_packetizer.c
+libltntstools_la_SOURCES += libltntstools/ts_packetizer.h
+libltntstools_la_SOURCES += klringbuffer.h
+libltntstools_la_SOURCES += klringbuffer.c
+libltntstools_la_SOURCES += udp_receiver.c
+libltntstools_la_SOURCES += libltntstools/udp_receiver.h
+libltntstools_la_SOURCES += ts.c
+libltntstools_la_SOURCES += libltntstools/ts.h
+libltntstools_la_SOURCES += stats.c
+libltntstools_la_SOURCES += libltntstools/stats.h
+libltntstools_la_SOURCES += pes.c
+libltntstools_la_SOURCES += libltntstools/pes.h
+libltntstools_la_SOURCES += libltntstools/histogram.h
+
+libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
+	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
+
+if DEBUG
+  libltntstools_la_CFLAGS += -g
+endif
+
+libltntstools_includedir = $(includedir)/libltntstools
+
+libltntstools_include_HEADERS  = libltntstools/ltntstools.h
+libltntstools_include_HEADERS += libltntstools/ts.h
+libltntstools_include_HEADERS += libltntstools/ts_packetizer.h
+libltntstools_include_HEADERS += libltntstools/stats.h
+libltntstools_include_HEADERS += libltntstools/pes.h
+libltntstools_include_HEADERS += libltntstools/udp_receiver.h
+libltntstools_include_HEADERS += libltntstools/histogram.h
+libltntstools_include_HEADERS += libltntstools/hexdump.h
+
