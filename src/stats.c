@@ -158,3 +158,13 @@ uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s 
 	return pid->pps * 188 * 8;
 }
 
+uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statistics_s *stream)
+{
+	uint32_t null_bps = ltntstools_pid_stats_pid_get_bps(stream, 0x1fff);
+	uint32_t stream_bps = ltntstools_pid_stats_stream_get_bps(stream);
+
+	if (stream_bps == 0)
+		return 0;
+
+	return (null_bps * 100) / stream_bps;
+}
