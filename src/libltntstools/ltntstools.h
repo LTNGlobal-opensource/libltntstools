@@ -28,4 +28,6 @@
 #include <libltntstools/pes.h>
 #include <libltntstools/histogram.h>
 #include <libltntstools/hexdump.h>
+#include <libltntstools/throughput.h>
+#include <libltntstools/clocks.h>
 
