@@ -17,7 +17,7 @@ void ltntstools_throughput_write_value(struct ltntstools_throughput_s *stream, i
 	stream->Bps_window += value;
 }
 
-void ltntstools_throughput_write_bytes(struct ltntstools_throughput_s *stream, const uint8_t *buf, uint32_t byteCount)
+void ltntstools_throughput_write(struct ltntstools_throughput_s *stream, const uint8_t *buf, uint32_t byteCount)
 {
 	time_t now;
 	time(&now);
