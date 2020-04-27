@@ -18,6 +18,7 @@ libltntstools_la_SOURCES += libltntstools/stats.h
 libltntstools_la_SOURCES += pes.c
 libltntstools_la_SOURCES += libltntstools/pes.h
 libltntstools_la_SOURCES += libltntstools/histogram.h
+libltntstools_la_SOURCES += time.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
