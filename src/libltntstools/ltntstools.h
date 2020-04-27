@@ -31,4 +31,5 @@
 #include <libltntstools/throughput.h>
 #include <libltntstools/clocks.h>
 #include <libltntstools/time.h>
+#include <libltntstools/segmentwriter.h>
 

@@ -21,6 +21,9 @@ libltntstools_la_SOURCES += libltntstools/histogram.h
 libltntstools_la_SOURCES += throughput.c
 libltntstools_la_SOURCES += clocks.c
 libltntstools_la_SOURCES += time.c
+libltntstools_la_SOURCES += libltntstools/time.h
+libltntstools_la_SOURCES += segmentwriter.c
+libltntstools_la_SOURCES += libltntstools/segmentwriter.h
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -41,4 +44,6 @@ libltntstools_include_HEADERS += libltntstools/histogram.h
 libltntstools_include_HEADERS += libltntstools/hexdump.h
 libltntstools_include_HEADERS += libltntstools/throughput.h
 libltntstools_include_HEADERS += libltntstools/clocks.h
+libltntstools_include_HEADERS += libltntstools/time.h
+libltntstools_include_HEADERS += libltntstools/segmentwriter.h
 
