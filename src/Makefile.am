@@ -18,6 +18,8 @@ libltntstools_la_SOURCES += libltntstools/stats.h
 libltntstools_la_SOURCES += pes.c
 libltntstools_la_SOURCES += libltntstools/pes.h
 libltntstools_la_SOURCES += libltntstools/histogram.h
+libltntstools_la_SOURCES += throughput.c
+libltntstools_la_SOURCES += clocks.c
 libltntstools_la_SOURCES += time.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
@@ -37,4 +39,6 @@ libltntstools_include_HEADERS += libltntstools/pes.h
 libltntstools_include_HEADERS += libltntstools/udp_receiver.h
 libltntstools_include_HEADERS += libltntstools/histogram.h
 libltntstools_include_HEADERS += libltntstools/hexdump.h
+libltntstools_include_HEADERS += libltntstools/throughput.h
+libltntstools_include_HEADERS += libltntstools/clocks.h
 
