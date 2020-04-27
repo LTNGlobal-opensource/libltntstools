@@ -10,7 +10,7 @@
 #include "libltntstools/time.h"
 #include "klringbuffer.h"
 
-#define LOCAL_DEBUG 1
+#define LOCAL_DEBUG 0
 
 struct ltntstools_segmentwriter_s
 {
