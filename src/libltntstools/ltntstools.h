@@ -32,4 +32,5 @@
 #include <libltntstools/clocks.h>
 #include <libltntstools/time.h>
 #include <libltntstools/segmentwriter.h>
+#include <libltntstools/nal.h>
 

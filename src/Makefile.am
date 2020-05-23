@@ -12,6 +12,7 @@ libltntstools_la_SOURCES += klringbuffer.c
 libltntstools_la_SOURCES += udp_receiver.c
 libltntstools_la_SOURCES += libltntstools/udp_receiver.h
 libltntstools_la_SOURCES += ts.c
+libltntstools_la_SOURCES += nal.c
 libltntstools_la_SOURCES += libltntstools/ts.h
 libltntstools_la_SOURCES += stats.c
 libltntstools_la_SOURCES += libltntstools/stats.h
@@ -36,6 +37,7 @@ libltntstools_includedir = $(includedir)/libltntstools
 
 libltntstools_include_HEADERS  = libltntstools/ltntstools.h
 libltntstools_include_HEADERS += libltntstools/ts.h
+libltntstools_include_HEADERS += libltntstools/nal.h
 libltntstools_include_HEADERS += libltntstools/ts_packetizer.h
 libltntstools_include_HEADERS += libltntstools/stats.h
 libltntstools_include_HEADERS += libltntstools/pes.h
