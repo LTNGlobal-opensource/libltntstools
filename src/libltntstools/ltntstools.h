@@ -30,4 +30,5 @@
 #include <libltntstools/hexdump.h>
 #include <libltntstools/throughput.h>
 #include <libltntstools/clocks.h>
+#include <libltntstools/throughput_hires.h>
 
