@@ -31,4 +31,7 @@
 #include <libltntstools/throughput.h>
 #include <libltntstools/clocks.h>
 #include <libltntstools/throughput_hires.h>
+#include <libltntstools/time.h>
+#include <libltntstools/segmentwriter.h>
+#include <libltntstools/nal.h>
 
