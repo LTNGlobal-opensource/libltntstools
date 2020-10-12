@@ -27,6 +27,7 @@ struct ltntstools_segmentwriter_s
 
 	FILE *fh;
 	char *filenamePrefix;
+	char *filenameSuffix;
 	char *filename;
 };
 
@@ -45,7 +46,10 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 		if (s->fh == NULL) {
 			if (s->filename)
 				free(s->filename);
-			s->filename = strdup(s->filenamePrefix);
+			char ts[64];
+			libltntstools_getTimestamp(&ts[0], sizeof(ts), NULL);
+			s->filename = realloc(s->filename, 512);
+			sprintf(s->filename, "%s-%s%s", s->filenamePrefix, ts, s->filenameSuffix);
 		}
 	} else
 	if (s->writeMode == 1) {
@@ -53,7 +57,7 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 			char ts[64];
 			libltntstools_getTimestamp(&ts[0], sizeof(ts), NULL);
 			s->filename = realloc(s->filename, 512);
-			sprintf(s->filename, "%s-%s.ts", s->filenamePrefix, ts);
+			sprintf(s->filename, "%s-%s%s", s->filenamePrefix, ts, s->filenameSuffix);
 		}
 	}
 
@@ -90,17 +94,24 @@ void *ltntstools_segmentwriter_threadFunc(void *p)
 		}
 	}
 
+	free(s->filenamePrefix);
+	free(s);
+
 	s->threadRunning = 0;
 	s->threadTerminated = 1;
 	return NULL;
 }
 
-int ltntstools_segmentwriter_alloc(void **hdl, const char *filenamePrefix, int writeMode)
+int ltntstools_segmentwriter_alloc(void **hdl, const char *filenamePrefix, const char *filenameSuffix, int writeMode)
 {
 	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)calloc(1, sizeof(*s));
 
 	pthread_mutex_init(&s->mutex, NULL);
 	s->filenamePrefix = strdup(filenamePrefix);
+	if (filenameSuffix == NULL)
+		s->filenameSuffix = strdup(".ts");
+	else
+		s->filenameSuffix = strdup(filenameSuffix);
 	s->writeMode = writeMode;
 	s->rb = rb_new(64 * 1024, 1024 * 1024);
 
@@ -114,11 +125,7 @@ void ltntstools_segmentwriter_free(void *hdl)
 	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)hdl;
 	if (s->threadRunning) {
 		s->threadTerminate = 1;
-		while (!s->threadTerminated)
-			usleep(5 * 1000);
 	}
-	free(s->filenamePrefix);
-	free(s);
 }
 
 ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t length)
@@ -132,4 +139,16 @@ ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t len
 
 	return len;
 }
+
+int ltntstools_segmentwriter_get_current_filename(void *hdl, char *dst, int lengthBytes)
+{
+	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)hdl;
+	if (!s->fh)
+		return -1;
+
+	strncpy(dst, &s->filename[0], lengthBytes);
+
+	return 0;
+}
+
 
