@@ -10,8 +10,6 @@
 #include "libltntstools/time.h"
 
 #include "tr101290-types.h"
-#include "tr101290-events.h"
-#include "tr101290-alarms.h"
 
 #define LOCAL_DEBUG 1
 

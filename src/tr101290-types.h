@@ -52,6 +52,9 @@ struct ltntstools_tr101290_s
 	int consecutiveSyncBytes;
 };
 
+#include "tr101290-events.h"
+#include "tr101290-alarms.h"
+
 #ifdef __cplusplus
 };
 #endif
