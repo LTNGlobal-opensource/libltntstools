@@ -9,24 +9,11 @@
 #include "libltntstools/tr101290.h"
 #include "libltntstools/time.h"
 
+#include "tr101290-types.h"
+
 #define LOCAL_DEBUG 1
 
-struct tr_event_s
-{
-	int enabled;
-	int priorityNr;
-	enum ltntstools_tr101290_event_e id;
-	char name[64];
-
-	int raised;
-	int report;
-	struct timeval lastRaised;
-	struct timeval lastReported;
-	struct timeval nextReport;
-	struct timeval reportInterval;
-	int autoClearAlarmAfterReport;
-
-} tr_events_tbl[] =
+struct tr_event_s tr_events_tbl[] =
 {
 	[E101290_UNDEFINED]{ 0, 1, E101290_UNDEFINED, "E101290_UNDEFINED", 0, 0, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0 },
 
@@ -125,25 +112,6 @@ struct tr_event_s
 	},
 
         /* Priority 3 - Unsupported */
-};
-
-struct ltntstools_tr101290_s
-{
-	pthread_t threadId;
-	int threadTerminate, threadTerminated, threadRunning;
-
-	ltntstools_tr101290_notification cb_notify;
-	void *userContext;
-
-	pthread_mutex_t mutex;
-	struct tr_event_s *event_tbl; /* A cloned and modified version of the tr_events_tbl */
-
-	/* Alarm list for reporting to user */
-	int alarmCount;
-	struct ltntstools_tr101290_alarm_s *alarm_tbl;
-
-	/* Vars to help track alarm stats */
-	int consecutiveSyncBytes;
 };
 
 static int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);

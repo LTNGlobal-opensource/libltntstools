@@ -26,6 +26,7 @@ libltntstools_la_SOURCES += time.c
 libltntstools_la_SOURCES += libltntstools/time.h
 libltntstools_la_SOURCES += segmentwriter.c
 libltntstools_la_SOURCES += libltntstools/segmentwriter.h
+libltntstools_la_SOURCES += tr101290-types.h
 libltntstools_la_SOURCES += tr101290.c
 libltntstools_la_SOURCES += libltntstools/tr101290.h
 
