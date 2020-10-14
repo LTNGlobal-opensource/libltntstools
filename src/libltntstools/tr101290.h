@@ -58,6 +58,7 @@ struct ltntstools_tr101290_alarm_s
 
 	char description[256];
 };
+void ltntstools_tr101290_event_dprintf(int fd, struct ltntstools_tr101290_alarm_s *alarm);
 
 typedef void (*ltntstools_tr101290_notification)(void *userContext, struct ltntstools_tr101290_alarm_s *array, int count);
 

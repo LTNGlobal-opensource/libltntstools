@@ -22,12 +22,15 @@ void *ltntstools_tr101290_threadFunc(void *p)
 	while (!s->threadTerminate) {
 		usleep(10 * 1000);
 
+		/* For each possible event, determine if we need to build and alarm
+		 * record to inform the user (via callback.
+		 */
 		for (int i = 1; i < (int)E101290_MAX; i++) {
 			struct tr_event_s *ev = &s->event_tbl[i];
 			if (ev->enabled == 0)
 				continue;
 
-			/* MMM: Find all events we should be reproting on,  */
+			/* Find all events we should be reproting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
 #if LOCAL_DEBUG
 				printf("%s(?, %s) will report\n", __func__, ltntstools_tr101290_event_name_ascii(ev->id));
@@ -40,7 +43,14 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				alarm->priorityNr = ltntstools_tr101290_event_priority(ev->id);
 				alarm->raised = ev->raised;
 				gettimeofday(&alarm->timestamp, NULL);
-				strcpy(alarm->description, "Alarm raised");
+
+				time_t when = alarm->timestamp.tv_sec;
+				struct tm *whentm = localtime(&when);
+				char ts[64];
+				strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
+
+				sprintf(alarm->description, "%s: Alarm %s", ts, alarm->raised ? "raised" : "cleared");
+
 				s->alarmCount++;
 
 				/* Decide the next time we should report for this event condition. */

@@ -11,7 +11,7 @@
 
 #include "tr101290-types.h"
 
-#define LOCAL_DEBUG 1
+#define LOCAL_DEBUG 0
 
 struct tr_event_s tr_events_tbl[] =
 {
@@ -223,7 +223,9 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 {
 	struct tr_event_s *ev = &s->event_tbl[event];
 
-	//printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
+#if LOCAL_DEBUG
+	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
+#endif
 
 	if (ev->enabled == 0) {
 		return 0;
@@ -239,10 +241,6 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 
 	if (timercmp(&now, &ev->nextReport, <)) {
 		createUserAlarm = 0;
-	} else {
-#if LOCAL_DEBUG
-		printf("%s(?, %s) - create alarm\n", __func__, ltntstools_tr101290_event_name_ascii(event));
-#endif
 	}
 
 	return createUserAlarm;

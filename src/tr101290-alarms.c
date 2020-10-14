@@ -35,3 +35,13 @@ void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltnts
 	ev->report = 1;
 }
 
+void ltntstools_tr101290_event_dprintf(int fd, struct ltntstools_tr101290_alarm_s *alarm)
+{
+	dprintf(fd, "@%d.%6d -- Event P%d: %s %s - '%s'\n",
+		(int)alarm->timestamp.tv_sec,
+		(int)alarm->timestamp.tv_usec,
+		alarm->priorityNr,
+		ltntstools_tr101290_event_name_ascii(alarm->id),
+		alarm->raised ? "raised" : "cleared",
+		alarm->description);
+}
