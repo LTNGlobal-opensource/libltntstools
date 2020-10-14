@@ -30,6 +30,8 @@ libltntstools_la_SOURCES += tr101290-types.h
 libltntstools_la_SOURCES += tr101290.c
 libltntstools_la_SOURCES += tr101290-events.h
 libltntstools_la_SOURCES += tr101290-events.c
+libltntstools_la_SOURCES += tr101290-alarms.h
+libltntstools_la_SOURCES += tr101290-alarms.c
 libltntstools_la_SOURCES += libltntstools/tr101290.h
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \

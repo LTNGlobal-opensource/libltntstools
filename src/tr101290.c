@@ -11,11 +11,9 @@
 
 #include "tr101290-types.h"
 #include "tr101290-events.h"
+#include "tr101290-alarms.h"
 
 #define LOCAL_DEBUG 1
-
-static void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
-static void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 
 void *ltntstools_tr101290_threadFunc(void *p)
 {
@@ -111,28 +109,6 @@ void ltntstools_tr101290_free(void *hdl)
 	}
 	free(s->event_tbl);
 	free(s);
-}
-
-static void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event)
-{
-#if LOCAL_DEBUG
-	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
-#endif
-	struct tr_event_s *ev = &s->event_tbl[event];
-
-	ev->raised = 1;
-	ev->report = 1;
-}
-
-static void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event)
-{
-#if LOCAL_DEBUG
-	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
-#endif
-	struct tr_event_s *ev = &s->event_tbl[event];
-
-	ev->raised = 0;
-	ev->report = 1;
 }
 
 ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount)
