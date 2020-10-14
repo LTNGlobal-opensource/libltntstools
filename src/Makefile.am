@@ -26,6 +26,8 @@ libltntstools_la_SOURCES += time.c
 libltntstools_la_SOURCES += libltntstools/time.h
 libltntstools_la_SOURCES += segmentwriter.c
 libltntstools_la_SOURCES += libltntstools/segmentwriter.h
+libltntstools_la_SOURCES += tr101290.c
+libltntstools_la_SOURCES += libltntstools/tr101290.h
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -50,4 +52,5 @@ libltntstools_include_HEADERS += libltntstools/throughput_hires.h
 libltntstools_include_HEADERS += libltntstools/clocks.h
 libltntstools_include_HEADERS += libltntstools/time.h
 libltntstools_include_HEADERS += libltntstools/segmentwriter.h
+libltntstools_include_HEADERS += libltntstools/tr101290.h
 
