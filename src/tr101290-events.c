@@ -43,12 +43,13 @@ struct tr_event_s tr_events_tbl[] =
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_3__PAT_ERROR]{
-		.enabled = 0, .priorityNr = 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_3__PAT_ERROR, "E101290_P1_3__PAT_ERROR",
 		.raised = 1 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 5, /* Seconds */
 		.timerRequired = 1,
-		.timerAlarmPeriodms = 100,
+		.timerAlarmPeriodms = 500,
 		.timerId = 0,
 	},
 	[E101290_P1_3a__PAT_ERROR_2]{

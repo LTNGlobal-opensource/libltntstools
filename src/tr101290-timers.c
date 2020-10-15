@@ -13,27 +13,34 @@
 
 #include "tr101290-types.h"
 
-#define LOCAL_DEBUG 0
+#define LOCAL_DEBUG 1
+
+struct timer_context_s
+{
+	struct ltntstools_tr101290_s *s;
+	struct tr_event_s *ev;
+};
+struct timer_context_s *_new_timer_context(struct ltntstools_tr101290_s *s, struct tr_event_s *ev)
+{
+	struct timer_context_s *ctx = malloc(sizeof(*ctx));
+	ctx->s = s;
+	ctx->ev = ev;
+	return ctx;
+}
 
 void timer_thread_handler(union sigval sv)
 {
-	struct tr_event_s *ev = sv.sival_ptr;
-
-	// Implement s, so we can
-	// ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event)
-
-	ev->raised = 1;
-	gettimeofday(&ev->lastChanged, NULL);
-#if 0
-	ev->nextReport = ev->lastChanged;
-#endif
+	struct timer_context_s *ctx = sv.sival_ptr;
+	struct ltntstools_tr101290_s *s = ctx->s;
+	struct tr_event_s *ev = ctx->ev;
 
 #if LOCAL_DEBUG
 	printf("%d.%06d fired %s\n",
-		(int)ev->lastRaised.tv_sec,
-		(int)ev->lastRaised.tv_usec,
+		(int)ev->lastChanged.tv_sec,
+		(int)ev->lastChanged.tv_usec,
 		ltntstools_tr101290_event_name_ascii(ev->id));
 #endif
+	ltntstools_tr101290_alarm_raise(s, ev->id);
 }
 
 int ltntstools_tr101290_timers_create(struct ltntstools_tr101290_s *s, struct tr_event_s *ev)
@@ -46,7 +53,7 @@ int ltntstools_tr101290_timers_create(struct ltntstools_tr101290_s *s, struct tr
 
 	sev.sigev_notify = SIGEV_THREAD;
 	sev.sigev_notify_function = &timer_thread_handler;
-	sev.sigev_value.sival_ptr = ev;
+	sev.sigev_value.sival_ptr = _new_timer_context(s, ev);
 	int ret = timer_create(CLOCK_REALTIME, &sev, &ev->timerId);
 	if (ret != 0) {
 		fprintf(stderr, "%s() error creating timer.\n", __func__);

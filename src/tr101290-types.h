@@ -16,6 +16,11 @@ extern "C" {
 #include "libltntstools/tr101290.h"
 #include "libltntstools/time.h"
 
+/* Set to 1 to include code that triggers test routines when certain files are present in /tmp.
+ * Production builds should ALWAYS be sero to zero.
+ */
+#define ENABLE_TESTING 1
+
 struct tr_event_s
 {
 	int enabled;
@@ -64,6 +69,7 @@ struct ltntstools_tr101290_s
 #include "tr101290-events.h"
 #include "tr101290-alarms.h"
 #include "tr101290-timers.h"
+#include "tr101290-p1.h"
 
 #ifdef __cplusplus
 };

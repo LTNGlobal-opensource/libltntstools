@@ -15,8 +15,6 @@
 
 #define LOCAL_DEBUG 1
 
-#define ENABLE_TESTING 1
-
 int64_t _timeval_to_ms(struct timeval *tv)
 {
 	return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
@@ -159,7 +157,7 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 	for (int i = 0; i < count; i++) {
                 struct tr_event_s *ev = &s->event_tbl[i];
 
-		if (0 && ev->timerRequired) {
+		if (ev->timerRequired) {
 			int ret = ltntstools_tr101290_timers_create(s, ev);
 			if (ret < 0) {
 				fprintf(stderr, "%s() Unable to create timer\n", __func__);
@@ -194,6 +192,7 @@ void ltntstools_tr101290_free(void *hdl)
 ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
+
 	struct timeval now;
 	gettimeofday(&now, NULL);
 
@@ -214,45 +213,7 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	/* The thread needs to understand how frequently we're getting write calls. */
 	gettimeofday(&s->lastWriteCall, NULL);
 
-	/* P1.2 - Sync Byte Error, sync byte != 0x47 */
-	for (int i = 0; i < packetCount; i += 188) {
-		int syncByte = 0x47;
-#if ENABLE_TESTING
-		FILE *fh = fopen("/tmp/manglesyncbyte", "rb");
-		if (fh) {
-			syncByte = 0x46;
-			fclose(fh);
-		}
-#endif
-
-		if (buf[i] != syncByte) {
-			/* Raise */
-			s->consecutiveSyncBytes = 0;
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR);
-		} else
-			s->consecutiveSyncBytes++;
-	}
-
-	if (s->consecutiveSyncBytes > 3) {
-		/* Clear Alarm */
-		struct tr_event_s *ev = &s->event_tbl[E101290_P1_2__SYNC_BYTE_ERROR];
-
-		if (ev->autoClearAlarmAfterReport) {
-			struct timeval interval = { ev->autoClearAlarmAfterReport, 0 };
-			struct timeval final;
-			timeradd(&ev->lastReported, &interval, &final);
-			
-			if (timercmp(&now, &final, >= )) {
-				ltntstools_tr101290_alarm_clear(s, ev->id);
-			}
-		}
-	}
-	if (s->consecutiveSyncBytes >= 50000) {
-		/* We never want the int to wrap back to zero. Once we're a certain size,
-		 * our wrap point needs to clear the reset of the 3->7 alarm condition above.
-		 */
-		s->consecutiveSyncBytes = 16; /* Stay clear of the window where sync byte is cleared. */
-	}
+	p1_write(s, buf, packetCount);
 
 	pthread_mutex_unlock(&s->mutex);
 
