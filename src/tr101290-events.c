@@ -12,107 +12,136 @@
 #include "tr101290-types.h"
 
 #define LOCAL_DEBUG 0
+#define TIMER_FIELD_DEFAULTS    .timerRequired = 0, .timerAlarmPeriodms = 0, .timerId = 0
 
 struct tr_event_s tr_events_tbl[] =
 {
-	[E101290_UNDEFINED]{ 0, 1, E101290_UNDEFINED, "E101290_UNDEFINED", 0, 0, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0 },
+	[E101290_UNDEFINED]{
+		.enabled = 0, .priorityNr = 1,
+		E101290_UNDEFINED, "E101290_UNDEFINED",
+		.raised = 0 /* Default not raised */, 1,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
+	},
 
 	/* Priority 1 */
 	[E101290_P1_1__TS_SYNC_LOSS]{
-		1, 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_1__TS_SYNC_LOSS, "E101290_P1_1__TS_SYNC_LOSS",
-		1 /* Default raised */, 1,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 1,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_2__SYNC_BYTE_ERROR]{
-		1, 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_2__SYNC_BYTE_ERROR, "E101290_P1_2__SYNC_BYTE_ERROR",
-		1 /* Default raised */, 1,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 1,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_3__PAT_ERROR]{
-		1, 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_3__PAT_ERROR, "E101290_P1_3__PAT_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		.timerRequired = 1,
+		.timerAlarmPeriodms = 100,
+		.timerId = 0,
 	},
 	[E101290_P1_3a__PAT_ERROR_2]{
-		1, 1,
+		.enabled = 0, .priorityNr = 1,
 		E101290_P1_3a__PAT_ERROR_2, "E101290_P1_3a__PAT_ERROR_2",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_4__CONTINUITY_COUNTER_ERROR]{
-		1, 1,
+		.enabled = 0, .priorityNr = 1,
 		E101290_P1_4__CONTINUITY_COUNTER_ERROR, "E101290_P1_4__CONTINUITY_COUNTER_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_5__PMT_ERROR]{
-		1, 1,
+		.enabled = 0, .priorityNr = 1,
 		E101290_P1_5__PMT_ERROR, "E101290_P1_5__PMT_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_5a__PMT_ERROR_2]{
-		1, 1,
+		.enabled = 0, .priorityNr = 1,
 		E101290_P1_5a__PMT_ERROR_2, "E101290_P1_5a__PMT_ERROR_2",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_6__PID_ERROR]{
-		1, 1,
+		.enabled = 0, .priorityNr = 1,
 		E101290_P1_6__PID_ERROR, "E101290_P1_6__PID_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 
         /* Priority 2 */
 	[E101290_P2_1__TRANSPORT_ERROR]{
-		1, 2,
+		.enabled = 0, .priorityNr = 2,
 		E101290_P2_1__TRANSPORT_ERROR, "E101290_P2_1__TRANSPORT_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P2_2__CRC_ERROR]{
-		1, 2,
+		.enabled = 0, .priorityNr = 2,
 		E101290_P2_2__CRC_ERROR, "E101290_P2_2__CRC_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P2_3__PCR_ERROR]{
-		1, 2,
+		.enabled = 0, .priorityNr = 2,
 		E101290_P2_3__PCR_ERROR, "E101290_P2_3__PCR_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P2_3a__PCR_REPETITION_ERROR]{
-		1, 2,
+		.enabled = 0, .priorityNr = 2,
 		E101290_P2_3a__PCR_REPETITION_ERROR, "E101290_P2_3a__PCR_REPETITION_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P2_4__PCR_ACCURACY_ERROR]{
-		1, 2,
+		.enabled = 0, .priorityNr = 2,
 		E101290_P2_4__PCR_ACCURACY_ERROR, "E101290_P2_4__PCR_ACCURACY_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P2_5__PTS_ERROR]{
-		1, 2,
+		.enabled = 0, .priorityNr = 2,
 		E101290_P2_5__PTS_ERROR, "E101290_P2_5__PTS_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P2_6__CAT_ERROR]{
-		1, 2,
+		.enabled = 0, .priorityNr = 2,
 		E101290_P2_6__CAT_ERROR, "E101290_P2_6__CAT_ERROR",
-		0 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0
+		.raised = 1 /* Default not raised */, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		TIMER_FIELD_DEFAULTS,
 	},
 
         /* Priority 3 - Unsupported */
 };
+
+int _event_table_entry_count(struct ltntstools_tr101290_s *s)
+{
+	return sizeof(tr_events_tbl) / sizeof(struct tr_event_s);
+}
 
 struct tr_event_s *ltntstools_tr101290_event_table_copy()
 {
@@ -230,16 +259,28 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 	if (ev->enabled == 0) {
 		return 0;
 	}
-	if (ev->report == 0) {
+#if 0
+	if (ev->reportXX == 0) {
 		return 0;
 	}
+#endif
 
 	/* Decide whether we need to raise an alarm record for this. */
 	int createUserAlarm = 1;
 	struct timeval now;
 	gettimeofday(&now, NULL);
 
-	if (timercmp(&now, &ev->nextReport, <)) {
+	/* See if we're entitled to report this change, don't report more than once in a given window.
+	 * For a given event, see how often is should be reported and skip over-reporting.
+	 */
+	struct timeval nextReport;
+	timeradd(&ev->lastReported, &ev->reportInterval, &nextReport);
+
+	struct timeval diff;
+	timersub(&nextReport, &now, &diff);
+//printf("%d.%d\n", diff.tv_sec, diff.tv_usec);
+
+	if (timercmp(&now, &nextReport, <)) {
 		createUserAlarm = 0;
 	}
 

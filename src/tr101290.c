@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <time.h>
 
 #include "libltntstools/tr101290.h"
 #include "libltntstools/time.h"
@@ -13,14 +15,51 @@
 
 #define LOCAL_DEBUG 1
 
+int64_t _timeval_to_ms(struct timeval *tv)
+{
+	return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
+}
+
+static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
+{
+	struct timeval now;
+	gettimeofday(&now, NULL);
+
+	/* Assume we have transport loss until the stats tell us different. */
+	int lost = 1;
+
+	struct timeval diff;
+	timersub(&now, &s->lastWriteCall, &diff);
+
+	int64_t ms = _timeval_to_ms(&diff);
+	if (ms < 20) {
+		lost = 0;
+	} else {
+#if LOCAL_DEBUG
+		//printf("LOS for %" PRIi64 " ms\n", ms);
+#endif
+	}
+
+	return lost;
+}
+
 void *ltntstools_tr101290_threadFunc(void *p)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)p;
 
 	s->threadRunning = 1;
 
+	struct timeval now;
 	while (!s->threadTerminate) {
 		usleep(10 * 1000);
+		gettimeofday(&now, NULL);
+
+		int conditionLOS = didExperienceTransportLoss(s);
+		if (conditionLOS) {
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
+		} else {
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
+		}
 
 		/* For each possible event, determine if we need to build and alarm
 		 * record to inform the user (via callback.
@@ -32,6 +71,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 
 			/* Find all events we should be reproting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
+				ev->lastReported = now;
 #if LOCAL_DEBUG
 				printf("%s(?, %s) will report\n", __func__, ltntstools_tr101290_event_name_ascii(ev->id));
 #endif
@@ -53,10 +93,8 @@ void *ltntstools_tr101290_threadFunc(void *p)
 
 				s->alarmCount++;
 
+#if 0
 				/* Decide the next time we should report for this event condition. */
-				struct timeval now;
-				gettimeofday(&now, NULL);
-
 				if (ev->report && ev->raised == 0) {
 					/* Don't raise it a second time around, if its a clear event. */
 					struct timeval theDistantFuture = { 0x0fffffff, 0 };
@@ -64,6 +102,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				} else {
 					timeradd(&now, &ev->reportInterval, &ev->nextReport);
 				}
+#endif
 			}
 
 			if (ev->autoClearAlarmAfterReport)
@@ -100,8 +139,27 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 	s->event_tbl = ltntstools_tr101290_event_table_copy();
 	s->userContext = userContext;
 	s->cb_notify = cb_notify;
-
 	pthread_mutex_init(&s->mutex, NULL);
+
+	int count = _event_table_entry_count(s);
+	for (int i = 0; i < count; i++) {
+                struct tr_event_s *ev = &s->event_tbl[i];
+
+		if (0 && ev->timerRequired) {
+			int ret = ltntstools_tr101290_timers_create(s, ev);
+			if (ret < 0) {
+				fprintf(stderr, "%s() Unable to create timer\n", __func__);
+				exit(1);
+			}
+			ret = ltntstools_tr101290_timers_arm(s, ev);
+			if (ret < 0) {
+				fprintf(stderr, "%s() Unable to arm timer\n", __func__);
+				exit(1);
+			}
+
+		}
+	}
+
 	*hdl = s;
 
 	return pthread_create(&s->threadId, NULL, ltntstools_tr101290_threadFunc, s);
@@ -128,12 +186,14 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 #endif
 	pthread_mutex_lock(&s->mutex);
 
+	/* The thread needs to understand how frequently we're getting write calls. */
+	gettimeofday(&s->lastWriteCall, NULL);
+
 	/* P1.2 - Sync Byte Error, sync byte != 0x47 */
 	for (int i = 0; i < packetCount; i += 188) {
 		if (buf[i] != 0x47) {
 			/* Raise */
 			s->consecutiveSyncBytes = 0;
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
 			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR);
 		} else
 			s->consecutiveSyncBytes++;
@@ -141,7 +201,6 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 
 	if (s->consecutiveSyncBytes > 3 && s->consecutiveSyncBytes <= 7) {
 		/* Clear Alarm */
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
 		ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR);
 	}
 	if (s->consecutiveSyncBytes >= 50000) {

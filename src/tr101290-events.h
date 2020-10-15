@@ -22,6 +22,8 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 
 void _tr101290_event_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 
+int _event_table_entry_count(struct ltntstools_tr101290_s *s);
+
 #ifdef __cplusplus
 };
 #endif

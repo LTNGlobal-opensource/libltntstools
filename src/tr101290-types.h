@@ -24,13 +24,20 @@ struct tr_event_s
 	char name[64];
 
 	int raised;
-	int report;
-	struct timeval lastRaised;
-	struct timeval lastReported;
-	struct timeval nextReport;
+	int reportXX;
+	struct timeval lastChanged;	/* When the raised state changes, we bump this timestamp. */
+	struct timeval lastReported;	/* Last time we sent this alarm via the user callback. */
+	struct timeval nextReportXX;
 	struct timeval reportInterval;
 	int autoClearAlarmAfterReport;
 
+	/* One timer per event, used to ensure time based events are properly tracked.
+	 * Timers are used per event, and fire when an event that was supposed to occur every
+	 * Nms doesn't occur, so the timer fires and an alarm condition is raised.
+	 */
+	int timerRequired; /* Boolean */
+	int timerAlarmPeriodms; /* If the timer isn't cancelled within this period, it fires and an alarm is raised. */
+	timer_t timerId;
 };
 
 struct ltntstools_tr101290_s
@@ -50,10 +57,13 @@ struct ltntstools_tr101290_s
 
 	/* Vars to help track alarm stats */
 	int consecutiveSyncBytes;
+	struct timeval now; /* Updated when a _write call arrives. */
+	struct timeval lastWriteCall;
 };
 
 #include "tr101290-events.h"
 #include "tr101290-alarms.h"
+#include "tr101290-timers.h"
 
 #ifdef __cplusplus
 };

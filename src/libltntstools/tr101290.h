@@ -100,6 +100,31 @@ int ltntstools_tr101290_event_processing_enable(void *hdl, enum ltntstools_tr101
 int ltntstools_tr101290_event_processing_disable_all(void *hdl);
 int ltntstools_tr101290_event_processing_enable_all(void *hdl);
 
+struct ltntstools_tr101290_summary_item_s
+{
+	enum ltntstools_tr101290_event_e id;
+
+	int enabled;	/* Is the stat actively being monitored. */
+	int priorityNr; /* 1 or 2, p3 not current supported. */
+	struct timeval last_update;
+	int raised;	/* Boolean, is the considered to be in alarm? */
+};
+void ltntstools_tr101290_summary_item_dprintf(int fd, struct ltntstools_tr101290_summary_item_s *summary_item);
+
+/**
+ * @brief       Return a summary of each event, regardless of whether the caller has enabled or disabled its reporting
+ *              capability, and return the state of each event (clear or raised), and the last date this condition changed.
+ *              This is considered a "polling helper" function, for simple application that don't want to track state
+ *              and handle that complexity in their nominated callback notification handler.
+ * @param[out]  void *hdl - Handle returned to the caller.
+ * @param[in]   struct ltntstools_tr101290_alarm_s **items - Array of items returned, caller must free the allocation
+ * @param[in]   int itemCount - Number of items in the array
+ * @return      0 on success else < 0.
+ */
+int ltntstools_tr101290_summary_get(void *hdl, struct ltntstools_tr101290_summary_item_s **item, int *itemCount);
+
+int ltntstools_tr101290_summary_report_dprintf(void *hdl, int fd);
+
 #ifdef __cplusplus
 };
 #endif

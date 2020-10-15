@@ -11,7 +11,7 @@
 
 #include "tr101290-types.h"
 
-#define LOCAL_DEBUG 1
+#define LOCAL_DEBUG 0
 
 void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event)
 {
@@ -20,8 +20,10 @@ void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltnts
 #endif
 	struct tr_event_s *ev = &s->event_tbl[event];
 
-	ev->raised = 1;
-	ev->report = 1;
+	if (ev->raised == 0) {
+		ev->raised = 1;
+		gettimeofday(&ev->lastChanged, NULL);
+	}
 }
 
 void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event)
@@ -31,8 +33,10 @@ void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltnts
 #endif
 	struct tr_event_s *ev = &s->event_tbl[event];
 
-	ev->raised = 0;
-	ev->report = 1;
+	if (ev->raised == 1) {
+		ev->raised = 0;
+		gettimeofday(&ev->lastChanged, NULL);
+	}
 }
 
 void ltntstools_tr101290_event_dprintf(int fd, struct ltntstools_tr101290_alarm_s *alarm)
