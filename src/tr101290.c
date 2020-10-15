@@ -36,7 +36,7 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 		lost = 0;
 	} else {
 #if LOCAL_DEBUG
-		printf("LOS for %" PRIi64 " ms\n", ms);
+		//printf("LOS for %" PRIi64 " ms\n", ms);
 #endif
 	}
 
@@ -153,11 +153,13 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 	s->cb_notify = cb_notify;
 	pthread_mutex_init(&s->mutex, NULL);
 
+	ltntstools_pid_stats_reset(&s->streamStatistics);
+
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {
                 struct tr_event_s *ev = &s->event_tbl[i];
 
-		if (ev->timerRequired) {
+		if (ev->enabled && ev->timerRequired) {
 			int ret = ltntstools_tr101290_timers_create(s, ev);
 			if (ret < 0) {
 				fprintf(stderr, "%s() Unable to create timer\n", __func__);
@@ -212,6 +214,8 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 
 	/* The thread needs to understand how frequently we're getting write calls. */
 	gettimeofday(&s->lastWriteCall, NULL);
+
+	ltntstools_pid_stats_update(&s->streamStatistics, buf, packetCount);
 
 	p1_write(s, buf, packetCount);
 

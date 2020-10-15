@@ -49,28 +49,33 @@ struct tr_event_s tr_events_tbl[] =
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
 		.autoClearAlarmAfterReport = 5, /* Seconds */
 		.timerRequired = 1,
-		.timerAlarmPeriodms = 500,
+		.timerAlarmPeriodms = 500, /* As per the spec */
 		.timerId = 0,
 	},
 	[E101290_P1_3a__PAT_ERROR_2]{
-		.enabled = 0, .priorityNr = 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_3a__PAT_ERROR_2, "E101290_P1_3a__PAT_ERROR_2",
 		.raised = 1 /* Default not raised */, 0,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
-		TIMER_FIELD_DEFAULTS,
+		.autoClearAlarmAfterReport = 5, /* Seconds */
+		.timerRequired = 0,
+		.timerAlarmPeriodms = 500, /* As per the spec */
+		.timerId = 0,
 	},
 	[E101290_P1_4__CONTINUITY_COUNTER_ERROR]{
-		.enabled = 0, .priorityNr = 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_4__CONTINUITY_COUNTER_ERROR, "E101290_P1_4__CONTINUITY_COUNTER_ERROR",
 		.raised = 1 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 5, /* Seconds */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_5__PMT_ERROR]{
 		.enabled = 0, .priorityNr = 1,
 		E101290_P1_5__PMT_ERROR, "E101290_P1_5__PMT_ERROR",
 		.raised = 1 /* Default not raised */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 5, /* Seconds */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_5a__PMT_ERROR_2]{

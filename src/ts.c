@@ -61,3 +61,14 @@ int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes)
 	return -1;
 }
 
+unsigned int ltntstools_get_section_tableid(unsigned char *pkt)
+{
+	int section_offset = 5;
+	if (ltntstools_has_adaption(pkt)) {
+		section_offset++;
+		section_offset += ltntstools_adaption_field_length(pkt);
+	}
+
+	return *(pkt + section_offset);
+}
+

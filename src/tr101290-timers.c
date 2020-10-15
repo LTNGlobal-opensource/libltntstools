@@ -34,13 +34,31 @@ void timer_thread_handler(union sigval sv)
 	struct ltntstools_tr101290_s *s = ctx->s;
 	struct tr_event_s *ev = ctx->ev;
 
-#if LOCAL_DEBUG
-	printf("%d.%06d fired %s\n",
-		(int)ev->lastChanged.tv_sec,
-		(int)ev->lastChanged.tv_usec,
-		ltntstools_tr101290_event_name_ascii(ev->id));
-#endif
-	ltntstools_tr101290_alarm_raise(s, ev->id);
+	/* We want a PAT every 100ms minimum. */
+	switch (ev->id) {
+	case E101290_P1_3__PAT_ERROR:
+	//case E101290_P1_3a__PAT_ERROR_2: /* Disabled, because its a duplicate of PAT_ERROR and creates duplicate triggers */
+	{
+		uint64_t count = ltntstools_pid_stats_pid_get_packet_count(&s->streamStatistics, 0);
+		if (s->PATCountLastTimer == count) {
+			/* PAT Activity has stopped. */
+			//ltntstools_tr101290_alarm_raise(s, ev->id);
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
+		} else {
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_3__PAT_ERROR);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_3a__PAT_ERROR_2);
+		}
+		s->PATCountLastTimer = count;
+		break;
+	}
+	default:
+		printf("%d.%06d fired %s\n",
+			(int)ev->lastChanged.tv_sec,
+			(int)ev->lastChanged.tv_usec,
+			ltntstools_tr101290_event_name_ascii(ev->id));
+		ltntstools_tr101290_alarm_raise(s, ev->id);
+	}
 }
 
 int ltntstools_tr101290_timers_create(struct ltntstools_tr101290_s *s, struct tr_event_s *ev)

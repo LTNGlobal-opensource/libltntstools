@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <libltntstools/stats.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -64,6 +65,10 @@ struct ltntstools_tr101290_s
 	int consecutiveSyncBytes;
 	struct timeval now; /* Updated when a _write call arrives. */
 	struct timeval lastWriteCall;
+
+	struct ltntstools_stream_statistics_s streamStatistics;
+	uint64_t PATCountLastTimer;
+	uint64_t CCCounterLastWrite;
 };
 
 #include "tr101290-events.h"

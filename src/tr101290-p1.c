@@ -16,6 +16,73 @@
 
 #define LOCAL_DEBUG 1
 
+static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+{
+	uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(&s->streamStatistics);
+
+#if ENABLE_TESTING
+	FILE *fh = fopen("/tmp/mangleccbyte", "rb");
+	if (fh) {
+		s->CCCounterLastWrite = count - 1;
+		fclose(fh);
+	}
+#endif
+	/* P1_4: Incorrect packet order */
+	if (s->CCCounterLastWrite != count) {
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR);
+	} else {
+		/* If the period of time between the last report and this clear is more than
+		 * five seconds, automatically clear the alarm.
+		 */
+		struct tr_event_s *ev = &s->event_tbl[E101290_P1_4__CONTINUITY_COUNTER_ERROR];
+
+		if (ev->autoClearAlarmAfterReport) {
+			struct timeval interval = { ev->autoClearAlarmAfterReport, 0 };
+			struct timeval final;
+			timeradd(&ev->lastReported, &interval, &final);
+
+			struct timeval now;
+			gettimeofday(&now, NULL);
+			if (timercmp(&now, &final, >= )) {
+				ltntstools_tr101290_alarm_clear(s, ev->id);
+			}
+		}
+	}
+	s->CCCounterLastWrite = count;
+
+	return packetCount;
+}
+
+static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+{
+	/* Look for a PAT */
+	for (int i = 0; i < packetCount; i += 188) {
+		uint16_t pid = ltntstools_pid(&buf[i]);
+		if (pid == 0) {
+			/* Good */
+
+			/* PID 0x0000 does not contain a table_id 0x00 */
+			unsigned char tableid = ltntstools_get_section_tableid((unsigned char *)&buf[i]);
+			if (tableid != 0) {
+				ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
+				ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
+			}
+
+			/* Scrambling_control_field is not 00 for PID 0x0000 */
+			if (ltntstools_transport_scrambling_control(&buf[i]) != 0) {
+				ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
+				ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
+			}
+		}
+	}
+
+	/* PID 0x0000 does not occur at least every 0,5 s
+	 * PAT has a time firing every 100ms, if no packets on pid 0 are found, we raise and error....
+	 */
+	
+	return packetCount;
+}
+
 ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
 {
 	struct timeval now;
@@ -76,7 +143,13 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 	/* End: P1.2 - Sync Byte Error, sync byte != 0x47. */
 
 	/* P1.3 - PAT_error */
+	p1_process_p1_3(s, buf, packetCount);
 	/* End: P1.3 - PAT_error */
+
+	/* P1.4 */
+	p1_process_p1_4(s, buf, packetCount);
+	/* End: P1.4 */
+	
 
 	return packetCount;
 }
