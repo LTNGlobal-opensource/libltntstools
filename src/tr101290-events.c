@@ -20,7 +20,8 @@ struct tr_event_s tr_events_tbl[] =
 		.enabled = 0, .priorityNr = 1,
 		E101290_UNDEFINED, "E101290_UNDEFINED",
 		.raised = 0 /* Default not raised */, 1,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 0,
 		TIMER_FIELD_DEFAULTS,
 	},
 
@@ -28,19 +29,21 @@ struct tr_event_s tr_events_tbl[] =
 	[E101290_P1_1__TS_SYNC_LOSS]{
 		.enabled = 1, .priorityNr = 1,
 		E101290_P1_1__TS_SYNC_LOSS, "E101290_P1_1__TS_SYNC_LOSS",
-		.raised = 1 /* Default not raised */, 1,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		.raised = 0 /* Default not raised */, 1,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 5, /* Seconds */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_2__SYNC_BYTE_ERROR]{
 		.enabled = 1, .priorityNr = 1,
 		E101290_P1_2__SYNC_BYTE_ERROR, "E101290_P1_2__SYNC_BYTE_ERROR",
-		.raised = 1 /* Default not raised */, 1,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		.raised = 0 /* Default not raised */, 1,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 5, /* Seconds */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_3__PAT_ERROR]{
-		.enabled = 1, .priorityNr = 1,
+		.enabled = 0, .priorityNr = 1,
 		E101290_P1_3__PAT_ERROR, "E101290_P1_3__PAT_ERROR",
 		.raised = 1 /* Default not raised */, 0,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
@@ -259,11 +262,6 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 	if (ev->enabled == 0) {
 		return 0;
 	}
-#if 0
-	if (ev->reportXX == 0) {
-		return 0;
-	}
-#endif
 
 	/* Decide whether we need to raise an alarm record for this. */
 	int createUserAlarm = 1;
@@ -276,14 +274,21 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 	struct timeval nextReport;
 	timeradd(&ev->lastReported, &ev->reportInterval, &nextReport);
 
-	struct timeval diff;
-	timersub(&nextReport, &now, &diff);
-//printf("%d.%d\n", diff.tv_sec, diff.tv_usec);
+	/* In a startup condition, ensure lastreported is less that changed, but close. */
+	if (ev->lastReported.tv_sec == 0)
+		ev->lastReported.tv_sec = ev->lastChanged.tv_sec - 1;
 
-	if (timercmp(&now, &nextReport, <)) {
+	if (timercmp(&ev->lastReported, &ev->lastChanged, >=)) {
 		createUserAlarm = 0;
 	}
 
+#if 0
+printf("lc: %d.%d lr: %d.%d\n",
+	ev->lastChanged.tv_sec, ev->lastChanged.tv_usec,
+	ev->lastReported.tv_sec, ev->lastReported.tv_usec);
+
+printf("create %d\n", createUserAlarm);
+#endif
 	return createUserAlarm;
 }
 

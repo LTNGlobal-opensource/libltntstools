@@ -15,6 +15,8 @@
 
 #define LOCAL_DEBUG 1
 
+#define ENABLE_TESTING 1
+
 int64_t _timeval_to_ms(struct timeval *tv)
 {
 	return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
@@ -36,7 +38,7 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 		lost = 0;
 	} else {
 #if LOCAL_DEBUG
-		//printf("LOS for %" PRIi64 " ms\n", ms);
+		printf("LOS for %" PRIi64 " ms\n", ms);
 #endif
 	}
 
@@ -58,7 +60,21 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		if (conditionLOS) {
 			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
 		} else {
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
+			/* If the period of time between the last report and this clear is more than
+			 * five seconds, automatically clear the alarm.
+			 */
+
+			struct tr_event_s *ev = &s->event_tbl[E101290_P1_1__TS_SYNC_LOSS];
+
+			if (ev->autoClearAlarmAfterReport) {
+				struct timeval interval = { ev->autoClearAlarmAfterReport, 0 };
+				struct timeval final;
+				timeradd(&ev->lastReported, &interval, &final);
+			
+				if (timercmp(&now, &final, >= )) {
+					ltntstools_tr101290_alarm_clear(s, ev->id);
+				}
+			}
 		}
 
 		/* For each possible event, determine if we need to build and alarm
@@ -72,6 +88,13 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			/* Find all events we should be reproting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
 				ev->lastReported = now;
+
+				/* Mark the last reported time slight int the future, to avoid duplicate
+				 * reports within a few useconds of each other
+				 */
+				struct timeval interval10ms = { 0, 1 * 1000 };
+				timeradd(&now, &interval10ms, &ev->lastReported);
+
 #if LOCAL_DEBUG
 				printf("%s(?, %s) will report\n", __func__, ltntstools_tr101290_event_name_ascii(ev->id));
 #endif
@@ -93,20 +116,11 @@ void *ltntstools_tr101290_threadFunc(void *p)
 
 				s->alarmCount++;
 
-#if 0
-				/* Decide the next time we should report for this event condition. */
-				if (ev->report && ev->raised == 0) {
-					/* Don't raise it a second time around, if its a clear event. */
-					struct timeval theDistantFuture = { 0x0fffffff, 0 };
-					timeradd(&now, &theDistantFuture, &ev->nextReport);
-				} else {
-					timeradd(&now, &ev->reportInterval, &ev->nextReport);
-				}
-#endif
 			}
-
+#if 0
 			if (ev->autoClearAlarmAfterReport)
 				_tr101290_event_clear(s, ev->id);
+#endif
 		}
 
 		/* Pass any alarms to the callback */
@@ -180,10 +194,21 @@ void ltntstools_tr101290_free(void *hdl)
 ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
+	struct timeval now;
+	gettimeofday(&now, NULL);
 
 #if LOCAL_DEBUG
 	//printf("%s(%d)\n", __func__, packetCount);
 #endif
+
+#if ENABLE_TESTING
+	FILE *fh = fopen("/tmp/droppayload", "rb");
+	if (fh) {
+		fclose(fh);
+		return packetCount;
+	}
+#endif
+
 	pthread_mutex_lock(&s->mutex);
 
 	/* The thread needs to understand how frequently we're getting write calls. */
@@ -191,7 +216,16 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 
 	/* P1.2 - Sync Byte Error, sync byte != 0x47 */
 	for (int i = 0; i < packetCount; i += 188) {
-		if (buf[i] != 0x47) {
+		int syncByte = 0x47;
+#if ENABLE_TESTING
+		FILE *fh = fopen("/tmp/manglesyncbyte", "rb");
+		if (fh) {
+			syncByte = 0x46;
+			fclose(fh);
+		}
+#endif
+
+		if (buf[i] != syncByte) {
 			/* Raise */
 			s->consecutiveSyncBytes = 0;
 			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR);
@@ -199,9 +233,19 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 			s->consecutiveSyncBytes++;
 	}
 
-	if (s->consecutiveSyncBytes > 3 && s->consecutiveSyncBytes <= 7) {
+	if (s->consecutiveSyncBytes > 3) {
 		/* Clear Alarm */
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR);
+		struct tr_event_s *ev = &s->event_tbl[E101290_P1_2__SYNC_BYTE_ERROR];
+
+		if (ev->autoClearAlarmAfterReport) {
+			struct timeval interval = { ev->autoClearAlarmAfterReport, 0 };
+			struct timeval final;
+			timeradd(&ev->lastReported, &interval, &final);
+			
+			if (timercmp(&now, &final, >= )) {
+				ltntstools_tr101290_alarm_clear(s, ev->id);
+			}
+		}
 	}
 	if (s->consecutiveSyncBytes >= 50000) {
 		/* We never want the int to wrap back to zero. Once we're a certain size,

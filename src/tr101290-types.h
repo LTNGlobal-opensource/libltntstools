@@ -29,7 +29,7 @@ struct tr_event_s
 	struct timeval lastReported;	/* Last time we sent this alarm via the user callback. */
 	struct timeval nextReportXX;
 	struct timeval reportInterval;
-	int autoClearAlarmAfterReport;
+	int autoClearAlarmAfterReport;  /* Automatically clear the alarm, if possible, 5 seconds after it returned to normal. */
 
 	/* One timer per event, used to ensure time based events are properly tracked.
 	 * Timers are used per event, and fire when an event that was supposed to occur every
