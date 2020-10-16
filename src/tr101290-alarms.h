@@ -19,6 +19,8 @@ extern "C" {
 void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 
+void ltntstools_tr101290_alarm_raise_all(struct ltntstools_tr101290_s *s);
+
 #ifdef __cplusplus
 };
 #endif

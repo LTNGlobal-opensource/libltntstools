@@ -49,6 +49,9 @@ void *ltntstools_tr101290_threadFunc(void *p)
 
 	s->threadRunning = 1;
 
+	/* Raise alert on every event */
+	ltntstools_tr101290_alarm_raise_all(s);
+
 	struct timeval now;
 	while (!s->threadTerminate) {
 		usleep(10 * 1000);
