@@ -10,6 +10,25 @@
 extern "C" {
 #endif
 
+struct ltntstools_pat_program_s
+{
+	uint32_t program_number;
+	uint32_t pid;
+};
+
+struct ltntstools_pat_s
+{
+	uint32_t transport_stream_id;
+	uint32_t version;
+	uint32_t current_next;
+
+	uint32_t program_count;
+	struct   ltntstools_pat_program_s programs[64];
+};
+struct ltntstools_pat_s *ltntstools_pat_alloc();
+void ltntstools_pat_free(struct ltntstools_pat_s *pat);
+void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd);
+
 int  ltntstools_pat_parser_alloc(void **hdl, void *userContext);
 void ltntstools_pat_parser_free(void *hdl);
 

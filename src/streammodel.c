@@ -16,6 +16,7 @@
 
 #include "libltntstools/streammodel.h"
 #include "libltntstools/ts.h"
+#include "libltntstools/pat.h"
 
 static void message(dvbpsi_t *handle, const dvbpsi_msg_level_t level, const char* msg);
 
@@ -207,9 +208,7 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 	struct streammodel_rom_s *rom = ps->rom;
 	struct streammodel_ctx_s *ctx = rom->ctx;
 
-#if LOCAL_DEBUG
-	printf("%s(%p)\n", __func__, ps);
-#endif
+	printf("%s(%p, pat %p) pid 0x%x model#%d\n", __func__, ps, p_pat, ps->pid, ps->rom->nr);
 
 	dvbpsi_pat_program_t *p_program = p_pat->p_first_program;
 
@@ -252,7 +251,6 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 
 	/* Don't delete p_pat, we're caching it. */
 	ps->p_pat = p_pat;
-
 }
 /* End: DVBPSI */
 
@@ -335,13 +333,11 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 	return packetCount;
 }
 
-void ltntstools_streammodel_dprintf(void *hdl, int fd)
+static void _streammodel_dprintf(struct streammodel_ctx_s *ctx, int fd, struct streammodel_rom_s *rom)
 {
-	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
-
-	pthread_mutex_lock(&ctx->rom_mutex);
+	dprintf(fd, "%s() model#%d\n", __func__, rom->nr);
 	for (int i = 0; i < MAX_ROM_PIDS; i++) {
-		struct streammodel_pid_s *ps = &ctx->next->pids[i];
+		struct streammodel_pid_s *ps = &rom->pids[i];
 		if (!ps->present)
 			continue;
 
@@ -350,6 +346,60 @@ void ltntstools_streammodel_dprintf(void *hdl, int fd)
 			ps->pidType,
 			ps->packetCount);
 	}
+}
+
+void ltntstools_streammodel_dprintf(void *hdl, int fd)
+{
+	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
+
+	pthread_mutex_lock(&ctx->rom_mutex);
+	_streammodel_dprintf(ctx, fd, ctx->next);
 	pthread_mutex_unlock(&ctx->rom_mutex);
+}
+
+int ltntstools_streammodel_query_model(void *hdl, struct ltntstools_pat_s **pat)
+{
+	int ret = 0;
+printf("%s()\n", __func__);
+
+	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
+
+	pthread_mutex_lock(&ctx->rom_mutex);
+	if (ctx->current->modelComplete) {
+
+//		_streammodel_dprintf(ctx, 0, ctx->current);
+
+		struct streammodel_pid_s *ps = &ctx->current->pids[0];
+
+		struct ltntstools_pat_s *p = ltntstools_pat_alloc();
+
+		dvbpsi_pat_t *stream_pat = ps->p_pat;
+		if (stream_pat) {
+
+			/* Convert the dvbpsi struct into a new obj. */
+			p->transport_stream_id = stream_pat->i_ts_id;
+			p->version = stream_pat->i_version;
+			p->current_next = stream_pat->b_current_next;
+
+			dvbpsi_pat_program_t *e = stream_pat->p_first_program;
+			while (e) {
+				p->programs[p->program_count].program_number = e->i_number;
+				p->programs[p->program_count].pid = e->i_pid;
+				p->program_count++;
+				e = e->p_next;
+			}
+			*pat = p;
+		} else {
+			ltntstools_pat_free(p);
+			ret = -1;
+		}
+
+
+	} else {
+		ret = -1;
+	}
+	pthread_mutex_unlock(&ctx->rom_mutex);
+
+	return ret;
 }
 
