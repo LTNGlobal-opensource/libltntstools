@@ -35,4 +35,6 @@
 #include <libltntstools/segmentwriter.h>
 #include <libltntstools/nal.h>
 #include <libltntstools/tr101290.h>
+#include <libltntstools/pat.h>
+#include <libltntstools/streammodel.h>
 

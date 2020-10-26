@@ -8,13 +8,19 @@
 #include <signal.h>
 #include <time.h>
 
-#include "libltntstools/tr101290.h"
-#include "libltntstools/time.h"
-#include "libltntstools/ts.h"
+#include "libltntstools/ltntstools.h"
 
 #include "tr101290-types.h"
 
 #define LOCAL_DEBUG 1
+
+static ssize_t p1_process_p1_5(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+{
+	/* PMT checking */
+	int complete = 0;
+	ltntstools_pat_parser_write(s->patParser, buf, packetCount, &complete);
+	return packetCount;
+}
 
 static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
 {
@@ -56,20 +62,20 @@ static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *b
 static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
 {
 	/* Look for a PAT */
-	for (int i = 0; i < packetCount; i += 188) {
-		uint16_t pid = ltntstools_pid(&buf[i]);
+	for (int i = 0; i < packetCount; i++) {
+		uint16_t pid = ltntstools_pid(&buf[i * 188]);
 		if (pid == 0) {
 			/* Good */
 
 			/* PID 0x0000 does not contain a table_id 0x00 */
-			unsigned char tableid = ltntstools_get_section_tableid((unsigned char *)&buf[i]);
+			unsigned char tableid = ltntstools_get_section_tableid((unsigned char *)&buf[i * 188]);
 			if (tableid != 0) {
 				ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
 				ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
 			}
 
 			/* Scrambling_control_field is not 00 for PID 0x0000 */
-			if (ltntstools_transport_scrambling_control(&buf[i]) != 0) {
+			if (ltntstools_transport_scrambling_control(&buf[i * 188]) != 0) {
 				ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
 				ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
 			}
@@ -101,17 +107,17 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 	 * or jitter, transport is lost for N ms, but resumes perfectly with zero
 	 * packet loss, in this case we never want to declare P1.2.
 	 */
-	for (int i = 0; i < packetCount; i += 188) {
+	for (int i = 0; i < packetCount; i++) {
 #if ENABLE_TESTING
 		FILE *fh = fopen("/tmp/manglesyncbyte", "rb");
 		if (fh) {
-			unsigned char *p = (unsigned char *)&buf[i];
+			unsigned char *p = (unsigned char *)&buf[i * 188];
 			*(p + 0) = 0x46;
 			fclose(fh);
 		}
 #endif
 
-		if (ltntstools_sync_present(&buf[i])) {
+		if (ltntstools_sync_present(&buf[i * 188])) {
 			s->consecutiveSyncBytes++;
 		} else {
 			/* Raise */
@@ -149,6 +155,10 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 	/* P1.4 */
 	p1_process_p1_4(s, buf, packetCount);
 	/* End: P1.4 */
+	
+	/* P1.5 */
+	p1_process_p1_5(s, buf, packetCount);
+	/* End: P1.5 */
 	
 
 	return packetCount;

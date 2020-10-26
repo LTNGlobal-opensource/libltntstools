@@ -158,6 +158,8 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 
 	ltntstools_pid_stats_reset(&s->streamStatistics);
 
+	ltntstools_pat_parser_alloc(&s->patParser, s);
+
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {
                 struct tr_event_s *ev = &s->event_tbl[i];

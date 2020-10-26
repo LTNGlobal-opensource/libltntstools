@@ -69,6 +69,8 @@ struct ltntstools_tr101290_s
 	struct ltntstools_stream_statistics_s streamStatistics;
 	uint64_t PATCountLastTimer;
 	uint64_t CCCounterLastWrite;
+
+	void *patParser; /* libdvbpsi based PAT parser, we need to understand where the PMT's are. */
 };
 
 #include "tr101290-events.h"

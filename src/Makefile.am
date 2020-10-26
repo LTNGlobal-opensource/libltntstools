@@ -12,6 +12,8 @@ libltntstools_la_SOURCES += klringbuffer.c
 libltntstools_la_SOURCES += udp_receiver.c
 libltntstools_la_SOURCES += libltntstools/udp_receiver.h
 libltntstools_la_SOURCES += ts.c
+libltntstools_la_SOURCES += libltntstools/pat.h
+libltntstools_la_SOURCES += pat.c
 libltntstools_la_SOURCES += nal.c
 libltntstools_la_SOURCES += libltntstools/ts.h
 libltntstools_la_SOURCES += stats.c
@@ -38,6 +40,8 @@ libltntstools_la_SOURCES += tr101290-p1.h
 libltntstools_la_SOURCES += tr101290-p1.c
 libltntstools_la_SOURCES += tr101290-summary.c
 libltntstools_la_SOURCES += libltntstools/tr101290.h
+libltntstools_la_SOURCES += libltntstools/streammodel.h
+libltntstools_la_SOURCES += streammodel.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -63,4 +67,6 @@ libltntstools_include_HEADERS += libltntstools/clocks.h
 libltntstools_include_HEADERS += libltntstools/time.h
 libltntstools_include_HEADERS += libltntstools/segmentwriter.h
 libltntstools_include_HEADERS += libltntstools/tr101290.h
+libltntstools_include_HEADERS += libltntstools/pat.h
+libltntstools_include_HEADERS += libltntstools/streammodel.h
 
