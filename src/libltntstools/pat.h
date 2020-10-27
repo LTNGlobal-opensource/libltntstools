@@ -11,6 +11,7 @@
  *
  * Caveats:
  *  PATs can ONLY carry a maximum of 64 programs.
+ *  Each program can have a maximum of 16 ES streams.
  */
 
 #include <stdio.h>
@@ -22,17 +23,35 @@
 extern "C" {
 #endif
 
+struct ltntstools_pmt_entry_s
+{
+	uint32_t stream_type;
+	uint32_t elementary_PID;
+};
+
+struct ltntstools_pmt_s
+{
+	uint32_t version_number;
+	uint32_t program_number;
+	uint32_t PCR_PID;
+
+	uint32_t stream_count;
+	struct ltntstools_pmt_entry_s streams[16];
+};
+
 /* See ISO13818-1 "program_association_section()" */
 struct ltntstools_pat_program_s
 {
 	uint32_t program_number;
-	uint32_t pid;
+	uint32_t program_map_PID;
+
+	struct ltntstools_pmt_s pmt;
 };
 
 struct ltntstools_pat_s
 {
 	uint32_t transport_stream_id;
-	uint32_t version;
+	uint32_t version_number;
 	uint32_t current_next_indicator;
 
 	uint32_t program_count;
@@ -45,6 +64,9 @@ void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd);
 
 typedef struct dvbpsi_pat_s dvbpsi_pat_t;
 struct ltntstools_pat_s * ltntstools_pat_alloc_from_existing(dvbpsi_pat_t *pat);
+
+typedef struct dvbpsi_pmt_s dvbpsi_pmt_t;
+void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t *pmt);
 
 #ifdef __cplusplus
 };

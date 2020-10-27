@@ -148,6 +148,11 @@ void _rom_activate(struct streammodel_ctx_s *ctx)
 	timeradd(&future, &ctx->now, &ctx->next->allowableWriteTime);
 }
 
+static struct streammodel_pid_s *_rom_current_find_pid(struct streammodel_ctx_s *ctx, uint16_t pid)
+{
+	return &ctx->current->pids[pid];
+}
+
 static struct streammodel_pid_s *_rom_next_find_pid(struct streammodel_ctx_s *ctx, uint16_t pid)
 {
 	return &ctx->next->pids[pid];
@@ -374,9 +379,24 @@ printf("%s()\n", __func__);
 		dvbpsi_pat_t *stream_pat = ps->p_pat;
 		if (stream_pat) {
 
-			struct ltntstools_pat_s *p = ltntstools_pat_alloc_from_existing(stream_pat);
+			struct ltntstools_pat_s *newpat = ltntstools_pat_alloc_from_existing(stream_pat);
 
-			*pat = p;
+			/* For each pmt in the model, add this to our new object. */
+			for (int i = 0; i < newpat->program_count; i++) {
+				if (newpat->programs[i].program_number == 0)
+					continue; /* Network PID */
+
+				struct streammodel_pid_s *c = _rom_current_find_pid(ctx, newpat->programs[i].program_map_PID);
+				if (c->present == 0 || c->p_pmt == NULL) {
+					fprintf(stderr, "%s() inactive pmt pid? 0x%x, should never happen.\n",
+						__func__, newpat->programs[i].program_map_PID);
+				} else {
+					ltntstools_pat_add_from_existing(newpat, c->p_pmt);
+				}
+				
+			}
+
+			*pat = newpat;
 
 		} else {
 			ret = -1;
