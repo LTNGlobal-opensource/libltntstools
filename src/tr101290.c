@@ -10,6 +10,7 @@
 
 #include "libltntstools/tr101290.h"
 #include "libltntstools/time.h"
+#include "libltntstools/streammodel.h"
 
 #include "tr101290-types.h"
 
@@ -158,7 +159,7 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 
 	ltntstools_pid_stats_reset(&s->streamStatistics);
 
-	ltntstools_pat_parser_alloc(&s->patParser, s);
+	ltntstools_streammodel_alloc(&s->smHandle);
 
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {

@@ -70,7 +70,7 @@ struct ltntstools_tr101290_s
 	uint64_t PATCountLastTimer;
 	uint64_t CCCounterLastWrite;
 
-	void *patParser; /* libdvbpsi based PAT parser, we need to understand where the PMT's are. */
+	void *smHandle; /* handle to a running PSIP stream modelling collector. */
 };
 
 #include "tr101290-events.h"

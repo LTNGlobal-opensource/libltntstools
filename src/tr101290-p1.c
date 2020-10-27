@@ -18,7 +18,7 @@ static ssize_t p1_process_p1_5(struct ltntstools_tr101290_s *s, const uint8_t *b
 {
 	/* PMT checking */
 	int complete = 0;
-	ltntstools_pat_parser_write(s->patParser, buf, packetCount, &complete);
+	ltntstools_streammodel_write(s->smHandle, buf, packetCount, &complete);
 	return packetCount;
 }
 
