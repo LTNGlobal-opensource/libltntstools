@@ -28,16 +28,20 @@ struct ltntstools_pmt_entry_s
 	uint32_t stream_type;
 	uint32_t elementary_PID;
 };
+int ltntstools_pmt_entry_compare(struct ltntstools_pmt_entry_s *a, struct ltntstools_pmt_entry_s *b);
 
 struct ltntstools_pmt_s
 {
 	uint32_t version_number;
 	uint32_t program_number;
+	uint32_t current_next_indicator;
 	uint32_t PCR_PID;
 
 	uint32_t stream_count;
-	struct ltntstools_pmt_entry_s streams[16];
+#define LTNTSTOOLS_PMT_ENTRIES_MAX 16
+	struct ltntstools_pmt_entry_s streams[LTNTSTOOLS_PMT_ENTRIES_MAX];
 };
+int ltntstools_pmt_compare(struct ltntstools_pmt_s *a, struct ltntstools_pmt_s *b);
 
 /* See ISO13818-1 "program_association_section()" */
 struct ltntstools_pat_program_s
@@ -47,6 +51,7 @@ struct ltntstools_pat_program_s
 
 	struct ltntstools_pmt_s pmt;
 };
+int ltntstools_pat_program_compare(struct ltntstools_pat_program_s *a, struct ltntstools_pat_program_s *b);
 
 struct ltntstools_pat_s
 {
@@ -55,13 +60,16 @@ struct ltntstools_pat_s
 	uint32_t current_next_indicator;
 
 	uint32_t program_count;
-	struct   ltntstools_pat_program_s programs[64];
+#define LTNTSTOOLS_PAT_ENTRIES_MAX 64
+	struct   ltntstools_pat_program_s programs[LTNTSTOOLS_PAT_ENTRIES_MAX];
 };
+int ltntstools_pat_compare(struct ltntstools_pat_s *a, struct ltntstools_pat_s *b);
 
 struct ltntstools_pat_s *ltntstools_pat_alloc();
 void ltntstools_pat_free(struct ltntstools_pat_s *pat);
 void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd);
 
+/* Helper functions from libdvbpsi to the internal model. */
 typedef struct dvbpsi_pat_s dvbpsi_pat_t;
 struct ltntstools_pat_s * ltntstools_pat_alloc_from_existing(dvbpsi_pat_t *pat);
 

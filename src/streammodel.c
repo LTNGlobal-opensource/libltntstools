@@ -219,14 +219,14 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 
 	printf("\n");
 	printf("PAT\n");
-	printf("  transport_stream_id : 0x%x\n", p_pat->i_ts_id);
-	printf("  version_number      : 0x%x\n", p_pat->i_version);
+	printf("  transport_stream_id : 0x%04x\n", p_pat->i_ts_id);
+	printf("  version_number      : 0x%04x\n", p_pat->i_version);
 	printf("    | program_number @ PID\n");
 
 	rom->totalPMTsInPAT = 0;
 
 	while(p_program) {
-		printf("    | %14d @ 0x%x (%d)\n", p_program->i_number, p_program->i_pid, p_program->i_pid);
+		printf("    | %14d @ 0x%04x (%d)\n", p_program->i_number, p_program->i_pid, p_program->i_pid);
 
 		/* Build a new parser for the PMT. */
 		struct streammodel_pid_s *m = _rom_next_find_pid(ctx, p_program->i_pid);
@@ -246,7 +246,9 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 			exit(1);
 		}
 
-		rom->totalPMTsInPAT++;
+		/* Program# 0 is reserved for NIT tables. We don't expect a PMT for these. */
+		if (p_program->i_number > 0)
+			rom->totalPMTsInPAT++;
 
 		p_program = p_program->p_next;
 
