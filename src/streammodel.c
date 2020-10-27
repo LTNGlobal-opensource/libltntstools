@@ -379,7 +379,7 @@ printf("%s()\n", __func__);
 			/* Convert the dvbpsi struct into a new obj. */
 			p->transport_stream_id = stream_pat->i_ts_id;
 			p->version = stream_pat->i_version;
-			p->current_next = stream_pat->b_current_next;
+			p->current_next_indicator = stream_pat->b_current_next;
 
 			dvbpsi_pat_program_t *e = stream_pat->p_first_program;
 			while (e) {
