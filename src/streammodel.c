@@ -371,26 +371,14 @@ printf("%s()\n", __func__);
 
 		struct streammodel_pid_s *ps = &ctx->current->pids[0];
 
-		struct ltntstools_pat_s *p = ltntstools_pat_alloc();
-
 		dvbpsi_pat_t *stream_pat = ps->p_pat;
 		if (stream_pat) {
 
-			/* Convert the dvbpsi struct into a new obj. */
-			p->transport_stream_id = stream_pat->i_ts_id;
-			p->version = stream_pat->i_version;
-			p->current_next_indicator = stream_pat->b_current_next;
+			struct ltntstools_pat_s *p = ltntstools_pat_alloc_from_existing(stream_pat);
 
-			dvbpsi_pat_program_t *e = stream_pat->p_first_program;
-			while (e) {
-				p->programs[p->program_count].program_number = e->i_number;
-				p->programs[p->program_count].pid = e->i_pid;
-				p->program_count++;
-				e = e->p_next;
-			}
 			*pat = p;
+
 		} else {
-			ltntstools_pat_free(p);
 			ret = -1;
 		}
 

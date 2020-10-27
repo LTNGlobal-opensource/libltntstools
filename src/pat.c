@@ -41,3 +41,27 @@ void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd)
 			pat->programs[i].pid);
 	}
 }
+
+struct ltntstools_pat_s * ltntstools_pat_alloc_from_existing(dvbpsi_pat_t *pat)
+{
+	if (!pat)
+		return NULL;
+
+	struct ltntstools_pat_s *p = ltntstools_pat_alloc();
+
+	/* Convert the dvbpsi struct into a new obj. */
+	p->transport_stream_id = pat->i_ts_id;
+	p->version = pat->i_version;
+	p->current_next_indicator = pat->b_current_next;
+
+	dvbpsi_pat_program_t *e = pat->p_first_program;
+	while (e) {
+		p->programs[p->program_count].program_number = e->i_number;
+		p->programs[p->program_count].pid = e->i_pid;
+		p->program_count++;
+		e = e->p_next;
+	}
+
+	return p;
+}
+

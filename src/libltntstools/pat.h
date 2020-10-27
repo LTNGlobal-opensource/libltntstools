@@ -43,6 +43,9 @@ struct ltntstools_pat_s *ltntstools_pat_alloc();
 void ltntstools_pat_free(struct ltntstools_pat_s *pat);
 void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd);
 
+typedef struct dvbpsi_pat_s dvbpsi_pat_t;
+struct ltntstools_pat_s * ltntstools_pat_alloc_from_existing(dvbpsi_pat_t *pat);
+
 #ifdef __cplusplus
 };
 #endif
