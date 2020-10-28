@@ -117,6 +117,7 @@ static void _rom_initialize(struct streammodel_ctx_s *ctx, struct streammodel_ro
 		}
 
 		if (ps->p_dvbpsi) {
+printf("pid 0x%x\n", i);
 			dvbpsi_delete(ps->p_dvbpsi);
 			ps->p_dvbpsi = NULL;
 		}
@@ -203,7 +204,7 @@ static void cb_pmt(void *p_zero, dvbpsi_pmt_t *p_pmt)
 	if (rom->parsedPMTs == rom->totalPMTsInPAT) {
 		printf("Model#%d collection complete, %d PMTs collected\n", rom->nr, rom->parsedPMTs);
 		_rom_next_complete(ctx);
-		_rom_activate(ctx);
+//		_rom_activate(ctx);
 	}
 }
 
@@ -228,27 +229,28 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 	while(p_program) {
 		printf("    | %14d @ 0x%04x (%d)\n", p_program->i_number, p_program->i_pid, p_program->i_pid);
 
-		/* Build a new parser for the PMT. */
-		struct streammodel_pid_s *m = _rom_next_find_pid(ctx, p_program->i_pid);
-
-		m->present = 1;
-		m->pidType = PT_PMT;
-
-		m->p_dvbpsi = dvbpsi_new(&message, DVBPSI_MSG_DEBUG);
-		if (!m->p_dvbpsi) {
-			fprintf(stderr, "%s() PSI alloc. Should never happen\n", __func__);
-			exit(1);
-		}
-
-		if (!dvbpsi_pmt_attach(m->p_dvbpsi, p_program->i_number, cb_pmt, m))
-		{
-			fprintf(stderr, "%s() PMT attach. Should never happen\n", __func__);
-			exit(1);
-		}
-
 		/* Program# 0 is reserved for NIT tables. We don't expect a PMT for these. */
-		if (p_program->i_number > 0)
+		if (p_program->i_number > 0) {
+			/* Build a new parser for the PMT. */
+			struct streammodel_pid_s *m = _rom_next_find_pid(ctx, p_program->i_pid);
+
+			m->present = 1;
+			m->pidType = PT_PMT;
+
+			m->p_dvbpsi = dvbpsi_new(&message, DVBPSI_MSG_DEBUG);
+			if (!m->p_dvbpsi) {
+				fprintf(stderr, "%s() PSI alloc. Should never happen\n", __func__);
+				exit(1);
+			}
+
+			if (!dvbpsi_pmt_attach(m->p_dvbpsi, p_program->i_number, cb_pmt, m))
+			{
+				fprintf(stderr, "%s() PMT attach. Should never happen\n", __func__);
+				exit(1);
+			}
+
 			rom->totalPMTsInPAT++;
+		}
 
 		p_program = p_program->p_next;
 
@@ -331,6 +333,10 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 
 		ps->packetCount++;
 		ps->lastUpdate = ctx->now;
+	}
+
+	if (ctx->next->modelComplete) {
+		_rom_activate(ctx);
 	}
 
 	*complete = ctx->current->modelComplete;
