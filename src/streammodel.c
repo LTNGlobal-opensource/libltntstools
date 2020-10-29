@@ -500,6 +500,23 @@ static int _streammodel_query_model(struct streammodel_ctx_s *ctx, struct stream
 	int ret = 0;
 //printf("%s() model#%d\n", __func__, rom->nr);
 
+#if 0
+	/* If no writes have occured to the stream in N seconds, any existing model is
+	 * deemed invalid. ctx->now is the last time a write() call was made.
+	 */
+	struct timeval future = { 3, 0 };
+	struct timeval modelTimeout;
+	timeradd(&future, &ctx->now, &modelTimeout);
+
+	struct timeval tod;
+	gettimeofday(&tod, NULL);
+	if (timercmp(&tod, &modelTimeout, >=)) {
+		/* Invalidate the model. */
+		printf("Invalidating the model\n");
+		ctx->restartModel = 1;
+		rom->modelComplete = 0;
+	}
+#endif
 	if (rom->modelComplete) {
 
 //		_streammodel_dprintf(ctx, 0, rom);
