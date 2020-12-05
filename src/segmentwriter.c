@@ -113,7 +113,7 @@ int ltntstools_segmentwriter_alloc(void **hdl, const char *filenamePrefix, const
 	else
 		s->filenameSuffix = strdup(filenameSuffix);
 	s->writeMode = writeMode;
-	s->rb = rb_new(64 * 1024, 1024 * 1024);
+	s->rb = rb_new(2 * 1048576, 16 * 1048576);
 
 	*hdl = s;
 
@@ -136,6 +136,10 @@ ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t len
 	int didOverflow;
 	ssize_t len = rb_write_with_state(s->rb, (const char *)buf, length, &didOverflow);
 	pthread_mutex_unlock(&s->mutex);
+
+	if (didOverflow) {
+		fprintf(stderr, "%s() didOverflow\n", __func__);
+	}
 
 	return len;
 }
