@@ -101,6 +101,8 @@ static int modifyMulticastInterfaces(int skt, struct sockaddr_in *sin, char *ipa
 		}
 	}
 
+	freeifaddrs(addrs);
+
 	if (didModify)
 		return 0; /* Success */
 	else
@@ -223,6 +225,8 @@ int ltntstools_udp_receiver_drop_multicast(struct ltntstools_udp_receiver_s *ctx
 static void *udp_receiver_threadfunc(void *p)
 {
 	struct ltntstools_udp_receiver_s *ctx = (struct ltntstools_udp_receiver_s *)p;
+
+	pthread_detach(ctx->threadId);
 
 	ctx->thread_running = 1;
 	while (!ctx->thread_terminate) {
