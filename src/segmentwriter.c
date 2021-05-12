@@ -29,6 +29,9 @@ struct ltntstools_segmentwriter_s
 	char *filenamePrefix;
 	char *filenameSuffix;
 	char *filename;
+
+	unsigned char *fileHeader;
+	int fileHeaderLength;
 };
 
 static size_t _write(struct ltntstools_segmentwriter_s *s)
@@ -67,6 +70,9 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 #endif
 		s->fh = fopen(s->filename, "wb");
 		s->lastOpen = time(NULL);
+		if (s->fh) {
+			fwrite(s->fileHeader, 1, s->fileHeaderLength, s->fh);
+		}
 	}
 
 	if (s->fh) {
@@ -126,6 +132,11 @@ void ltntstools_segmentwriter_free(void *hdl)
 	if (s->threadRunning) {
 		s->threadTerminate = 1;
 	}
+	if (s->fileHeader) {
+		free(s->fileHeader);
+		s->fileHeader = NULL;
+		s->fileHeaderLength = 0;
+	}
 }
 
 ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t length)
@@ -155,4 +166,22 @@ int ltntstools_segmentwriter_get_current_filename(void *hdl, char *dst, int leng
 	return 0;
 }
 
+int ltntstools_segmentwriter_set_header(void *hdl, const uint8_t *buf, size_t length)
+{
+	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)hdl;
 
+	if (s->fileHeader) {
+		free(s->fileHeader);
+		s->fileHeader = NULL;
+		s->fileHeaderLength = 0;
+	}
+
+	s->fileHeader = malloc(length);
+	if (!s->fileHeader)
+		return -1;
+
+	s->fileHeaderLength = length;
+	memcpy(s->fileHeader, buf, s->fileHeaderLength);
+
+	return 0;
+}
