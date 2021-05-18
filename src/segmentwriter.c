@@ -81,6 +81,7 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 		char *buf = malloc(len);
 		rb_read(s->rb, buf, len);
 		fwrite(buf, 1, len, s->fh);
+		free(buf);
 		pthread_mutex_unlock(&s->mutex);
 	}
 
