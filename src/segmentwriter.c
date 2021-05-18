@@ -138,6 +138,10 @@ void ltntstools_segmentwriter_free(void *hdl)
 		s->fileHeader = NULL;
 		s->fileHeaderLength = 0;
 	}
+	if (s->rb) {
+		rb_free(s->rb);
+		s->rb = NULL;
+	}
 }
 
 ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t length)
