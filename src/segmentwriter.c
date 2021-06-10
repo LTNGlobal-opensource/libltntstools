@@ -230,7 +230,6 @@ int ltntstools_segmentwriter_alloc(void **hdl, const char *filenamePrefix, const
 		s->filenameSuffix = strdup(filenameSuffix);
 	s->writeMode = writeMode;
 #if USE_QUEUE_NOT_RING
-	fprintf(stderr, "%s() DEBUG: prefer Q to ring\n", __func__);
 	klqueue_initialize(&s->q);
 #else
 	s->rb = rb_new(4 * 1048576, 16 * 1048576);
