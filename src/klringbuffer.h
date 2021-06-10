@@ -135,7 +135,7 @@ size_t rb_write(KLRingBuffer *buf, const char *from, size_t bytes);
  * @param[in]   KLRingBuffer *buf - Object.
  * @param[in]	char *to - Destination buffer when data will me (mem)copied to.
  * @param[in]	size_t bytes - Number of bytes to copy.
- * @return	Number of bytes written.
+ * @return	Number of bytes read.
  */
 size_t rb_read(KLRingBuffer *buf, char *to, size_t bytes);
 size_t rb_read_alloc(KLRingBuffer *buf, char **to, size_t bytes);
