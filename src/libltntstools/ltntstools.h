@@ -37,4 +37,5 @@
 #include <libltntstools/tr101290.h>
 #include <libltntstools/pat.h>
 #include <libltntstools/streammodel.h>
+#include <libltntstools/kl-queue.h>
 
