@@ -22,6 +22,8 @@ int     ltntstools_segmentwriter_get_segment_count(void *hdl);
 int64_t ltntstools_segmentwriter_get_recording_size(void *hdl); /* In Bytes */
 time_t  ltntstools_segmentwriter_get_recording_start_time(void *hdl);
 
+int     ltntstools_segmentwriter_object_alloc(void *hdl, size_t length, void **obj, uint8_t **dst);
+int     ltntstools_segmentwriter_object_write(void *hdl, void *object);
 
 #ifdef __cplusplus
 };

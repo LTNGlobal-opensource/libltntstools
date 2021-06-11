@@ -36,7 +36,9 @@ struct q_item_s *q_item_malloc(const unsigned char *buf, int lengthBytes)
 	}
 	i->lengthBytes = lengthBytes;
 
-	memcpy(i->ptr, buf, i->lengthBytes);
+	if (buf) {
+		memcpy(i->ptr, buf, i->lengthBytes);
+	}
 
 	return i;
 };
@@ -113,8 +115,10 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 
 	if (s->writeMode == 0) {
 		if (s->fh == NULL) {
-			if (s->filename)
+			if (s->filename) {
 				free(s->filename);
+				s->filename = NULL;
+			}
 			char ts[64];
 			libltntstools_getTimestamp(&ts[0], sizeof(ts), NULL);
 			s->filename = realloc(s->filename, 512);
@@ -125,6 +129,10 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 		if (s->fh == NULL) {
 			char ts[64];
 			libltntstools_getTimestamp(&ts[0], sizeof(ts), NULL);
+			if (s->filename) {
+				free(s->filename);
+				s->filename = NULL;
+			}
 			s->filename = realloc(s->filename, 512);
 			sprintf(s->filename, "%s-%s%s", s->filenamePrefix, ts, s->filenameSuffix);
 		}
@@ -154,7 +162,7 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 #if USE_QUEUE_NOT_RING
 		while (!klqueue_empty(&s->q)) {
 			struct q_item_s *qi = NULL;
-			int ret = klqueue_pop_non_blocking(&s->q, 100, (void **)&qi);
+			int ret = klqueue_pop_non_blocking(&s->q, 2000, (void **)&qi);
 			if (ret == 0) {
 				fwrite(qi->ptr, 1, qi->lengthBytes, s->fh);
 				s->totalBytesWritten += qi->lengthBytes;
@@ -261,6 +269,40 @@ void ltntstools_segmentwriter_free(void *hdl)
 		rb_free(s->rb);
 		s->rb = NULL;
 	}
+#endif
+}
+
+/* alloc a buffer of length bytes, caller will fill dst and return it to us later via
+ * ltntstools_segmentwriter_object_write(hdl, obj)
+ */
+int ltntstools_segmentwriter_object_alloc(void *hdl, size_t length, void **obj, uint8_t **dst)
+{
+#if USE_QUEUE_NOT_RING
+	struct q_item_s *qi = q_item_malloc(NULL, length);
+	if (!qi) {
+		return -1;
+	}
+	*obj = qi;
+	*dst = qi->ptr;
+
+	return 0;
+#else
+	return -1;
+#endif
+}
+
+int ltntstools_segmentwriter_object_write(void *hdl, void *object)
+{
+	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)hdl;
+
+	struct q_item_s *qi = (struct q_item_s *)object;
+	klqueue_push(&s->q, qi);
+
+	return qi->lengthBytes;
+
+#if USE_QUEUE_NOT_RING
+#else
+	return -1;
 #endif
 }
 
