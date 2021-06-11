@@ -1,5 +1,6 @@
 /* Copyright Kernel Labs Inc 2017-2021. All Rights Reserved. */
 
+#include <stdio.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <string.h>
@@ -46,11 +47,23 @@ void klqueue_destroy(struct klqueue_s *q)
 	/* Intensionally don't emit any signals */
 	/* Intensionally leave the queue locked */
 
+	int cnt = klqueue_count(q);
+	if (cnt != 0) {
+		fprintf(stderr, "%s(%p) Warning, leaking %d user pointers.\n", __func__, q, cnt);
+		fprintf(stderr, "%s(%p) User needs to pop more before klqueue teardown.\n", __func__, q);
+	}
+
 	pthread_mutex_lock(&q->mutex);
 	while (!xorg_list_is_empty(&q->head)) {
 		struct klqueue_item_s *i = xorg_list_first_entry(&q->head, struct klqueue_item_s, list);
 		xorg_list_del(&i->list);
 		q->item_count--;
+
+		/* We don't know what the caller put into the i->data, so we can't free it
+		 * from a safety perspective, but we can free the allocations we've made.
+		 * Valgrind will complain if the calluer is losing references.
+		 */
+		free(i);
 	}
 };
 
