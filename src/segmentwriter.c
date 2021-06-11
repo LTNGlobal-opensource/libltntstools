@@ -263,6 +263,13 @@ void ltntstools_segmentwriter_free(void *hdl)
 		s->fileHeaderLength = 0;
 	}
 #if USE_QUEUE_NOT_RING
+	while (!klqueue_empty(&s->q)) {
+		struct q_item_s *qi = NULL;
+		int ret = klqueue_pop_non_blocking(&s->q, 200, (void **)&qi);
+		if (ret == 0) {
+			q_item_free(qi);
+		}
+	}
 	klqueue_destroy(&s->q);
 #else
 	if (s->rb) {
