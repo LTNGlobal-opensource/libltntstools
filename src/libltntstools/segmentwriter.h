@@ -25,6 +25,8 @@ time_t  ltntstools_segmentwriter_get_recording_start_time(void *hdl);
 int     ltntstools_segmentwriter_object_alloc(void *hdl, size_t length, void **obj, uint8_t **dst);
 int     ltntstools_segmentwriter_object_write(void *hdl, void *object);
 
+int     ltntstools_segmentwriter_get_queue_depth(void *hdl);
+
 #ifdef __cplusplus
 };
 #endif

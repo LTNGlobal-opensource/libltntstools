@@ -416,3 +416,9 @@ time_t ltntstools_segmentwriter_get_recording_start_time(void *hdl)
 	return s->recordingStartTime;
 }
 
+int ltntstools_segmentwriter_get_queue_depth(void *hdl)
+{
+	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)hdl;
+	return klqueue_count(&s->q);
+}
+
