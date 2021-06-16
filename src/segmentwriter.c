@@ -218,6 +218,11 @@ void *ltntstools_segmentwriter_threadFunc(void *p)
 		}
 	}
 
+	if (s->fh) {
+		fclose(s->fh);
+		s->fh = NULL;
+	}
+
 	free(s->filenamePrefix);
 	free(s);
 
