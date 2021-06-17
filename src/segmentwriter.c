@@ -21,6 +21,7 @@ struct q_item_s
 {
 	unsigned char *ptr;
 	int lengthBytes;
+	time_t datetime;
 };
 
 struct q_item_s *q_item_malloc(const unsigned char *buf, int lengthBytes)
@@ -151,6 +152,19 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 		if (s->recordingStartTime == 0)
 			s->recordingStartTime = s->lastOpen;
 		s->totalSegmentsCreated++;
+
+		/* we're a super user, obtain any SUDO uid and change file ownership to it - if possible. */
+		if (s->fh && getuid() == 0 && getenv("SUDO_UID") && getenv("SUDO_GID")) {
+			uid_t o_uid = atoi(getenv("SUDO_UID"));
+			gid_t o_gid = atoi(getenv("SUDO_GID"));
+
+			if (chown(s->filename, o_uid, o_gid) != 0) {
+				/* Error */
+				fprintf(stderr, "Error changing %s ownership to uid %d gid %d, ignoring\n",
+					s->filename, o_uid, o_gid);
+			}
+		}
+
 		if (s->fh) {
 			fwrite(s->fileHeader, 1, s->fileHeaderLength, s->fh);
 			s->totalBytesWritten += s->fileHeaderLength;
@@ -160,13 +174,28 @@ static size_t _write(struct ltntstools_segmentwriter_s *s)
 	if (s->fh) {
 		pthread_mutex_lock(&s->mutex);
 #if USE_QUEUE_NOT_RING
+		int maxwrites = 1000;
 		while (!klqueue_empty(&s->q)) {
 			struct q_item_s *qi = NULL;
 			int ret = klqueue_pop_non_blocking(&s->q, 2000, (void **)&qi);
 			if (ret == 0) {
+				if (s->writeMode == 1 && qi->datetime >= (s->lastOpen + 60)) {
+					/* bTerminate this write loop, vie the segmentor a chance
+					 * to switch segments.
+					 */
+					maxwrites = 0;
+				}
 				fwrite(qi->ptr, 1, qi->lengthBytes, s->fh);
 				s->totalBytesWritten += qi->lengthBytes;
 				q_item_free(qi);
+
+				/* After 10k writes, break and give the writer
+				 * a chance to split the file, if needed.
+				 * Else all the writes keep goinging into a single
+				 * file.
+				 */
+				if (maxwrites-- <= 0)
+					break;
 			} else {
 				break;
 			}
@@ -308,6 +337,7 @@ int ltntstools_segmentwriter_object_write(void *hdl, void *object)
 	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)hdl;
 
 	struct q_item_s *qi = (struct q_item_s *)object;
+	time(&qi->datetime);
 	klqueue_push(&s->q, qi);
 
 	return qi->lengthBytes;
@@ -328,6 +358,7 @@ ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t len
 	if (!qi) {
 		return 0;
 	}
+	time(&qi->datetime);
 	klqueue_push(&s->q, qi);
 #else
 	pthread_mutex_lock(&s->mutex);
