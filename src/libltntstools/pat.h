@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include "libltntstools/descriptor.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +28,8 @@ struct ltntstools_pmt_entry_s
 {
 	uint32_t stream_type;
 	uint32_t elementary_PID;
+
+	struct ltntstools_descriptor_list_s descr_list;
 };
 int ltntstools_pmt_entry_compare(struct ltntstools_pmt_entry_s *a, struct ltntstools_pmt_entry_s *b);
 
@@ -40,6 +43,8 @@ struct ltntstools_pmt_s
 	uint32_t stream_count;
 #define LTNTSTOOLS_PMT_ENTRIES_MAX 16
 	struct ltntstools_pmt_entry_s streams[LTNTSTOOLS_PMT_ENTRIES_MAX];
+
+	struct ltntstools_descriptor_list_s descr_list;
 };
 int ltntstools_pmt_compare(struct ltntstools_pmt_s *a, struct ltntstools_pmt_s *b);
 
@@ -58,6 +63,7 @@ struct ltntstools_pat_s
 	uint32_t transport_stream_id;
 	uint32_t version_number;
 	uint32_t current_next_indicator;
+	struct   ltntstools_descriptor_list_s descr_list;
 
 	uint32_t program_count;
 #define LTNTSTOOLS_PAT_ENTRIES_MAX 64

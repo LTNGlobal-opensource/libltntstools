@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <time.h>
+#include <ctype.h>
 #include <stdbool.h>
 #include <dvbpsi/dvbpsi.h>
 #include <dvbpsi/psi.h>
@@ -49,11 +50,45 @@ void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd)
 		dprintf(fd, "\t\tpmt.program_number = %d\n", pmt->program_number);
 		dprintf(fd, "\t\tpmt.current_next_indicator = %d\n", pmt->current_next_indicator);
 		dprintf(fd, "\t\tpmt.PCR_PID = 0x%04x\n", pmt->PCR_PID);
-		dprintf(fd, "\t\tpmt.stream_count = %d\n", pmt->stream_count);
+		dprintf(fd, "\t\tpmt.descriptor_count = %d\n", pmt->descr_list.count);
+		for (int j = 0; j < pmt->descr_list.count; j++) {
+			dprintf(fd, "\t\t\tpmt.descr[%d].tag = 0x%02x  len %02x : ",
+				j,
+				pmt->descr_list.array[j].tag,
+				pmt->descr_list.array[j].len);
 
+			for (int z = 0; z < pmt->descr_list.array[j].len; z++)
+				dprintf(fd, "%02x ", pmt->descr_list.array[j].data[z]);
+
+			dprintf(fd, "  [");
+			for (int z = 0; z < pmt->descr_list.array[j].len; z++)
+				dprintf(fd, "%c",
+					isprint(pmt->descr_list.array[j].data[z]) ?
+						pmt->descr_list.array[j].data[z] : '.');
+			dprintf(fd, "]\n");
+		}
+
+		dprintf(fd, "\t\tpmt.stream_count = %d\n", pmt->stream_count);
 		for (int j = 0; j < pmt->stream_count; j++) {
 			dprintf(fd, "\t\t\tpmt.entry[%d].elementary_PID = 0x%04x\n", j, pmt->streams[j].elementary_PID);
 			dprintf(fd, "\t\t\tpmt.entry[%d].stream_type = 0x%02x\n", j, pmt->streams[j].stream_type);
+			dprintf(fd, "\t\t\tpmt.entry[%d].descriptor_count = %d\n", j, pmt->streams[j].descr_list.count);
+			for (int k = 0; k < pmt->streams[j].descr_list.count; k++) {
+				dprintf(fd, "\t\t\t\tpmt.entry[%d].descr[%d].tag = 0x%02x  len %02x : ",
+					j,
+					k,
+					pmt->streams[j].descr_list.array[k].tag,
+					pmt->streams[j].descr_list.array[k].len);
+
+				for (int z = 0; z < pmt->streams[j].descr_list.array[k].len; z++)
+					dprintf(fd, "%02x ", pmt->streams[j].descr_list.array[k].data[z]);
+				dprintf(fd, "  [");
+				for (int z = 0; z < pmt->streams[j].descr_list.array[k].len; z++)
+					dprintf(fd, "%c",
+						isprint(pmt->streams[j].descr_list.array[k].data[z]) ? 
+							pmt->streams[j].descr_list.array[k].data[z] : '.');
+				dprintf(fd, "]\n");
+			}
 		}
 	}
 }
@@ -107,12 +142,33 @@ void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t
 	e->current_next_indicator = pmt->b_current_next;
 	e->PCR_PID = pmt->i_pcr_pid;
 
+	/* Outer descriptors */
+	dvbpsi_descriptor_t *p_desc = pmt->p_first_descriptor;
+	while (p_desc) {
+		int ret = ltntstools_descriptor_list_add(&e->descr_list, p_desc->i_tag, &p_desc->p_data[0], p_desc->i_length);
+		if (ret < 0) {
+			/* Error, skipping. */
+		}
+		p_desc = p_desc->p_next;
+	}
+
 	/* Add all of the ES streams. */
 	dvbpsi_pmt_es_t *p_es = pmt->p_first_es;
 	while (p_es && e->stream_count < LTNTSTOOLS_PMT_ENTRIES_MAX) {
 		struct ltntstools_pmt_entry_s *es = &e->streams[ e->stream_count ];
 		es->stream_type = p_es->i_type;
 		es->elementary_PID = p_es->i_pid;
+
+		/* Inner descriptors */
+		dvbpsi_descriptor_t *p_desc = p_es->p_first_descriptor;
+		while (p_desc) {
+			int ret = ltntstools_descriptor_list_add(&es->descr_list, p_desc->i_tag, &p_desc->p_data[0], p_desc->i_length);
+			if (ret < 0) {
+				/* Error, skipping. */
+			}
+			p_desc = p_desc->p_next;
+		}
+
 		e->stream_count++;
 		p_es = p_es->p_next;
 	}

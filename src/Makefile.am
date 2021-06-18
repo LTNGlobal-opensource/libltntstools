@@ -43,6 +43,7 @@ libltntstools_la_SOURCES += libltntstools/tr101290.h
 libltntstools_la_SOURCES += libltntstools/streammodel.h
 libltntstools_la_SOURCES += streammodel.c
 libltntstools_la_SOURCES += kl-queue.c
+libltntstools_la_SOURCES += descriptor.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -72,4 +73,5 @@ libltntstools_include_HEADERS += libltntstools/pat.h
 libltntstools_include_HEADERS += libltntstools/streammodel.h
 libltntstools_include_HEADERS += libltntstools/kl-queue.h
 libltntstools_include_HEADERS += libltntstools/xorg-list.h
+libltntstools_include_HEADERS += libltntstools/descriptor.h
 
