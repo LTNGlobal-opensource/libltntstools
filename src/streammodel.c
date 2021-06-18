@@ -370,7 +370,6 @@ int ltntstools_streammodel_alloc(void **hdl)
 {
 	struct streammodel_ctx_s *ctx = calloc(1, sizeof(*ctx));
 
-	ctx->current = calloc(1, sizeof(*ctx));
 	pthread_mutex_init(&ctx->rom_mutex, NULL);
 
 	_rom_initialize(ctx, &ctx->roms[0], 0);
