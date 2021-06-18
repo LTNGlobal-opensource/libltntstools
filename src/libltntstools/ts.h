@@ -79,4 +79,6 @@ int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes);
 
 unsigned int ltntstools_get_section_tableid(unsigned char *pkt);
 
+const char *ltntstools_GetESPayloadTypeDescription(unsigned char esPayloadType);
+
 #endif /* TS_H */

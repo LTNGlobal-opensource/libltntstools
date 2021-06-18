@@ -72,3 +72,81 @@ unsigned int ltntstools_get_section_tableid(unsigned char *pkt)
 	return *(pkt + section_offset);
 }
 
+const char *ltntstools_GetESPayloadTypeDescription(unsigned char esPayloadType)
+{
+    switch (esPayloadType)
+    {
+        case 0x00:
+            return "Reserved";
+        case 0x01:
+            return "ISO/IEC 11172 Video";
+        case 0x02:
+            return "ISO/IEC 13818-2 Video";
+        case 0x03:
+            return "ISO/IEC 11172 Audio";
+        case 0x04:
+            return "ISO/IEC 13818-3 Audio";
+        case 0x05:
+            return "ISO/IEC 13818-1 Private Section";
+        case 0x06:
+            return "ISO/IEC 13818-1 Private PES data packets";
+        case 0x07:
+            return "ISO/IEC 13522 MHEG";
+        case 0x08:
+            return "ISO/IEC 13818-1 Annex A DSM CC";
+        case 0x09:
+            return "H222.1";
+        case 0x0A:
+            return "ISO/IEC 13818-6 type A";
+        case 0x0B:
+            return "ISO/IEC 13818-6 type B";
+        case 0x0C:
+            return "ISO/IEC 13818-6 type C";
+        case 0x0D:
+            return "ISO/IEC 13818-6 type D";
+        case 0x0E:
+            return "ISO/IEC 13818-1 auxillary";
+        case 0x0F:
+            return "ISO/IEC 13818-7 Audio with ADTS transport syntax";
+        case 0x10:
+            return "ISO/IEC 14496-2 (MPEG-4) Visual";
+        case 0x11:
+            return "ISO/IEC 14496-3 Audio with the LATM transport syntax as defined in ISO/IEC 14496-3 / AMD 1";
+        case 0x12:
+            return "ISO/IEC 14496-1 SL-packetized stream or FlexMux stream carried in PES packets";
+        case 0x13:
+            return "ISO/IEC 14496-1 SL-packetized stream or FlexMux stream carried in ISO/IEC14496_sections";
+        case 0x14:
+            return "ISO/IEC 13818-6 Synchronized Download Protocol";
+        case 0x1B:
+            return "H.264 Video";
+        case 0x21:
+            return "JPEG 2000";
+        case 0x24:
+        case 0x25:
+        case 0x27:
+        case 0x28:
+        case 0x29:
+        case 0x2A:
+            return "HEVC Video";
+        case 0x81:
+            return "ATSC AC-3 Audio";
+        case 0xC1:
+            /* See https://developer.apple.com/library/content/documentation/AudioVideo/Conceptual/HLS_Sample_Encryption/TransportStreamSignaling/TransportStreamSignaling.html#//apple_ref/doc/uid/TP40012862-CH3-SW1 */
+            return "ATSC AC-3 Audio (HLS TS Encryption)";
+        case 0xC2:
+            /* See https://developer.apple.com/library/content/documentation/AudioVideo/Conceptual/HLS_Sample_Encryption/TransportStreamSignaling/TransportStreamSignaling.html#//apple_ref/doc/uid/TP40012862-CH3-SW1 */
+            return "ATSC EAC-3 Audio (HLS TS Encryption)";
+        case 0xCF:
+            /* See https://developer.apple.com/library/content/documentation/AudioVideo/Conceptual/HLS_Sample_Encryption/TransportStreamSignaling/TransportStreamSignaling.html#//apple_ref/doc/uid/TP40012862-CH3-SW1 */
+            return "ISO/IEC 13818-7 Audio with ADTS transport syntax (HLS TS Encryption)";
+        case 0xdb:
+            /* See https://developer.apple.com/library/content/documentation/AudioVideo/Conceptual/HLS_Sample_Encryption/TransportStreamSignaling/TransportStreamSignaling.html#//apple_ref/doc/uid/TP40012862-CH3-SW1 */
+            return "H.264 Video (HLS TS Encryption)";
+        default:
+            if (esPayloadType < 0x80)
+                return "ISO/IEC 13818-1 reserved";
+            else
+                return "User Private";
+    }
+}

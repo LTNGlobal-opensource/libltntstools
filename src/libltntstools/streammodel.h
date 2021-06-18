@@ -21,6 +21,8 @@ void ltntstools_streammodel_dprintf(void *hdl, int fd);
 /* Caller is responsible for returning the allocation. */
 int ltntstools_streammodel_query_model(void *hdl, struct ltntstools_pat_s **pat);
 
+int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat);
+
 #ifdef __cplusplus
 };
 #endif

@@ -264,7 +264,9 @@ static void cb_pmt(void *p_zero, dvbpsi_pmt_t *p_pmt)
 	printf("%s() parsed %d expecting %d\n", __func__, rom->parsedPMTs, rom->totalPMTsInPAT);
 #endif
 	if (rom->parsedPMTs == rom->totalPMTsInPAT) {
+#if CHATTY_CALLBACKS
 		printf("Model#%d collection complete, %d PMTs collected\n", rom->nr, rom->parsedPMTs);
+#endif
 		_rom_next_complete(ctx);
 //		_rom_activate(ctx);
 	}
@@ -276,7 +278,9 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 	struct streammodel_rom_s *rom = ps->rom;
 	struct streammodel_ctx_s *ctx = rom->ctx;
 
+#if CHATTY_CALLBACKS
 	printf("%s(%p, pat %p) pid 0x%x model#%d\n", __func__, ps, p_pat, ps->pid, ps->rom->nr);
+#endif
 
 	dvbpsi_pat_program_t *p_program = p_pat->p_first_program;
 
@@ -290,8 +294,10 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 		 */
 		struct streammodel_pid_s *m = _rom_next_find_pid(ctx, 0);
 		if (m->p_pat->i_version != p_pat->i_version && p_pat->b_current_next) {
+#if CHATTY_CALLBACKS
 			printf("New PAT arrived before the prior PAT complete version 0x%02x vs 0x%02x.\n",
 				m->p_pat->i_version, p_pat->i_version);
+#endif
 			dvbpsi_pat_delete(p_pat);
 			ctx->restartModel = 1;
 			return;
@@ -566,4 +572,16 @@ int ltntstools_streammodel_query_model(void *hdl, struct ltntstools_pat_s **pat)
 	pthread_mutex_unlock(&ctx->rom_mutex);
 
 	return ret;
+}
+
+int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat)
+{
+	int validServices = 0;
+	for (int i = 0; i < pat->program_count; i++) {
+		if (pat->programs[i].program_number == 0)
+			continue;
+		validServices++;
+	}
+
+	return validServices > 1 ? 1 : 0;
 }
