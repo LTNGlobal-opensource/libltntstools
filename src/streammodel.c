@@ -386,6 +386,8 @@ int ltntstools_streammodel_alloc(void **hdl)
 void ltntstools_streammodel_free(void *hdl)
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
+	_rom_initialize(ctx, &ctx->roms[0], 0);
+	_rom_initialize(ctx, &ctx->roms[1], 1);
 	free(ctx);
 }
 
