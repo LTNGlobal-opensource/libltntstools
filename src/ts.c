@@ -150,3 +150,13 @@ const char *ltntstools_GetESPayloadTypeDescription(unsigned char esPayloadType)
                 return "User Private";
     }
 }
+
+void ltntstools_generateNullPacket(unsigned char *pkt)
+{
+        memset(pkt, 0xff, 188);
+        *(pkt + 0) = 0x47;
+        *(pkt + 1) = 0x1f;
+        *(pkt + 2) = 0xff;
+        *(pkt + 3) = 0x10;
+}
+
