@@ -51,6 +51,8 @@
  *   struct ltn_histogram_s *hdl;
  *   ltn_histogram_alloc_video_defaults(&hdl, "CSC conversion time");
  *
+ *   ltn_histogram_reset(hdl);
+ *
  *   // At the start of a cumulative period, reset any counters, such as when
  *   // the GOP begins.
  *   ltn_histogram_cumulative_initialize(hdl)
@@ -226,6 +228,10 @@ static __inline__ int ltn_histogram_interval_update_with_value(struct ltn_histog
 	}
 
 	struct ltn_histogram_bucket_s *bucket = ltn_histogram_bucket(ctx, diffMs);
+
+	struct timeval now;
+	gettimeofday(&now, NULL);
+	bucket->lastUpdate = now; /* Implicit struct copy. */
 	bucket->count++;
 
 	return diffMs;
@@ -252,6 +258,72 @@ static __inline__ int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
 	bucket->count++;
 
 	return diffMs;
+}
+
+static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_histogram_s *ctx, unsigned int seconds)
+{
+	int blen = 4096;
+
+	*buf = NULL;
+
+	char *p = calloc(1, blen);
+	if (!p) {
+		return;
+	}
+
+	if (seconds) {
+		struct timeval now;
+		gettimeofday(&now, NULL);
+
+		struct timeval r;
+		ltn_histogram_timeval_subtract(&r, &now, &ctx->printLast);
+		uint32_t diffMs = ltn_histogram_timeval_to_ms(&r);
+
+		if (diffMs < (seconds * 1000))
+			return;
+
+		ctx->printLast = now; /* Implicit struct copy. */
+	}
+
+	sprintf(p + strlen(p), "Histogram '%s' (ms, count, last update time)\n", ctx->name);
+
+	uint64_t cnt = 0, measurements = 0;
+	for (uint32_t i = 0; i < ctx->bucketCount; i++) {
+		struct ltn_histogram_bucket_s *b = &ctx->buckets[i];
+		if (!b->count)
+			continue;
+
+		char timestamp[128];
+		sprintf(timestamp, "%s", ctime(&b->lastUpdate.tv_sec));
+		timestamp[strlen(timestamp) - 1] = 0; /* Trim trailing CR */
+
+		sprintf(p + strlen(p),
+			"-> %5" PRIu64 " %'15" PRIu64 "  %s (%u.%06u)\n",
+			ctx->minValMs + i,
+			b->count,
+			timestamp,
+			(unsigned int)b->lastUpdate.tv_sec,
+			(unsigned int)b->lastUpdate.tv_usec);
+
+		cnt++;
+		measurements += b->count;
+
+		if (strlen(p) > (blen - 516)) {
+			blen += 4096;
+			p = realloc(p, blen);
+		}
+	}
+
+	if (ctx->bucketMissCount) {
+		sprintf(p + strlen(p), "%" PRIu64 " out-of-range bucket misses\n", ctx->bucketMissCount);
+	}
+
+	sprintf(p + strlen(p), "%" PRIu64 " distinct buckets with %'" PRIu64 " total measurements, range: %" PRIu64 " -> %" PRIu64 " ms\n",
+		cnt,
+		measurements,
+		ctx->minValMs, ctx->maxValMs);
+
+	*buf = p;
 }
 
 static __inline__ void ltn_histogram_interval_print(int fd, struct ltn_histogram_s *ctx, unsigned int seconds)
@@ -283,7 +355,7 @@ static __inline__ void ltn_histogram_interval_print(int fd, struct ltn_histogram
 		timestamp[strlen(timestamp) - 1] = 0; /* Trim trailing CR */
 
 		dprintf(fd,
-			"-> %5" PRIu64 " %8" PRIu64 "  %s (%u.%u)\n",
+			"-> %5" PRIu64 " %'15" PRIu64 "  %s (%u.%06u)\n",
 			ctx->minValMs + i,
 			b->count,
 			timestamp,
@@ -298,7 +370,7 @@ static __inline__ void ltn_histogram_interval_print(int fd, struct ltn_histogram
 		dprintf(fd, "%" PRIu64 " out-of-range bucket misses\n", ctx->bucketMissCount);
 	}
 
-	dprintf(fd, "%" PRIu64 " distinct buckets with %" PRIu64 " total measurements, range: %" PRIu64 " -> %" PRIu64 " ms\n",
+	dprintf(fd, "%" PRIu64 " distinct buckets with %'" PRIu64 " total measurements, range: %" PRIu64 " -> %" PRIu64 " ms\n",
 		cnt,
 		measurements,
 		ctx->minValMs, ctx->maxValMs);
