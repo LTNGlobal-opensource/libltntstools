@@ -39,4 +39,5 @@
 #include <libltntstools/streammodel.h>
 #include <libltntstools/kl-queue.h>
 #include <libltntstools/descriptor.h>
+#include <libltntstools/sectionextractor.h>
 
