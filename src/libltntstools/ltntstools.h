@@ -40,4 +40,5 @@
 #include <libltntstools/kl-queue.h>
 #include <libltntstools/descriptor.h>
 #include <libltntstools/sectionextractor.h>
+#include <libltntstools/probes.h>
 
