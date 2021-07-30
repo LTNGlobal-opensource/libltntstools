@@ -27,6 +27,11 @@
  *   VitecSEI2: 05 1c da 84 22 1f 18 ec 53 1a 8e 05 2c 6d d1 bf 54 3a 1f 00 00 ff 03 4d ff 36 d3 ff 95 35 
  *   VitecSEI1: 05 1c a8 68 7d d4 d7 59 37 58 a5 ce f0 33 8b 65 45 f1 1f 00 00 ff 00 00 ff d8 60 ff 35 cc 
  *   VitecSEI2: 05 1c da 84 22 1f 18 ec 53 1a 8e 05 2c 6d d1 bf 54 3a 1f 00 00 ff 03 4d ff 37 d2 ff 25 d5 
+ *
+ * Ateme CM5k: Has user unregistered data but it contains a one byte value
+ * Cobalt EN9992: No unregistered data
+ * AVIWest HE4000: No unregistered data
+ *
  */
 
 struct ltnencoder_sei_ctx_s
