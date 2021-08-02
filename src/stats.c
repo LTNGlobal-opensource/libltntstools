@@ -19,6 +19,38 @@ int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC)
 	return 1;
 }
 
+void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes)
+{
+	time_t now;
+	time(&now);
+
+	/* Pull the CC out of the frame and check for CC loss. */
+	uint16_t sequence_number = *(buf + 2) << 8 | *(buf + 3);
+	if (((stream->a324_sequence_number + 1) & 0xffff) != sequence_number) {
+		/* No CC error for the first packet. */
+		if (stream->packetCount) {
+			stream->ccErrors++;
+		}
+	}
+	stream->a324_sequence_number = sequence_number;
+
+	/* Roughly convert the CTL into number of packets so we can count them, approximately correct.
+	 * But some rounding down will occur.
+	 * TODO: Add a CTP correct mechanism.
+	 */
+	stream->packetCount++;
+
+	/* Update / maintain bitrate */
+	if (now != stream->Bps_last_update) {
+		stream->Bps = stream->Bps_window;
+		stream->Bps_window = 0;
+		stream->a324_mbps = stream->Bps * 8;
+		stream->a324_mbps /= 1e6;
+		stream->Bps_last_update = now;
+	}
+	stream->Bps_window += lengthBytes;
+}
+
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount)
 {
 	time_t now;
@@ -100,11 +132,22 @@ static void _expire_per_second_stream_stats(struct ltntstools_stream_statistics_
 	time_t now;
 	time(&now);
 
+	if (stream->Bps_window && now > stream->Bps_last_update + 2) {
+		stream->a324_mbps = 0;
+		stream->Bps = 0;
+		stream->Bps_window = 0;
+	} else
 	if (now > stream->pps_last_update + 2) {
 		stream->mbps = 0;
 		stream->pps = 0;
 		stream->pps_window = 0;
 	}
+}
+
+double ltntstools_ctp_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream)
+{
+	_expire_per_second_stream_stats(stream);
+	return stream->a324_mbps;
 }
 
 double ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream)

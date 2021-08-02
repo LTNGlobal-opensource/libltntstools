@@ -39,12 +39,22 @@ struct ltntstools_stream_statistics_s
 	uint32_t pps;
 	uint32_t pps_window;
 	double mbps; /* Updated once per second. */
+
+	/* A/324 specific */
+	uint16_t a324_sequence_number;
+
+	/* A/324 Maintain a packets per second count, we can convert this into Mb/ps */
+	time_t Bps_last_update;
+	uint32_t Bps;
+	uint32_t Bps_window;
+	double a324_mbps;
 };
 
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC);
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount);
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream);
 
+double   ltntstools_ctp_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
@@ -55,6 +65,9 @@ double   ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s
 uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/* A324 stats wedged into this framework, better than nothing. */
+void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
 
 #ifdef __cplusplus
 };
