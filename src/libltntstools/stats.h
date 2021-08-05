@@ -48,6 +48,7 @@ struct ltntstools_stream_statistics_s
 	uint32_t Bps;
 	uint32_t Bps_window;
 	double a324_mbps;
+	double a324_bps;
 };
 
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC);
@@ -55,9 +56,12 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream);
 
 double   ltntstools_ctp_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
+double   ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
+uint32_t ltntstools_ctp_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
+uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statistics_s *stream);
 
@@ -68,6 +72,7 @@ uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_stat
 
 /* A324 stats wedged into this framework, better than nothing. */
 void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
+void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
 
 #ifdef __cplusplus
 };
