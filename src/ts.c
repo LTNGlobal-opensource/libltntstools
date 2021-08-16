@@ -166,7 +166,7 @@ int ltntstools_findSyncPosition(const uint8_t *buf, int lengthBytes)
 		return -1;
 
 	for (int i = 0; i < 188; i++) {
-		if (buf[i] == 0x47 && buf[i + (1 * 188)] && buf[i + (2 * 188)]) {
+		if (buf[i] == 0x47 && buf[i + (1 * 188)] == 0x47 && buf[i + (2 * 188)] == 0x47) {
 			return i;
 		}
 	}
