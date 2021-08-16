@@ -160,3 +160,48 @@ void ltntstools_generateNullPacket(unsigned char *pkt)
         *(pkt + 3) = 0x10;
 }
 
+int ltntstools_findSyncPosition(const uint8_t *buf, int lengthBytes)
+{
+	if (lengthBytes < 3 * 188)
+		return -1;
+
+	for (int i = 0; i < 188; i++) {
+		if (buf[i] == 0x47 && buf[i + (1 * 188)] && buf[i + (2 * 188)]) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, struct ltntstools_pcr_position_s **array, int *arrayLength)
+{
+	/* Find the SYNC byte offset in a buffer of potential transport packets. */
+	int offset = ltntstools_findSyncPosition(buf, lengthBytes);
+	if (offset < 0)
+		return -1;
+
+	struct ltntstools_pcr_position_s *arr = NULL;
+	int arrLength = 0;
+	uint64_t scr;
+
+	for (uint64_t i = offset; i < lengthBytes - offset; i += 188) {
+		const uint8_t *pkt = buf + i;
+
+		if (ltntstools_scr((uint8_t *)pkt, &scr) < 0)
+			continue;
+
+		arr = realloc(arr, ++arrLength * sizeof(struct ltntstools_pcr_position_s));
+		if (!arr)
+			return -1;
+
+		(arr + (arrLength - 1))->pid = ltntstools_pid(pkt);
+		(arr + (arrLength - 1))->offset = addr + i;
+		(arr + (arrLength - 1))->pcr = scr;
+	}
+
+	*array = arr;
+	*arrayLength = arrLength;
+
+	return 0; /* Success */
+}

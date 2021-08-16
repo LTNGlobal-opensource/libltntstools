@@ -83,4 +83,14 @@ const char *ltntstools_GetESPayloadTypeDescription(unsigned char esPayloadType);
 
 void ltntstools_generateNullPacket(unsigned char *pkt);
 
+int ltntstools_findSyncPosition(const uint8_t *buf, int lengthBytes);
+
+struct ltntstools_pcr_position_s
+{
+	int64_t  pcr;
+	uint64_t offset;
+	uint16_t pid;
+};
+int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, struct ltntstools_pcr_position_s **array, int *arrayLength);
+
 #endif /* TS_H */
