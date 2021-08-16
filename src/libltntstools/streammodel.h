@@ -23,6 +23,8 @@ int ltntstools_streammodel_query_model(void *hdl, struct ltntstools_pat_s **pat)
 
 int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat);
 
+int ltntstools_streammodel_query_first_program_pcr_pid(void *hdl, struct ltntstools_pat_s *pat, uint16_t *PCRPID);
+
 #ifdef __cplusplus
 };
 #endif

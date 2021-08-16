@@ -586,3 +586,25 @@ int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat
 
 	return validServices > 1 ? 1 : 0;
 }
+
+int ltntstools_streammodel_query_first_program_pcr_pid(void *hdl, struct ltntstools_pat_s *pat, uint16_t *PCRPID)
+{
+	if (!pat || !PCRPID)
+		return -1;
+
+	*PCRPID = 0;
+	for (int i = 0; i < pat->program_count; i++) {
+		if (pat->programs[i].program_number == 0)
+			continue; /* Skip the network pid */
+
+		if (pat->programs[i].pmt.stream_count == 0)
+			continue; /* Skip programs with no streams */
+
+		if (pat->programs[i].pmt.PCR_PID) {
+			*PCRPID =  pat->programs[i].pmt.PCR_PID;
+			return 0; /* Success */
+		}
+	}
+
+	return -1; /* Failed */
+}
