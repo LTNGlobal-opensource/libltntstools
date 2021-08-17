@@ -32,6 +32,10 @@
  * Cobalt EN9992: No unregistered data
  * AVIWest HE4000: No unregistered data
  *
+ * Elemental supports SMPTE timecodes based on walltime.
+ * They go into pic_timing.
+ *
+ * Evertz.IO sample from medialive contains NO unregistered data.
  */
 
 struct ltnencoder_sei_ctx_s
