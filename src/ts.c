@@ -50,6 +50,47 @@ int ltntstools_scr(uint8_t *pkt, uint64_t *scr)
 	return 0;
 }
 
+/* Helper function, packs the pcr into six bytes
+ * ready for packing into an adaption field.
+ */
+void ltntstools_pcr_packTo(uint8_t *dst, int lengthBytes, uint64_t pcr)
+{
+	/* PCR / SCR value in 27MHz */
+	/* The PCR is a 42bit number coded in two parts */
+
+	/* Base is 90KHz clock, ext is 27MHz clock */
+	uint64_t base = (pcr / 300);
+	uint64_t ext = pcr & 0x1ff;
+
+	*(dst + 0)  = base >> 25LL;
+	*(dst + 1)  = base >> 17LL;
+	*(dst + 2)  = base >>  9LL;
+	*(dst + 3)  = base >>  1LL;
+	*(dst + 4)  = base <<  7LL;
+	*(dst + 4) |= 0x7e;
+	*(dst + 4) |= (ext & 0x100LL) >> 8;
+	*(dst + 5)  = ext;
+}
+
+int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t pcr)
+{
+	if (lengthBytes < 188 || !pkt || !cc)
+		return -1;
+
+	memset(pkt, 0xff, 188);
+
+	*(pkt + 0) = 0x47;
+	*(pkt + 1) = (pid & 0x1fff) >> 8;
+	*(pkt + 2) = pid;
+	*(pkt + 3) = 0x20 | ((*cc)++ & 0x0f); /* Adaption field only, no payload */
+	*(pkt + 4) = 1 + 6; /* Adaption field length. Indicators plus pcr field */
+	*(pkt + 5) = 0x10; /* PCR_flag = 1 */
+
+	ltntstools_pcr_packTo(pkt + 6, 188 - 6, pcr);
+
+	return 0;
+}
+
 int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes)
 {
 	const char pattern[] = { 0x00, 0x00, 0x01 };
@@ -158,6 +199,29 @@ void ltntstools_generateNullPacket(unsigned char *pkt)
         *(pkt + 1) = 0x1f;
         *(pkt + 2) = 0xff;
         *(pkt + 3) = 0x10;
+}
+
+int ltntstools_generatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter)
+{
+	if (lengthBytes < 188 || !pkt || !cc)
+		return -1;
+
+        memset(pkt, 0xff, 188);
+
+        *(pkt +  0) = 0x47;
+        *(pkt +  1) = (pid & 0x1fff) >> 8;
+        *(pkt +  2) = pid;
+        *(pkt +  3) = 0x10 | ((*cc)++ & 0x0f);
+        *(pkt +  8) = counter >> 56LL;
+        *(pkt +  9) = counter >> 48LL;
+        *(pkt + 10) = counter >> 40LL;
+        *(pkt + 11) = counter >> 32LL;
+        *(pkt + 12) = counter >> 24LL;
+        *(pkt + 13) = counter >> 16LL;
+        *(pkt + 14) = counter >>  8LL;
+        *(pkt + 15) = counter;
+
+	return 0;
 }
 
 int ltntstools_findSyncPosition(const uint8_t *buf, int lengthBytes)
