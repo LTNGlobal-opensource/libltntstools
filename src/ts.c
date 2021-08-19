@@ -201,6 +201,46 @@ void ltntstools_generateNullPacket(unsigned char *pkt)
         *(pkt + 3) = 0x10;
 }
 
+static uint8_t verifyPacket[188] = { 0 };
+
+int ltntstools_verifyPacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint64_t lastCounter, uint64_t *currentCounter)
+{
+	if (lengthBytes < 188 || !pkt || !currentCounter)
+		return -1;
+
+	if (verifyPacket[0] == 0) {
+        	memset(verifyPacket, 0xff, 188);
+	}
+
+	if (*(pkt +  0) != 0x47)
+		return -1;
+	if (*(pkt +  1) != (pid & 0x1fff) >> 8)
+		return -1;
+	if (*(pkt +  2) != pid)
+		return -1;
+	if ((*(pkt +  3) & 0xf0) != 0x10)
+		return -1;
+
+	/* Igonring the CC for now */
+
+        *currentCounter  = (uint64_t)*(pkt +  8) << 56LL;
+        *currentCounter |= (uint64_t)*(pkt +  9) << 48LL;
+        *currentCounter |= (uint64_t)*(pkt + 10) << 40LL;
+        *currentCounter |= (uint64_t)*(pkt + 11) << 32LL;
+        *currentCounter |= (uint64_t)*(pkt + 12) << 24LL;
+        *currentCounter |= (uint64_t)*(pkt + 13) << 16LL;
+        *currentCounter |= (uint64_t)*(pkt + 14) <<  8LL;
+        *currentCounter |= (uint64_t)*(pkt + 15);
+
+	if (lastCounter + 1 != *currentCounter)
+		return -1;
+
+	if (memcmp(&verifyPacket[16], pkt + 16, 188 - 16) != 0)
+		return -1;
+
+	return 0;
+}
+
 int ltntstools_generatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter)
 {
 	if (lengthBytes < 188 || !pkt || !cc)

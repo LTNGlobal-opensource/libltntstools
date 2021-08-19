@@ -95,5 +95,6 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
 
 int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t pcr);
 int ltntstools_generatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter);
+int ltntstools_verifyPacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint64_t lastCounter, uint64_t *currentCounter);
 
 #endif /* TS_H */
