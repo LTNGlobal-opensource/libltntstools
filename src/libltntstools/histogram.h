@@ -110,6 +110,9 @@ struct ltn_histogram_s
 	/* Helper mechism for printing the histogram routinely. */
 	struct timeval printLast;
 	struct timeval printSummaryLast;
+
+	/* Only supported on 64bit platforms. */
+	__int128 totalCount; /* Sum of all buckets */
 };
 
 /* Compare time T1 to T2. */
@@ -233,6 +236,7 @@ static __inline__ int ltn_histogram_interval_update_with_value(struct ltn_histog
 	gettimeofday(&now, NULL);
 	bucket->lastUpdate = now; /* Implicit struct copy. */
 	bucket->count++;
+	ctx->totalCount++;
 
 	return diffMs;
 }
@@ -256,6 +260,7 @@ static __inline__ int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
 	struct ltn_histogram_bucket_s *bucket = ltn_histogram_bucket(ctx, diffMs);
 	bucket->lastUpdate = now; /* Implicit struct copy. */
 	bucket->count++;
+	ctx->totalCount++;
 
 	return diffMs;
 }
@@ -285,25 +290,31 @@ static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_h
 		ctx->printLast = now; /* Implicit struct copy. */
 	}
 
-	sprintf(p + strlen(p), "Histogram '%s' (ms, count, last update time)\n", ctx->name);
+	sprintf(p + strlen(p), "Histogram '%s' (ms, count, last update time, pct)\n", ctx->name);
 
+	__int128 bucketTotals = 0;
 	uint64_t cnt = 0, measurements = 0;
 	for (uint32_t i = 0; i < ctx->bucketCount; i++) {
 		struct ltn_histogram_bucket_s *b = &ctx->buckets[i];
 		if (!b->count)
 			continue;
 
+		/* Compute the relative percentage vs total */
+		bucketTotals += b->count;
+		double overallPCT = ((double)b->count / (double)ctx->totalCount) * 100.0;
+		double rankedPCT = ((double)bucketTotals / (double)ctx->totalCount) * 100.0;
+
 		char timestamp[128];
 		sprintf(timestamp, "%s", ctime(&b->lastUpdate.tv_sec));
 		timestamp[strlen(timestamp) - 1] = 0; /* Trim trailing CR */
 
 		sprintf(p + strlen(p),
-			"-> %5" PRIu64 " %'15" PRIu64 "  %s (%u.%06u)\n",
+			"-> %5" PRIu64 " %'15" PRIu64 "  %s  %10.6f%%  %10.6f%%\n",
 			ctx->minValMs + i,
 			b->count,
 			timestamp,
-			(unsigned int)b->lastUpdate.tv_sec,
-			(unsigned int)b->lastUpdate.tv_usec);
+			overallPCT,
+			rankedPCT);
 
 		cnt++;
 		measurements += b->count;
@@ -342,25 +353,31 @@ static __inline__ void ltn_histogram_interval_print(int fd, struct ltn_histogram
 		ctx->printLast = now; /* Implicit struct copy. */
 	}
 
-	dprintf(fd, "Histogram '%s' (ms, count, last update time)\n", ctx->name);
+	dprintf(fd, "Histogram '%s' (ms, count, last update time, pct)\n", ctx->name);
 
+	__int128 bucketTotals = 0;
 	uint64_t cnt = 0, measurements = 0;
 	for (uint32_t i = 0; i < ctx->bucketCount; i++) {
 		struct ltn_histogram_bucket_s *b = &ctx->buckets[i];
 		if (!b->count)
 			continue;
 
+		/* Compute the relative percentage vs total */
+		bucketTotals += b->count;
+		double overallPCT = ((double)b->count / (double)ctx->totalCount) * 100.0;
+		double rankedPCT = ((double)bucketTotals / (double)ctx->totalCount) * 100.0;
+
 		char timestamp[128];
 		sprintf(timestamp, "%s", ctime(&b->lastUpdate.tv_sec));
 		timestamp[strlen(timestamp) - 1] = 0; /* Trim trailing CR */
 
 		dprintf(fd,
-			"-> %5" PRIu64 " %'15" PRIu64 "  %s (%u.%06u)\n",
+			"-> %5" PRIu64 " %'15" PRIu64 "  %s  %10.6f%%  %10.6f%%\n",
 			ctx->minValMs + i,
 			b->count,
 			timestamp,
-			(unsigned int)b->lastUpdate.tv_sec,
-			(unsigned int)b->lastUpdate.tv_usec);
+			overallPCT,
+			rankedPCT);
 
 		cnt++;
 		measurements += b->count;
@@ -451,6 +468,7 @@ __inline__ static uint64_t ltn_histogram_cumulative_finalize(struct ltn_histogra
 		struct ltn_histogram_bucket_s *bucket = ltn_histogram_bucket(ctx, ctx->cumulativeMs);
 		gettimeofday(&bucket->lastUpdate, 0);
 		bucket->count++;
+		ctx->totalCount++;
 	}
 
 	return ctx->cumulativeMs;
@@ -478,6 +496,7 @@ __inline__ static uint64_t ltn_histogram_sample_end(struct ltn_histogram_s *ctx)
 		struct ltn_histogram_bucket_s *bucket = ltn_histogram_bucket(ctx, ctx->sampleMs);
 		gettimeofday(&bucket->lastUpdate, 0);
 		bucket->count++;
+		ctx->totalCount++;
 	}
 
 	return ctx->sampleMs;
