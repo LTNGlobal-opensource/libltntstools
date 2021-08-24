@@ -42,4 +42,5 @@
 #include <libltntstools/sectionextractor.h>
 #include <libltntstools/probes.h>
 #include <libltntstools/crc32.h>
+#include <libltntstools/pes-extractor.h>
 

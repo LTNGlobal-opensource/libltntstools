@@ -33,8 +33,15 @@ struct ltn_pes_packet_s
 	uint32_t PES_extension_flag;
 	uint32_t PES_header_data_length;
 
+	uint32_t ES_rate;
+	uint32_t additional_copy_info;
+	uint32_t previous_PES_packet_CRC;
+
 	int64_t PTS;
 	int64_t DTS;
+
+	unsigned char *data;
+	uint32_t dataLengthBytes;
 };
 
 struct ltn_pes_packet_s *ltn_pes_packet_alloc();
@@ -44,7 +51,7 @@ void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt);
 /* Parse an existing bitstream into an existing pkt, returning the number of bits parsed,
  * or < 0 on error.
  */
-ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs);
+ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData);
 void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent);
 void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *src);
 

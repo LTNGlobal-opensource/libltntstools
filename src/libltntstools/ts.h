@@ -76,6 +76,7 @@ int ltntstools_scr(uint8_t *pkt, uint64_t *scr);
  * @return      < 0 - Error
  */
 int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes);
+int ltntstools_contains_pes_header_reverse(uint8_t *buf, int lengthBytes);
 
 unsigned int ltntstools_get_section_tableid(unsigned char *pkt);
 

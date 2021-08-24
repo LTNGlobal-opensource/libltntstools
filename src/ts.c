@@ -91,10 +91,21 @@ int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid
 	return 0;
 }
 
+int ltntstools_contains_pes_header_reverse(uint8_t *buf, int lengthBytes)
+{
+	const char pattern[] = { 0x00, 0x00, 0x01 };
+	for (int i = lengthBytes - 3; i >= 0; i--) {
+		if (memcmp(buf + i, pattern, sizeof(pattern)) == 0)
+			return i;
+	}
+
+	return -1;
+}
+
 int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes)
 {
 	const char pattern[] = { 0x00, 0x00, 0x01 };
-	for (int i = 0; i < lengthBytes - 4; i++) {
+	for (int i = 0; i < lengthBytes - 3; i++) {
 		if (memcmp(buf + i, pattern, sizeof(pattern)) == 0)
 			return i;
 	}
