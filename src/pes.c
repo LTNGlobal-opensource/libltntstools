@@ -249,6 +249,10 @@ void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent)
 void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *src)
 {
 	memcpy(dst, src, sizeof(*src));
+	if (src->data) {
+		dst->data = malloc(src->dataLengthBytes);
+		memcpy(dst->data, src->data, src->dataLengthBytes);
+	}
 }
 
 int ltn_pes_packet_is_audio(struct ltn_pes_packet_s *pes)
