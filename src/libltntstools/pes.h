@@ -33,12 +33,21 @@ struct ltn_pes_packet_s
 	uint32_t PES_extension_flag;
 	uint32_t PES_header_data_length;
 
+	int64_t PTS;
+	int64_t DTS;
+
 	uint32_t ES_rate;
 	uint32_t additional_copy_info;
 	uint32_t previous_PES_packet_CRC;
 
-	int64_t PTS;
-	int64_t DTS;
+	uint8_t PES_private_data_flag;
+	uint8_t pack_header_field_flag;
+	uint8_t program_packet_sequence_counter_flag;
+	uint8_t PSTD_buffer_flag;
+	uint8_t PSTD_buffer_scale;
+	uint32_t PSTD_buffer_size;
+	uint8_t PES_extension_flag_2;
+	uint8_t PES_extension_field_length;
 
 	unsigned char *data;
 	uint32_t dataLengthBytes;
