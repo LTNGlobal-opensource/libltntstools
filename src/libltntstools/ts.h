@@ -11,6 +11,9 @@
 
 #define TSTOOLS_PID_PAT 0
 
+#define MAX_SCR_VALUE 2576980377600
+#define MAX_PTS_VALUE 8589934591
+
 __inline__ int ltntstools_sync_present(const uint8_t *pkt)
 {
 	return *pkt == 0x47;
@@ -64,6 +67,38 @@ __inline__ uint8_t ltntstools_adaption_field_length(const uint8_t *pkt)
 __inline__ uint8_t ltntstools_continuity_counter(const uint8_t *pkt)
 {
 	return *(pkt + 3) & 0x0f;
+}
+
+/* Always returns a positive number of ticks in the 27MHz clock */
+__inline__ int64_t ltntstools_scr_diff(int64_t from, int64_t to)
+{
+	int64_t diffTicks;
+
+	if (from > to) {
+		/* Probably we wrapped, or the stream restarted. */
+		diffTicks = MAX_SCR_VALUE - from;
+		diffTicks += to;
+	} else {
+		diffTicks = to - from;
+	}
+
+	return diffTicks;
+}
+
+/* Always returns a positive number of ticks in the 90MHz clock */
+__inline__ int64_t ltntstools_pts_diff(int64_t from, int64_t to)
+{
+	int64_t diffTicks;
+
+	if (from > to) {
+		/* Probably we wrapped, or the stream restarted. */
+		diffTicks = MAX_PTS_VALUE - from;
+		diffTicks += to;
+	} else {
+		diffTicks = to - from;
+	}
+
+	return diffTicks;
 }
 
 int ltntstools_scr(uint8_t *pkt, uint64_t *scr);
