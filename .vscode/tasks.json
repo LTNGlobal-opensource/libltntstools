@@ -1,0 +1,36 @@
+{
+    "version": "2.0.0",
+    "command": "bash",
+    "args": [
+        "-c"
+    ],
+    "echoCommand": true,
+    "tasks": [
+        {
+            "label": "make",
+            "type": "shell",
+            "args": [
+                "make"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "_id": "build",
+                "isDefault": false
+            }
+        },
+        {
+            "label": "make clean",
+            "type": "shell",
+            "args": [
+                "make",
+                "clean"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "_id": "build",
+                "isDefault": false
+            }
+        },
+    ]
+}
+
