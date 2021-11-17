@@ -320,3 +320,37 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
 
 	return 0; /* Success */
 }
+
+int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstools_pcr_position_s *pos, uint16_t pcrPID, int pktAligned)
+{
+	int offset = 0;
+
+	if (!pktAligned) {
+		/* Find the SYNC byte offset in a buffer of potential transport packets. */
+		int offset = ltntstools_findSyncPosition(buf, lengthBytes);
+		if (offset < 0)
+			return -1;
+	}
+
+	uint64_t scr;
+
+	int ret = -1;
+	for (uint64_t i = offset; i < lengthBytes - offset; i += 188) {
+		const uint8_t *pkt = buf + i;
+
+		if (ltntstools_pid(pkt) != pcrPID)
+			continue;
+
+		if (ltntstools_scr((uint8_t *)pkt, &scr) < 0)
+			continue;
+
+		pos->pid = pcrPID;
+		pos->offset = i;
+		pos->pcr = scr;
+
+		ret = 0; /* Success */
+		break; /* We only need the first PCR */
+	}
+
+	return ret;
+}

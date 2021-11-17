@@ -8,7 +8,7 @@ int ltntstools_descriptor_list_add(struct ltntstools_descriptor_list_s *list,
 	if (list->count == LTNTSTOOLS_DESCRIPTOR_ENTRIES_MAX)
 		return -1;
 
-	if (lengthBytes > 256)
+	if (lengthBytes > 255)
 		return -1;
 
 	if (!src)

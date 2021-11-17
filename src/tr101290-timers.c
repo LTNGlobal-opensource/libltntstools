@@ -69,6 +69,7 @@ int ltntstools_tr101290_timers_create(struct ltntstools_tr101290_s *s, struct tr
 	struct sigevent sev;
 	memset(&sev, 0, sizeof(sev));
 
+#if defined(__linux__)
 	sev.sigev_notify = SIGEV_THREAD;
 	sev.sigev_notify_function = &timer_thread_handler;
 	sev.sigev_value.sival_ptr = _new_timer_context(s, ev);
@@ -77,6 +78,10 @@ int ltntstools_tr101290_timers_create(struct ltntstools_tr101290_s *s, struct tr
 		fprintf(stderr, "%s() error creating timer.\n", __func__);
 		return -1;
 	}
+#endif
+#if defined(__APPLE__)
+	return -1; /* No support on Apple, yet */
+#endif
 
 	return 0;
 }
@@ -87,6 +92,7 @@ int ltntstools_tr101290_timers_arm(struct ltntstools_tr101290_s *s, struct tr_ev
 	printf("%s() %s\n", __func__, ltntstools_tr101290_event_name_ascii(ev->id));
 #endif
 	/* Setup a timer to begin 1 second from now, to expire in N milliseconds, as determined by the overall event. */
+#if defined(__linux__)
 	struct itimerspec t;
 	t.it_value.tv_sec = 1;
 	t.it_value.tv_nsec = 0;
@@ -95,12 +101,17 @@ int ltntstools_tr101290_timers_arm(struct ltntstools_tr101290_s *s, struct tr_ev
 	int ret = timer_settime(ev->timerId, 0, &t, NULL);
 	if (ret != 0)
 		return -1;
+#endif
+#if defined(__APPLE__)
+	return -1; /* No support on Apple, yet */
+#endif
 
 	return 0;
 }
 
 int ltntstools_tr101290_timers_disarm(struct ltntstools_tr101290_s *s, struct tr_event_s *ev)
 {
+#if defined(__linux__)
 	struct itimerspec t;
 	t.it_value.tv_sec = 0;
 	t.it_value.tv_nsec = 0;
@@ -109,6 +120,10 @@ int ltntstools_tr101290_timers_disarm(struct ltntstools_tr101290_s *s, struct tr
 	int ret = timer_settime(ev->timerId, 0, &t, NULL);
 	if (ret != 0)
 		return -1;
+#endif
+#if defined(__APPLE__)
+	return -1; /* No support on Apple, yet */
+#endif
 
 	return 0;
 }

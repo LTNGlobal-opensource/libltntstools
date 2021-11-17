@@ -127,7 +127,23 @@ struct ltntstools_pcr_position_s
 	uint64_t offset;
 	uint16_t pid;
 };
+
+__inline__ void ltntstools_pcr_position_reset(struct ltntstools_pcr_position_s *p)
+{
+	p->pcr = -1;
+	p->offset = 0;
+	p->pid = 0;
+};
+
+/* Query a buffer containing transport packets from many pids,
+ * Return all of the PCRs found for any pids.
+ */
 int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, struct ltntstools_pcr_position_s **array, int *arrayLength);
+
+/* Query a buffer containing transport packets from many pids,
+ * Return the first PCR found for pcrPID.
+ */
+int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstools_pcr_position_s *pos, uint16_t pcrPID, int pktAligned);
 
 int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t pcr);
 int ltntstools_generatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter);

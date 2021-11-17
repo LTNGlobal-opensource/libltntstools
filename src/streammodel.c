@@ -24,6 +24,16 @@
 #define DVBPSI_REPORTING (DVBPSI_MSG_ERROR)
 #endif
 
+/* Any given PID could have multiple PMTs on a single pid.
+ * We need to track all of this state.
+ */
+struct streammodel_pid_parser_s
+{
+	dvbpsi_t *p_dvbpsi;
+	dvbpsi_pmt_t *p_pmt;
+	int programNumber;
+};
+
 /* Running Object Model: A model of an entire ISO13818 stream,
  * Including PAT/PMT configurations, PIDS being used, when and how.
  * Caveats:
@@ -48,9 +58,9 @@ struct streammodel_pid_s
 	//int estype;
 
 	/* DVBPSI Cached Data */
-	dvbpsi_t *p_dvbpsi;
+#define MAX_PID_PARSERS 24
+	struct streammodel_pid_parser_s parser[MAX_PID_PARSERS];
 	dvbpsi_pat_t *p_pat;
-	dvbpsi_pmt_t *p_pmt;
 
 	/* Housekeeping */
 	struct streammodel_rom_s *rom;
@@ -123,21 +133,25 @@ static void _rom_initialize(struct streammodel_ctx_s *ctx, struct streammodel_ro
 			dvbpsi_pat_delete(ps->p_pat);
 			ps->p_pat = NULL;
 		}
-		if (ps->pidType == PT_PAT && ps->p_dvbpsi) {
-			dvbpsi_pat_detach(ps->p_dvbpsi);
+		if (ps->pidType == PT_PAT && ps->parser[0].p_dvbpsi) {
+			dvbpsi_pat_detach(ps->parser[0].p_dvbpsi);
 		}
 
-		if (ps->p_pmt) {
-			dvbpsi_pmt_delete(ps->p_pmt);
-			ps->p_pmt = NULL;
-		}
-		if (ps->pidType == PT_PMT && ps->p_dvbpsi) {
-			dvbpsi_pmt_detach(ps->p_dvbpsi);
+		for (int j = 0; j < MAX_PID_PARSERS ; j++) {
+			if (ps->parser[j].p_pmt) {
+				dvbpsi_pmt_delete(ps->parser[j].p_pmt);
+				ps->parser[j].p_pmt = NULL;
+			}
+			if (ps->pidType == PT_PMT && ps->parser[j].p_dvbpsi) {
+				dvbpsi_pmt_detach(ps->parser[j].p_dvbpsi);
+			}
 		}
 
-		if (ps->p_dvbpsi) {
-			dvbpsi_delete(ps->p_dvbpsi);
-			ps->p_dvbpsi = NULL;
+		for (int j = 0; j < MAX_PID_PARSERS ; j++) {
+			if (ps->parser[j].p_dvbpsi) {
+				dvbpsi_delete(ps->parser[j].p_dvbpsi);
+				ps->parser[j].p_dvbpsi = NULL;
+			}
 		}
 
 		/* Everything else */
@@ -255,9 +269,14 @@ static void cb_pmt(void *p_zero, dvbpsi_pmt_t *p_pmt)
 		p_es = p_es->p_next;
 	}
 
+	/* Find the appropriate PMT in the array matching this program number. */
+	int idx = 0;
+	for (int j = 0; j < MAX_PID_PARSERS;j++) {
+		if (ps->parser[j].programNumber == p_pmt->i_program_number)
+			idx = j;
+	}
 	/* Don't delete p_pmt, we're caching it. */
-	ps->p_pmt = p_pmt;
-
+	ps->parser[idx].p_pmt = p_pmt;
 	rom->parsedPMTs++;
 
 #if CHATTY_CALLBACKS
@@ -332,23 +351,32 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 			m->present = 1;
 			m->pidType = PT_PMT;
 
-			if (m->p_dvbpsi) {
-				dvbpsi_pmt_detach(m->p_dvbpsi);
-				dvbpsi_delete(m->p_dvbpsi);
-				m->p_dvbpsi = NULL;
+			int idx = 0;
+			for (int i = 0; i < MAX_PID_PARSERS; i++) {
+				if (m->parser[i].p_dvbpsi == 0) {
+					idx = i;
+					break;
+				}
 			}
 
-			m->p_dvbpsi = dvbpsi_new(&message, DVBPSI_REPORTING);
-			if (!m->p_dvbpsi) {
+			if (m->parser[idx].p_dvbpsi) {
+				dvbpsi_pmt_detach(m->parser[idx].p_dvbpsi);
+				dvbpsi_delete(m->parser[idx].p_dvbpsi);
+				m->parser[idx].p_dvbpsi = NULL;
+			}
+
+			m->parser[idx].p_dvbpsi = dvbpsi_new(&message, DVBPSI_REPORTING);
+			if (!m->parser[idx].p_dvbpsi) {
 				fprintf(stderr, "%s() PSI alloc. Should never happen\n", __func__);
 				exit(1);
 			}
 
-			if (!dvbpsi_pmt_attach(m->p_dvbpsi, p_program->i_number, cb_pmt, m))
+			if (!dvbpsi_pmt_attach(m->parser[idx].p_dvbpsi, p_program->i_number, cb_pmt, m))
 			{
 				fprintf(stderr, "%s() PMT attach. Should never happen\n", __func__);
 				exit(1);
 			}
+			m->parser[idx].programNumber = p_program->i_number;
 
 			rom->totalPMTsInPAT++;
 		}
@@ -437,17 +465,21 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 			ps->present = 1;
 			ps->pidType = PT_PAT;
 
-			ps->p_dvbpsi = dvbpsi_new(&message, DVBPSI_REPORTING);
+			ps->parser[0].p_dvbpsi = dvbpsi_new(&message, DVBPSI_REPORTING);
 
-			if (!dvbpsi_pat_attach(ps->p_dvbpsi, cb_pat, ps))
+			if (!dvbpsi_pat_attach(ps->parser[0].p_dvbpsi, cb_pat, ps))
 			{
 				fprintf(stderr, "%s() PAT attach. Should never happen\n", __func__);
 				exit(1);
 			}
 		}
 
-		if (ps->present && ps->p_dvbpsi) {
-			dvbpsi_packet_push(ps->p_dvbpsi, (unsigned char *)&pkt[i * 188]);
+		if (ps->present) {
+			for (int j = 0; j < MAX_PID_PARSERS; j++) {
+				if (ps->parser[j].p_dvbpsi == NULL)
+					continue;
+				dvbpsi_packet_push(ps->parser[j].p_dvbpsi, (unsigned char *)&pkt[i * 188]);
+			}
 		}
 
 		ps->packetCount++;
@@ -544,8 +576,12 @@ static int _streammodel_query_model(struct streammodel_ctx_s *ctx, struct stream
 				if (c->present == 0)
 					continue;
 
-				if (c->p_pmt) {
-					ltntstools_pat_add_from_existing(newpat, c->p_pmt);
+				for (int j = 0; j < MAX_PID_PARSERS; j++) {
+					if (c->parser[j].p_pmt && c->parser[j].programNumber ==
+						newpat->programs[i].program_number)
+					{
+						ltntstools_pat_add_from_existing(newpat, c->parser[j].p_pmt);
+					}
 				}
 				
 			}

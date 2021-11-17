@@ -22,6 +22,11 @@ extern "C" {
  */
 #define ENABLE_TESTING 1
 
+/* TR101290 isn't supported on MAC Yet, but keep the compiler happy. */
+#if defined(__APPLE__)
+typedef unsigned int timer_t;
+#endif
+
 struct tr_event_s
 {
 	int enabled;

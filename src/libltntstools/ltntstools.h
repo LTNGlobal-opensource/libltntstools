@@ -43,4 +43,6 @@
 #include <libltntstools/probes.h>
 #include <libltntstools/crc32.h>
 #include <libltntstools/pes-extractor.h>
+#include <libltntstools/smoother-pcr.h>
+#include <libltntstools/proc-net-udp.h>
 

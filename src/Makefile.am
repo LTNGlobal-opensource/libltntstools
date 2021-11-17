@@ -50,6 +50,8 @@ libltntstools_la_SOURCES += sei-timestamp.c
 libltntstools_la_SOURCES += sei-timestamp.h
 libltntstools_la_SOURCES += crc32.c
 libltntstools_la_SOURCES += pes-extractor.c
+libltntstools_la_SOURCES += smoother-pcr.c
+libltntstools_la_SOURCES += proc-net-udp.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -84,4 +86,6 @@ libltntstools_include_HEADERS += libltntstools/sectionextractor.h
 libltntstools_include_HEADERS += libltntstools/probes.h
 libltntstools_include_HEADERS += libltntstools/crc32.h
 libltntstools_include_HEADERS += libltntstools/pes-extractor.h
+libltntstools_include_HEADERS += libltntstools/smoother-pcr.h
+libltntstools_include_HEADERS += libltntstools/proc-net-udp.h
 
