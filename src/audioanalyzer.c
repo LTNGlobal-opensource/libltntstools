@@ -5,6 +5,8 @@
 #include <libavutil/dict.h>
 #include <libavutil/fifo.h>
 
+#include "nielsen-bindings.h"
+
 #define LOCAL_DEBUG 0
 
 struct ltntstools_audioanalyzer_stream_s
@@ -35,11 +37,7 @@ struct ltntstools_audioanalyzer_stream_s
     uint64_t        pesCallbackCount;
 
 #if HAVE_IMONITORSDKPROCESSOR_H
-#define NIELSEN_CHANNEL_COUNT 2
-    /* We're assuming N channels of audio */
-    CMonitorApi *pNielsenAPI[ NIELSEN_CHANNEL_COUNT ];
-    CMonitorSdkParameters *pNielsenParams[ NIELSEN_CHANNEL_COUNT ];
-    CMonitorSdkCallback *pNielsenCallback[ NIELSEN_CHANNEL_COUNT ];
+    struct nielsen_bindings_decoder_s *nielsen;
 #endif
 };
 
@@ -79,42 +77,50 @@ static void decode(struct ltntstools_audioanalyzer_ctx_s *ctx, struct ltntstools
             fprintf(stderr, "Failed to calculate data size\n");
             exit(1);
         }
-        unsigned char *ptr = stream->decoded_frame->data[0];
+
+        /* Flip endian */
+#if 0
+        for (int i = 0; i < 2; i++) {
+            uint16_t *ptr = (uint16_t *)stream->decoded_frame->data[i];
+            for (int s = 0; s < stream->decoded_frame->nb_samples; s++) {
+                uint16_t d = *ptr;
+                uint16_t v = d << 8;
+                v = v | (d >> 8);
+                *ptr = v;
+                ptr++;
+            }
+        }
+#endif
 
         if (ctx->verbose >= 2) {
             int bytes = stream->decoded_frame->nb_samples * sample_size * stream->codecContext->channels;
-
             printf("pid 0x%04x decoded %d bytes\n", stream->pid, bytes);
 
-            for (int s = 0; s < stream->decoded_frame->nb_samples; s++) {
-                printf("\t%d: ", s);
-                for (int c = 0; c < stream->codecContext->channels; c++) {
-                    for (int i = 0 ; i < sample_size; i++) {
-                        printf("%02x ", *(ptr++));
-                    }
+            for (int i = 0; i < 2; i++) {
+                printf("pid 0x%04x plane%d: ", stream->pid, i);
+                uint8_t *p = (uint8_t *)stream->decoded_frame->data[i];
+                for (int j = 0; j < stream->decoded_frame->nb_samples * sample_size; j++) {
+                    printf("%02x ", *(p++));
+                    if (j > 31)
+                        break;
                 }
                 printf("\n");
-                if (s > 3)
-                    break;
             }
         }
 
 #if HAVE_IMONITORSDKPROCESSOR_H
-        if (1) {
-            /* TODO: 16 bit samples only */
-            uint16_t *p = (uint16_t *)stream->decoded_frame->data[0];
 
-            /* This is a little messy, calling the API hundreds of times per buffer. Good enough for now. */
-            for (int i = 0; i < stream->decoded_frame->nb_samples; i++) {
-                for (int j = 0; j < stream->codecContext->channels; j++) {
-                    pNielsenAPI[j]->InputAudioData(*(p++), 2);
-                }
-            }
+        /* Stereo planes */
+        for (int i = 0; i < 2; i++) {
+            //printf("ch%d planes = %p/%p/%p\n", i, stream->decoded_frame->data[0], stream->decoded_frame->data[1], stream->decoded_frame->data[2]);
+            nielsen_bindings_write_silent(stream->nielsen, 0);
+            nielsen_bindings_write_plane(stream->nielsen, i, (uint8_t *)stream->decoded_frame->data[i], stream->decoded_frame->nb_samples * sample_size);
         }
 #endif /* HAVE_IMONITORSDKPROCESSOR_H */
     }
 }
 
+extern int pthread_setname_np(pthread_t thread, const char *name);
 static void *ltntstools_audioanalyzer_stream_threadfunc(void *p)
 {
     struct ltntstools_audioanalyzer_ctx_s *ctx = (struct ltntstools_audioanalyzer_ctx_s *)p;
@@ -123,6 +129,7 @@ static void *ltntstools_audioanalyzer_stream_threadfunc(void *p)
 #endif
 
     pthread_detach(ctx->threadId);
+    pthread_setname_np(ctx->threadId, "thread-nielsen");
 
     ctx->threadTerminate = 0;
 	ctx->threadRunning = 1;
@@ -256,13 +263,7 @@ int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamI
     /* end: libavcodec */
 
 #if HAVE_IMONITORSDKPROCESSOR_H
-    /* Neilsen SDK */
-    for (int i = 0; i < NIELSEN_CHANNEL_COUNT; i++) {
-        delete pNielsenAPI[i];
-        delete pNielsenCallback[i];
-        delete pNielsenParams[i];
-    }
-    /* End: Neilsen SDK */
+    stream->nielsen = nielsen_bindings_alloc(pid, 2); /* TODO Two channels only currently */
 #endif /* HAVE_IMONITORSDKPROCESSOR_H */
 
     pthread_mutex_unlock(&ctx->mutex);

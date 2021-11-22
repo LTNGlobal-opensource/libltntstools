@@ -53,8 +53,8 @@ libltntstools_la_SOURCES += pes-extractor.c
 libltntstools_la_SOURCES += smoother-pcr.c
 libltntstools_la_SOURCES += proc-net-udp.c
 libltntstools_la_SOURCES += audioanalyzer.c
-libltntstools_la_SOURCES += nielsen.cpp
-libltntstools_la_SOURCES += nielsen.h
+libltntstools_la_SOURCES += nielsen-bindings.cpp
+libltntstools_la_SOURCES += nielsen-bindings.h
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -62,6 +62,9 @@ libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\""
 if DEBUG
   libltntstools_la_CFLAGS += -g
 endif
+
+libltntstools_la_CXXFLAGS  = $(libltntstools_la_CFLAGS)
+libltntstools_la_CXXFLAGS += -std=c++11
 
 libltntstools_includedir = $(includedir)/libltntstools
 

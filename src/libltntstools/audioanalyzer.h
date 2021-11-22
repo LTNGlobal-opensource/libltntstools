@@ -32,4 +32,8 @@ void    ltntstools_audioanalyzer_free(void *hdl);
 int     ltntstools_audioanalyzer_has_feature_nielsen(void *hdl);
 void    ltntstools_audioanalyzer_set_verbosity(void *hdl, int level);
 
+#ifdef __cplusplus
+};
+#endif
+
 #endif /* _AUDIOANALYZER_H */
