@@ -29,7 +29,7 @@
 class CMonitorSdkCallback : public IMonitorSdkCallback
 {
 public:
-	CMonitorSdkCallback(int pairNumber);
+	CMonitorSdkCallback(int pid, int channelNr);
 	virtual ~CMonitorSdkCallback();
 
 	virtual void ResultCallback(uint32_t elapsed_time, std::string result) override;
@@ -40,12 +40,16 @@ private:
 	int pairNumber;
 public:
     int silentMode;
+    int pid;
+    int channelNr;
 };
 
-CMonitorSdkCallback::CMonitorSdkCallback(int pairNumber)
+CMonitorSdkCallback::CMonitorSdkCallback(int pid, int channelNr)
 {
 	this->pairNumber = pairNumber;
     silentMode = 1; /* By default, silence all message outputs */
+    this->pid = pid;
+    this->channelNr = channelNr;
 }
 
 CMonitorSdkCallback::~CMonitorSdkCallback()
@@ -55,21 +59,21 @@ CMonitorSdkCallback::~CMonitorSdkCallback()
 void CMonitorSdkCallback::ResultCallback(uint32_t elapsed_time, std::string result)
 {
     if (!silentMode) {
-	    printf("\nNielsen pid 0x%06x: %d, %s\n", pairNumber, elapsed_time, result.c_str());
+	    printf("\nNielsen pid 0x%04x/ch#%d: @ %d - %s\n", pid, channelNr, elapsed_time, result.c_str());
     }
 };
 
 void CMonitorSdkCallback::LogCallback(int code, const char* pMessage)
 {
     if (!silentMode) {
-    	printf("\nNielsen pair 0x%06x: %d, %s\n", pairNumber, code, pMessage);
+    	printf("\nNielsen pid 0x%04x/ch#%d - %d %s\n", pid, channelNr, code, pMessage);
     }
 };
 
 void CMonitorSdkCallback::AlarmCallback(uint32_t elapsed_time, std::string warning_list)
 {
     if (!silentMode) {
-	    printf("\nNielsen pair 0x%06x: %d, %s\n", pairNumber, elapsed_time, warning_list.c_str());
+	    printf("\nNielsen pid 0x%04x/ch#%d: @ %d - %s\n", pid, channelNr, elapsed_time, warning_list.c_str());
     }
 };
 
@@ -110,7 +114,7 @@ struct nielsen_bindings_decoder_s *nielsen_bindings_alloc(int pid, int channelCo
                 exit(0);
         }
 
-        CMonitorSdkCallback *pNielsenCallback = new CMonitorSdkCallback(pid << 8 | i);
+        CMonitorSdkCallback *pNielsenCallback = new CMonitorSdkCallback(pid, i);
 
         CMonitorApi *pNielsenAPI = new CMonitorApi(pNielsenParams, pNielsenCallback);
         pNielsenAPI->SetIncludeDetailedReport(1);
