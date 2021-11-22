@@ -271,7 +271,7 @@ static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_h
 
 	*buf = NULL;
 
-	char *p = calloc(1, blen);
+	char *p = (char *)calloc(1, blen);
 	if (!p) {
 		return;
 	}
@@ -321,7 +321,7 @@ static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_h
 
 		if (strlen(p) > (blen - 516)) {
 			blen += 4096;
-			p = realloc(p, blen);
+			p = (char *)realloc(p, blen);
 		}
 	}
 
