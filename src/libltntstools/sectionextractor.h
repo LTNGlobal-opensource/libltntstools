@@ -23,5 +23,9 @@ ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkt, size_t 
 void    ltntstools_sectionextractor_free(void *hdl);
 int     ltntstools_sectionextractor_query(void *hdl, uint8_t *dst, int lengthBytes);
 
+#ifdef __cplusplus
+};
+#endif
+
 #endif /* _SECTIONEXTRACTOR_H */
 
