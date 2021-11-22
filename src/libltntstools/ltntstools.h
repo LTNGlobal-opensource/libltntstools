@@ -45,4 +45,5 @@
 #include <libltntstools/pes-extractor.h>
 #include <libltntstools/smoother-pcr.h>
 #include <libltntstools/proc-net-udp.h>
+#include <libltntstools/audioanalyzer.h>
 
