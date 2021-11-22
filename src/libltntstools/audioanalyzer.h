@@ -1,15 +1,15 @@
 #ifndef _AUDIOANALYZER_H
 #define _AUDIOANALYZER_H
 
-/* A minimalistic implemenation of a section extractor, it has significant
+/* A minimalistic implemenation of a bulk audio decoder.
  * limitations, namely:
- * 1. Only sections less than 180 bytes are supported.
- * 2. sections MUST be select contained with a single TS packet.
- * 3. TS packets must have the packet marker set, which they should anyway, for the start of a new packet.
- * Good enough for some basic lab testing with SCTE35.
+ * 1. Only stereo pairs are currently support.
+ * 2. Only MP2, AAC and AC3 stereo pairs are currently supported.
+ *
+ * Currently functionality:
+ * 1) Nielsen audio codes are detected and dumped to console.
+ * 
  */
-
-/* Heavily leaveraged from bits of libiso13818 */
 
 #include <time.h>
 #include <inttypes.h>
@@ -22,7 +22,7 @@ extern "C" {
 #define LTN_CODEC_ID_AAC (0x15000 + 2) /* specifically matching avcodecs id */
 #define LTN_CODEC_ID_AC3 (0x15000 + 3) /* specifically matching avcodecs id */
 
-int     ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID);
+int     ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID, int enableNielsen);
 void    ltntstools_audioanalyzer_stream_remove(void *hdl, uint16_t pid);
 
 int     ltntstools_audioanalyzer_alloc(void **hdl);

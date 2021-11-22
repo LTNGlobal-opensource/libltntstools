@@ -36,9 +36,17 @@ struct ltntstools_audioanalyzer_stream_s
     void           *pesExtractor;
     uint64_t        pesCallbackCount;
 
+    int enableNielsen;
 #if HAVE_IMONITORSDKPROCESSOR_H
     struct nielsen_bindings_decoder_s *nielsen;
 #endif
+
+    /* Up to 8 channels of PCM (7.1) for any single audio codec */
+    struct {
+        double     pcm_dbFS;
+        const char pcm_dbFSDescription[8];
+        int        decodeCounterOptimize;
+    } pcm[16];
 };
 
 struct ltntstools_audioanalyzer_ctx_s
@@ -53,6 +61,49 @@ struct ltntstools_audioanalyzer_ctx_s
     struct ltntstools_audioanalyzer_stream_s *streams[8192];
 };
 
+static void compute_dbFS(struct ltntstools_audioanalyzer_stream_s *stream, int channelNr, int16_t *samples, int sampleCount)
+{
+    /* I don't need dbFS for every sample, because these that's arent that timely,
+     * instead process every 8th sample.
+     */
+    if (++stream->pcm[channelNr].decodeCounterOptimize < 16)
+        return;
+    stream->pcm[channelNr].decodeCounterOptimize = 0;
+
+    /* Find the largest sample in the series of samples, for a given channel */
+    int bits = 16;
+
+    double x = 0.0;
+    int16_t *p = samples;
+    for (int i = 0; i < sampleCount; i++) {
+        if (*p > x)
+            x = *p;
+        p++;
+    }
+
+    /* Generate a dbFS measurement. Where maximum power is 0dbFS, and minimum is -90dbFS. */
+    if (bits <= 16) {
+        stream->pcm[channelNr].pcm_dbFS = 20 * log10( x / 32767.0);
+    } else
+    if (bits <= 20) {
+        stream->pcm[channelNr].pcm_dbFS = 20 * log10( x / 524287.0);
+    } else
+    if (bits <= 24) {
+        stream->pcm[channelNr].pcm_dbFS = 20 * log10( x / 8388607.0);
+    } else
+    if (bits <= 32) {
+        stream->pcm[channelNr].pcm_dbFS = 20 * log10( x / 2147483647.0);
+    }
+
+    if (isinf(stream->pcm[channelNr].pcm_dbFS)) {
+        sprintf((char *)stream->pcm[channelNr].pcm_dbFSDescription, "N/A");
+    } else {
+        sprintf((char *)stream->pcm[channelNr].pcm_dbFSDescription, "% 04.02f", stream->pcm[channelNr].pcm_dbFS);
+    }
+#if 1
+    printf("pid 0x%04x/ch#%d: %s\n", stream->pid, channelNr, stream->pcm[channelNr].pcm_dbFSDescription);
+#endif
+}
 static void decode(struct ltntstools_audioanalyzer_ctx_s *ctx, struct ltntstools_audioanalyzer_stream_s *stream)
 {
     /* send the packet with the compressed data to the decoder */
@@ -108,15 +159,21 @@ static void decode(struct ltntstools_audioanalyzer_ctx_s *ctx, struct ltntstools
             }
         }
 
-#if HAVE_IMONITORSDKPROCESSOR_H
-
         /* Stereo planes */
-        for (int i = 0; i < 2; i++) {
+        for (int ch = 0; ch < 2; ch++) {
             //printf("ch%d planes = %p/%p/%p\n", i, stream->decoded_frame->data[0], stream->decoded_frame->data[1], stream->decoded_frame->data[2]);
-            nielsen_bindings_write_silent(stream->nielsen, 0);
-            nielsen_bindings_write_plane(stream->nielsen, i, (uint8_t *)stream->decoded_frame->data[i], stream->decoded_frame->nb_samples * sample_size);
-        }
+#if HAVE_IMONITORSDKPROCESSOR_H
+            /* Its fairly expensive to compute Nielson, skip it if the user doesn't want it. */
+            if (stream->enableNielsen) {
+                nielsen_bindings_write_silent(stream->nielsen, 0);
+                nielsen_bindings_write_plane(stream->nielsen, ch, (uint8_t *)stream->decoded_frame->data[ch], stream->decoded_frame->nb_samples * sample_size);
+            }
 #endif /* HAVE_IMONITORSDKPROCESSOR_H */
+
+            /* Measure dbFS across every PCM channel, this is planer so the samples are just a massive array. */
+            compute_dbFS(stream, ch, (int16_t *)stream->decoded_frame->data[ch], stream->decoded_frame->nb_samples);
+        }
+
     }
 }
 
@@ -212,7 +269,7 @@ static void *pes_callback(void *userContext, struct ltn_pes_packet_s *pes)
     return NULL;
 }
 
-int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID)
+int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID, int enableNielsen)
 {
 #if LOCAL_DEBUG
     printf("%s(%p, 0x%04x, 0x%02x, 0x%08x)\n", __func__, hdl, pid, streamID, codecID);
@@ -233,6 +290,7 @@ int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamI
     stream->codecID = codecID;
     stream->pid = pid;
     stream->streamID = streamID;
+    stream->enableNielsen = enableNielsen;
     pthread_mutex_init(&stream->tsmutex, NULL);
 
     /* Bring up the PES extractor */
@@ -263,7 +321,9 @@ int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamI
     /* end: libavcodec */
 
 #if HAVE_IMONITORSDKPROCESSOR_H
-    stream->nielsen = nielsen_bindings_alloc(pid, 2); /* TODO Two channels only currently */
+    if (stream->enableNielsen) {
+        stream->nielsen = nielsen_bindings_alloc(pid, 2); /* TODO Two channels only currently */
+    }
 #endif /* HAVE_IMONITORSDKPROCESSOR_H */
 
     pthread_mutex_unlock(&ctx->mutex);
@@ -296,6 +356,9 @@ void ltntstools_audioanalyzer_stream_remove(void *hdl, uint16_t pid)
     av_frame_free(&stream->decoded_frame);
     av_packet_free(&stream->pkt);
 
+    if (stream->enableNielsen) {
+        nielsen_bindings_free(stream->nielsen);
+    }
     memset(stream, 0, sizeof(*stream));
     free(stream);
 
