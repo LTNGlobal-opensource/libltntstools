@@ -18,11 +18,16 @@
 extern "C" {
 #endif
 
-#define LTN_CODEC_ID_MP2 (0x15000 + 0) /* specifically matching avcodecs id */
-#define LTN_CODEC_ID_AAC (0x15000 + 2) /* specifically matching avcodecs id */
-#define LTN_CODEC_ID_AC3 (0x15000 + 3) /* specifically matching avcodecs id */
+/* specifically matching avcodecs id */
+#define LTN_CODEC_ID_MP2 (0x15000 + 0) 
+#define LTN_CODEC_ID_AAC (0x15000 + 2)
+#define LTN_CODEC_ID_AC3 (0x15000 + 3)
 
-int     ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID, int enableNielsen);
+/* specifically matching avcodecs formats */
+#define LTN_SAMPLE_FMT_S16P (6) 
+#define LTN_SAMPLE_FMT_FLTP (8) 
+
+int     ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID, unsigned int sampleFormat, int enableNielsen);
 void    ltntstools_audioanalyzer_stream_remove(void *hdl, uint16_t pid);
 
 int     ltntstools_audioanalyzer_alloc(void **hdl);

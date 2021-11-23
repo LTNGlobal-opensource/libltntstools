@@ -16,6 +16,7 @@ struct ltntstools_audioanalyzer_stream_s
     uint8_t                                streamID;
 
     enum AVCodecID       codecID;
+    enum AVSampleFormat  sampleFormat;
     const AVCodec        *codec;
     AVCodecParserContext *parser;
     AVCodecContext       *codecContext;
@@ -61,7 +62,7 @@ struct ltntstools_audioanalyzer_ctx_s
     struct ltntstools_audioanalyzer_stream_s *streams[8192];
 };
 
-static void compute_dbFS(struct ltntstools_audioanalyzer_stream_s *stream, int channelNr, int16_t *samples, int sampleCount)
+static void _compute_dbFS_s16p(struct ltntstools_audioanalyzer_stream_s *stream, int channelNr, int16_t *samples, int sampleCount)
 {
     /* I don't need dbFS for every sample, because these that's arent that timely,
      * instead process every 8th sample.
@@ -100,10 +101,55 @@ static void compute_dbFS(struct ltntstools_audioanalyzer_stream_s *stream, int c
     } else {
         sprintf((char *)stream->pcm[channelNr].pcm_dbFSDescription, "% 04.02f", stream->pcm[channelNr].pcm_dbFS);
     }
-#if 1
-    printf("pid 0x%04x/ch#%d: %s\n", stream->pid, channelNr, stream->pcm[channelNr].pcm_dbFSDescription);
+#if 0
+    printf("S16P pid 0x%04x/ch#%d: %s\n", stream->pid, channelNr, stream->pcm[channelNr].pcm_dbFSDescription);
 #endif
 }
+
+static void _compute_dbFS_fltp(struct ltntstools_audioanalyzer_stream_s *stream, int channelNr, int16_t *samples, int sampleCount)
+{
+    /* I don't need dbFS for every sample, because these that's arent that timely,
+     * instead process every 8th sample.
+     */
+    if (++stream->pcm[channelNr].decodeCounterOptimize < 16)
+        return;
+    stream->pcm[channelNr].decodeCounterOptimize = 0;
+
+    /* Find the largest sample in the series of samples, for a given channel */
+
+    float x = 0.0;
+    float *p = (float *)samples;
+    for (int i = 0; i < sampleCount; i++) {
+        if (*p > x)
+            x = *p;
+        p++;
+    }
+
+printf("x %f\n", x);
+    stream->pcm[channelNr].pcm_dbFS = 20 * log10(abs(x));
+
+    if (isinf(stream->pcm[channelNr].pcm_dbFS)) {
+        sprintf((char *)stream->pcm[channelNr].pcm_dbFSDescription, "N/A");
+    } else {
+        sprintf((char *)stream->pcm[channelNr].pcm_dbFSDescription, "% 04.02f", stream->pcm[channelNr].pcm_dbFS);
+    }
+#if 1
+    printf("FLPT pid 0x%04x/ch#%d: %s\n", stream->pid, channelNr, stream->pcm[channelNr].pcm_dbFSDescription);
+#endif
+}
+
+static void compute_dbFS(struct ltntstools_audioanalyzer_stream_s *stream, int channelNr, int16_t *samples, int sampleCount)
+{
+    switch(stream->sampleFormat) {
+    case AV_SAMPLE_FMT_S16P:
+        return _compute_dbFS_s16p(stream, channelNr, samples, sampleCount);
+    case AV_SAMPLE_FMT_FLTP:
+        return _compute_dbFS_fltp(stream, channelNr, samples, sampleCount);
+    default:
+        break;
+    }
+}
+
 static void decode(struct ltntstools_audioanalyzer_ctx_s *ctx, struct ltntstools_audioanalyzer_stream_s *stream)
 {
     /* send the packet with the compressed data to the decoder */
@@ -159,19 +205,28 @@ static void decode(struct ltntstools_audioanalyzer_ctx_s *ctx, struct ltntstools
             }
         }
 
-        /* Stereo planes */
-        for (int ch = 0; ch < 2; ch++) {
-            //printf("ch%d planes = %p/%p/%p\n", i, stream->decoded_frame->data[0], stream->decoded_frame->data[1], stream->decoded_frame->data[2]);
-#if HAVE_IMONITORSDKPROCESSOR_H
-            /* Its fairly expensive to compute Nielson, skip it if the user doesn't want it. */
-            if (stream->enableNielsen) {
-                nielsen_bindings_write_silent(stream->nielsen, 0);
-                nielsen_bindings_write_plane(stream->nielsen, ch, (uint8_t *)stream->decoded_frame->data[ch], stream->decoded_frame->nb_samples * sample_size);
+        if (stream->sampleFormat == AV_SAMPLE_FMT_FLTP) {
+            /* Stereo planes */
+            for (int ch = 0; ch < 2; ch++) {
+                /* Measure dbFS across every PCM channel, this is planer so the samples are just a massive array. */
+                compute_dbFS(stream, ch, (int16_t *)stream->decoded_frame->data[ch], stream->decoded_frame->nb_samples);
             }
+        } else
+        if (stream->sampleFormat == AV_SAMPLE_FMT_S16P) {
+            /* Stereo planes */
+            for (int ch = 0; ch < 2; ch++) {
+                //printf("ch%d planes = %p/%p/%p\n", i, stream->decoded_frame->data[0], stream->decoded_frame->data[1], stream->decoded_frame->data[2]);
+#if HAVE_IMONITORSDKPROCESSOR_H
+                /* Its fairly expensive to compute Nielson, skip it if the user doesn't want it. */
+                if (stream->enableNielsen) {
+                    nielsen_bindings_write_silent(stream->nielsen, 0);
+                    nielsen_bindings_write_plane(stream->nielsen, ch, (uint8_t *)stream->decoded_frame->data[ch], stream->decoded_frame->nb_samples * sample_size);
+                }
 #endif /* HAVE_IMONITORSDKPROCESSOR_H */
 
-            /* Measure dbFS across every PCM channel, this is planer so the samples are just a massive array. */
-            compute_dbFS(stream, ch, (int16_t *)stream->decoded_frame->data[ch], stream->decoded_frame->nb_samples);
+                /* Measure dbFS across every PCM channel, this is planer so the samples are just a massive array. */
+                compute_dbFS(stream, ch, (int16_t *)stream->decoded_frame->data[ch], stream->decoded_frame->nb_samples);
+            }
         }
 
     }
@@ -269,13 +324,21 @@ static void *pes_callback(void *userContext, struct ltn_pes_packet_s *pes)
     return NULL;
 }
 
-int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID, int enableNielsen)
+int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamID, unsigned int codecID, unsigned int sampleFormat, int enableNielsen)
 {
 #if LOCAL_DEBUG
-    printf("%s(%p, 0x%04x, 0x%02x, 0x%08x)\n", __func__, hdl, pid, streamID, codecID);
+    printf("%s(%p, 0x%04x, 0x%02x, 0x%08x, fmt %d)\n", __func__, hdl, pid, streamID, codecID, sampleFormat);
 #endif
     struct ltntstools_audioanalyzer_ctx_s *ctx = (struct ltntstools_audioanalyzer_ctx_s *)hdl;
     pid &= 0x1fff;
+
+    switch (sampleFormat) {
+    //case AV_SAMPLE_FMT_FLTP:
+    case AV_SAMPLE_FMT_S16P:
+        break;
+    default:
+        return -1;
+    }
 
     pthread_mutex_lock(&ctx->mutex);
     if (ctx->streams[pid]) {
@@ -288,6 +351,7 @@ int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamI
 
     stream->ctx = ctx;
     stream->codecID = codecID;
+    stream->sampleFormat = sampleFormat;
     stream->pid = pid;
     stream->streamID = streamID;
     stream->enableNielsen = enableNielsen;
