@@ -58,6 +58,22 @@ int ltntstools_proc_net_udp_item_query(void *hdl, struct ltntstools_proc_net_udp
     return ret;
 }
 
+/* Lookup an unique entry in an array, based on slot number. */
+struct ltntstools_proc_net_udp_item_s *ltntstools_proc_net_udp_find_slot(struct ltntstools_proc_net_udp_item_s *array, int arrayCount, uint64_t slotNr)
+{
+    if (array == NULL || arrayCount <= 0)
+        return NULL;
+
+    struct ltntstools_proc_net_udp_item_s *e;
+    for (int i = 0; i < arrayCount; i++) {
+        e = &array[i];
+        if (e->sl == slotNr)
+            return e;
+    }
+
+    return NULL;
+}
+
 void ltntstools_proc_net_udp_item_free(void *hdl, struct ltntstools_proc_net_udp_item_s *array)
 {
     //struct ltntstools_proc_net_udp_ctx_s *ctx = (struct ltntstools_proc_net_udp_ctx_s *)hdl;
@@ -214,6 +230,19 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
     return 0; /* Success */
 }
 
+void ltntstools_proc_net_udp_items_reset_drops(void *hdl)
+{
+    struct ltntstools_proc_net_udp_ctx_s *ctx = (struct ltntstools_proc_net_udp_ctx_s *)hdl;
+
+    pthread_mutex_lock(&ctx->mutex);
+    for (int i = 0; i < ctx->itemCount; i++) {
+        struct ltntstools_proc_net_udp_item_s *e = &ctx->items[i];
+        e->drops_reset = e->drops;
+        e->drops_delta = 0;
+    }
+    pthread_mutex_unlock(&ctx->mutex);
+}
+
 /* Build a memory structure containing all of the records in /proc/net/udp */
 static int _tableBuilderSockets(struct ltntstools_proc_net_udp_ctx_s *ctx)
 {
@@ -269,6 +298,23 @@ static int _tableBuilderSockets(struct ltntstools_proc_net_udp_ctx_s *ctx)
         sscanf(remaddr, "%X", &i->remote_addr.sin_addr.s_addr);
         sprintf(i->locaddr, "%s:%d", inet_ntoa(i->local_addr.sin_addr), i->local_addr.sin_port);
         sprintf(i->remaddr, "%s:%d", inet_ntoa(i->remote_addr.sin_addr), i->remote_addr.sin_port);
+
+        struct ltntstools_proc_net_udp_item_s *e = ltntstools_proc_net_udp_find_slot(ctx->items, ctx->itemCount, i->sl);
+        if (e) {
+            /* Find a preview record for this, compare the drops and flag a change if needed. */
+            if (e->drops != i->drops) {
+                i->drops_delta = i->drops - i->drops_reset;
+                i->drops_delta = i->drops - i->drops_reset;
+            } else {
+                i->drops_reset = e->drops_reset;
+                i->drops_delta = i->drops - i->drops_reset;
+            }
+        } else {
+            /* First time we've see this socket, remember the startup drops */
+            i->drops_reset = i->drops;
+            i->drops_delta = 0;
+        }
+
     }
     fclose(fh);
 

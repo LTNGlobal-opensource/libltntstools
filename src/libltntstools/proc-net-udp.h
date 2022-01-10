@@ -51,6 +51,8 @@ struct ltntstools_proc_net_udp_item_s
     struct sockaddr_in local_addr;
     struct sockaddr_in remote_addr;
     uint64_t drops;
+    uint64_t drops_reset;
+    uint64_t drops_delta;   /* Number of drops between drops_reset and now */
 
     char locaddr[64]; /* Eg. 0.0.0.0:4001 */
     char remaddr[64]; /* Eg. 0.0.0.0:4001 */
@@ -74,7 +76,11 @@ int  ltntstools_proc_net_udp_item_query(void *hdl, struct ltntstools_proc_net_ud
 
 void ltntstools_proc_net_udp_item_free(void *hdl, struct ltntstools_proc_net_udp_item_s *array);
 
+void ltntstools_proc_net_udp_items_reset_drops(void *hdl);
+
 void ltntstools_proc_net_udp_item_dprintf(void *hdl, int fd, struct ltntstools_proc_net_udp_item_s *array, int arrayCount);
+
+struct ltntstools_proc_net_udp_item_s *ltntstools_proc_net_udp_find_slot(struct ltntstools_proc_net_udp_item_s *array, int arrayCount, uint64_t slotNr);
 
 #ifdef __cplusplus
 };
