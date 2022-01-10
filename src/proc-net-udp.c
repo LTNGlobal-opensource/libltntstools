@@ -59,7 +59,7 @@ int ltntstools_proc_net_udp_item_query(void *hdl, struct ltntstools_proc_net_udp
 }
 
 /* Lookup an unique entry in an array, based on slot number. */
-struct ltntstools_proc_net_udp_item_s *ltntstools_proc_net_udp_find_slot(struct ltntstools_proc_net_udp_item_s *array, int arrayCount, uint64_t slotNr)
+struct ltntstools_proc_net_udp_item_s *ltntstools_proc_net_udp_find_inode(struct ltntstools_proc_net_udp_item_s *array, int arrayCount, uint64_t inode)
 {
     if (array == NULL || arrayCount <= 0)
         return NULL;
@@ -67,7 +67,7 @@ struct ltntstools_proc_net_udp_item_s *ltntstools_proc_net_udp_find_slot(struct 
     struct ltntstools_proc_net_udp_item_s *e;
     for (int i = 0; i < arrayCount; i++) {
         e = &array[i];
-        if (e->sl == slotNr)
+        if (e->inode == inode)
             return e;
     }
 
@@ -299,7 +299,7 @@ static int _tableBuilderSockets(struct ltntstools_proc_net_udp_ctx_s *ctx)
         sprintf(i->locaddr, "%s:%d", inet_ntoa(i->local_addr.sin_addr), i->local_addr.sin_port);
         sprintf(i->remaddr, "%s:%d", inet_ntoa(i->remote_addr.sin_addr), i->remote_addr.sin_port);
 
-        struct ltntstools_proc_net_udp_item_s *e = ltntstools_proc_net_udp_find_slot(ctx->items, ctx->itemCount, i->sl);
+        struct ltntstools_proc_net_udp_item_s *e = ltntstools_proc_net_udp_find_inode(ctx->items, ctx->itemCount, i->inode);
         if (e) {
             /* Find a preview record for this, compare the drops and flag a change if needed. */
             if (e->drops != i->drops) {

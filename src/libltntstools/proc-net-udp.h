@@ -80,7 +80,7 @@ void ltntstools_proc_net_udp_items_reset_drops(void *hdl);
 
 void ltntstools_proc_net_udp_item_dprintf(void *hdl, int fd, struct ltntstools_proc_net_udp_item_s *array, int arrayCount);
 
-struct ltntstools_proc_net_udp_item_s *ltntstools_proc_net_udp_find_slot(struct ltntstools_proc_net_udp_item_s *array, int arrayCount, uint64_t slotNr);
+struct ltntstools_proc_net_udp_item_s *ltntstools_proc_net_udp_find_inode(struct ltntstools_proc_net_udp_item_s *array, int arrayCount, uint64_t inode);
 
 #ifdef __cplusplus
 };
