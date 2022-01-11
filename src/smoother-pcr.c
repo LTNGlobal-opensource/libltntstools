@@ -230,9 +230,14 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	return 0;
 }
 
+extern int ltnpthread_setname_np(pthread_t thread, const char *name);
+
 static void * _threadFunc(void *p)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)p;
+
+	pthread_detach(ctx->threadId);
+	ltnpthread_setname_np(ctx->threadId, "thread-brsmooth");
 
 	ctx->threadTerminated = 0;
 	ctx->threadRunning = 1;
