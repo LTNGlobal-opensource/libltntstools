@@ -67,4 +67,6 @@ void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *
 int ltn_pes_packet_is_audio(struct ltn_pes_packet_s *pes);
 int ltn_pes_packet_is_video(struct ltn_pes_packet_s *pes);
 
+ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pes, struct klbs_context_s *bs);
+
 #endif /* PES_H */

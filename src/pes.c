@@ -32,6 +32,18 @@ void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt)
 	free(pkt);
 }
 
+static void write33bit_ts(struct klbs_context_s *bs, int64_t value)
+{
+	klbs_write_bits(bs, value >> 30, 3);
+	klbs_write_bits(bs, 1, 1);
+
+	klbs_write_bits(bs, value >> 15, 15);
+	klbs_write_bits(bs, 1, 1);
+
+	klbs_write_bits(bs, value, 15);
+	klbs_write_bits(bs, 1, 1);
+}
+
 static int64_t read33bit_ts(struct klbs_context_s *bs)
 {
         int64_t a = (uint64_t)klbs_read_bits(bs, 3) << 30;
@@ -49,6 +61,158 @@ static int64_t read33bit_ts(struct klbs_context_s *bs)
 	int64_t ts = a | b | c;
 
 	return ts;
+}
+
+ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs)
+{
+	ssize_t bits = 0;
+	klbs_write_bits(bs, pkt->packet_start_code_prefix, 24);
+	klbs_write_bits(bs, pkt->stream_id, 8);
+	klbs_write_bits(bs, pkt->PES_packet_length, 16);
+
+	if ((pkt->stream_id != 0xBC /* program_stream_map */) &&
+		(pkt->stream_id != 0xBE /* padding_stream */) &&
+		(pkt->stream_id != 0xBF /* private_stream_2 */) &&
+		(pkt->stream_id != 0xF0 /* ECM */) &&
+		(pkt->stream_id != 0xF1 /* EMM */) &&
+		(pkt->stream_id != 0xFF /* program_stream_directory */) &&
+		(pkt->stream_id != 0xF2 /* DSMCC_stream */) &&
+		(pkt->stream_id != 0xF8 /* ITU H.222.1 type E */))
+	{
+
+		klbs_write_bits(bs, 0xff, 2); /* reserved */
+
+		klbs_write_bits(bs, pkt->PES_scrambling_control, 2);
+		klbs_write_bits(bs, pkt->PES_priority, 1);
+		klbs_write_bits(bs, pkt->data_alignment_indicator, 1);
+		klbs_write_bits(bs, pkt->copyright, 1);
+		klbs_write_bits(bs, pkt->original_or_copy, 1);
+		klbs_write_bits(bs, pkt->PTS_DTS_flags, 2);
+		klbs_write_bits(bs, pkt->ESCR_flag, 1);
+		klbs_write_bits(bs, pkt->ES_rate_flag, 1);
+		klbs_write_bits(bs, pkt->DSM_trick_mode_flag, 1);
+		klbs_write_bits(bs, pkt->additional_copy_info_flag, 1);
+		klbs_write_bits(bs, pkt->PES_CRC_flag, 1);
+		klbs_write_bits(bs, pkt->PES_extension_flag, 1);
+		klbs_write_bits(bs, pkt->PES_header_data_length, 8);
+
+		bits += 72;
+
+		if (pkt->PTS_DTS_flags == 2) {
+			klbs_write_bits(bs, 0x2, 4);
+			write33bit_ts(bs, pkt->PTS);
+			bits += 40;
+		} else
+		if (pkt->PTS_DTS_flags == 3) {
+			klbs_write_bits(bs, 0x3, 4);
+			write33bit_ts(bs, pkt->PTS);
+			bits += 40;
+
+			klbs_write_bits(bs, 0x1, 4);
+			write33bit_ts(bs, pkt->DTS);
+			bits += 40;
+		}
+
+		if (pkt->ESCR_flag) {
+			klbs_write_bits(bs, 0, 40); /* Not supported */
+			bits += 48;
+		}
+
+		if (pkt->ES_rate_flag) {
+			klbs_write_bits(bs, 1, 1); /* market bit */
+			klbs_write_bits(bs, pkt->ES_rate_flag, 22);
+			klbs_write_bits(bs, 1, 1); /* market bit */
+			bits += 24;
+		}
+
+		if (pkt->DSM_trick_mode_flag) {
+			klbs_write_bits(bs, 0, 8); /* Not supported */ /* Skip trick mode bits */
+			bits += 8;
+		}
+
+		if (pkt->additional_copy_info_flag) {
+			klbs_write_bits(bs, 1, 1); /* market bit */
+			klbs_write_bits(bs, pkt->additional_copy_info, 7);
+			bits += 8;
+		}
+
+		if (pkt->PES_CRC_flag) {
+			klbs_write_bits(bs, 0, 16); /* Not supported */
+			bits += 16;
+		}
+
+		if (pkt->PES_extension_flag) {
+			klbs_write_bits(bs, pkt->PES_private_data_flag, 1);
+			klbs_write_bits(bs, pkt->pack_header_field_flag, 1);
+			klbs_write_bits(bs, pkt->program_packet_sequence_counter_flag, 1);
+			klbs_write_bits(bs, pkt->PSTD_buffer_flag, 1);
+			klbs_write_bits(bs, 0xff, 3); /* reserved */
+			klbs_write_bits(bs, pkt->PES_extension_flag_2, 1);
+			bits += 8;
+
+			if (pkt->PES_private_data_flag == 1) {
+				klbs_write_bits(bs, 0xffffffff, 32); /* private data */
+				klbs_write_bits(bs, 0xffffffff, 32); /* private data */
+				klbs_write_bits(bs, 0xffffffff, 32); /* private data */
+				klbs_write_bits(bs, 0xffffffff, 32); /* private data */
+				bits += 128;
+			}
+
+			if (pkt->pack_header_field_flag == 1) {
+				/* Not supported */
+//					bits += 8;
+			}
+
+			if (pkt->program_packet_sequence_counter_flag == 1) {
+				/* Not supported */
+//				klbs_read_bits(bs, 16);
+				bits += 16;
+			}
+
+			if (pkt->PSTD_buffer_flag == 1) {
+				/* Not supported */
+//				klbs_read_bits(bs, 2); /* '01' */
+//				pkt->PSTD_buffer_scale = klbs_read_bits(bs, 1);
+//				pkt->PSTD_buffer_size = klbs_read_bits(bs, 13);
+				bits += 16;
+			}
+
+			if (pkt->PES_extension_flag_2 == 1) {
+				bits += 8;
+				for (int i = 0; i < pkt->PES_extension_field_length; i++) {
+					klbs_write_bits(bs, 0xff, 8); /* Not supported */
+					bits += 8;
+				}
+			}
+		}
+
+		for (int i = 0; i < pkt->dataLengthBytes; i++) {
+			klbs_write_bits(bs, *(pkt->data + i), 8);
+			bits += 8;
+		}
+	} /* (pkt->stream_id != 0xBC) && */
+	else if ((pkt->stream_id == 0xBF /* private_stream_2 */) ||
+		(pkt->stream_id == 0xF0 /* ECM */) ||
+		(pkt->stream_id == 0xF1 /* EMM */) ||
+		(pkt->stream_id == 0xFF /* program_stream_directory */) ||
+		(pkt->stream_id == 0xF2 /* DSMCC_stream */) ||
+		(pkt->stream_id == 0xF8 /* H.222.1 type E */))
+	{
+		if (pkt->data) {
+			for (int i = 0; i < pkt->PES_packet_length; i++) {
+				klbs_write_bits(bs, *(pkt->data + i), 8);
+				bits += 8;
+			}
+		} else
+		if (pkt->stream_id == 0xBE /* padding_stream */) {
+			for (int i = 0; i < pkt->PES_packet_length; i++) {
+				klbs_write_bits(bs, 0xff, 8); /* padding */
+				bits += 8;
+			}
+		}
+	}
+
+	return bits;
 }
 
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData)
