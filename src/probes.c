@@ -91,6 +91,11 @@ int ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned ch
 {
 	struct ltnencoder_sei_ctx_s *ctx = (struct ltnencoder_sei_ctx_s *)hdl;
 
+	/* TODO: This will first the first latency field in a mux, and report
+	 * it back for all services. Bug.
+	 * We need to take the video pid into consideration before returning.
+	 */
+	
 	/* Find the LTN Encoder UUID */
 	int offset = ltn_uuid_find(buf, lengthBytes);
 	if (offset >= 0) {
