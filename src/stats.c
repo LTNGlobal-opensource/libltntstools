@@ -127,6 +127,34 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			pid->teiErrors++;
 			stream->teiErrors++;
 		}
+
+		/* If the buffer contains a packet with a potential PCR, and the user has asked
+		 * then process the PCR timing.
+		 */
+		if (pid->hasPCR) {
+			/* If the clock is not yet established. */
+			struct ltntstools_clock_s *pcrclk = &pid->clocks[ltntstools_CLOCK_PCR];
+			/* Attempt to extract a PCR from this packet. */
+			uint64_t pcr;
+			if (ltntstools_scr((uint8_t *)(pkts + offset), &pcr) == 0) {
+				if (pid->seenPCR++ < 100)
+					continue;
+
+				if (ltntstools_clock_is_established_timebase(pcrclk) == 0) {
+					ltntstools_clock_initialize(pcrclk);
+					ltntstools_clock_establish_timebase(pcrclk, 27 * 1e6);
+				}
+
+				if (ltntstools_clock_is_established_wallclock(pcrclk) == 0) {
+					ltntstools_clock_establish_wallclock(pcrclk, pcr);
+				}
+
+				/* Update current value and re-compute drifts. */
+				ltntstools_clock_set_ticks(pcrclk, pcr);
+				ltntstools_clock_get_drift_us(pcrclk);
+			}
+		}
+
 	}
 }
 
@@ -144,6 +172,11 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 		stream->pids[i].ccErrors = 0;
 		stream->pids[i].teiErrors = 0;
 		stream->pids[i].mbps = 0;
+
+		stream->pids[i].clocks[ltntstools_CLOCK_PCR].drift_us_hwm = 0;
+		stream->pids[i].clocks[ltntstools_CLOCK_PCR].drift_us_lwm = 0;
+		stream->pids[i].clocks[ltntstools_CLOCK_PCR].establishedWT = 0;
+		stream->pids[i].seenPCR = 0;
 	}
 }
 
@@ -254,6 +287,18 @@ uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_stat
 {
 	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
 	return pid->packetCount;
+}
+
+void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	pid->hasPCR = 1;
+}
+
+int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	return pid->hasPCR;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream)

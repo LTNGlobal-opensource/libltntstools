@@ -5,6 +5,7 @@
 
 #include <time.h>
 #include <inttypes.h>
+#include <libltntstools/clocks.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,6 +26,13 @@ struct ltntstools_pid_statistics_s
 	uint32_t pps;
 	uint32_t pps_window;
 	double mbps; /* Updated once per second. */
+
+	int hasPCR;
+	int seenPCR;
+#define ltntstools_CLOCK_PCR 0
+#define ltntstools_CLOCK_PTS 1
+#define ltntstools_CLOCK_DTS 2
+	struct ltntstools_clock_s clocks[3];
 };
 
 struct ltntstools_stream_statistics_s
@@ -69,6 +77,9 @@ double   ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s
 uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /* A324 stats wedged into this framework, better than nothing. */
 void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
