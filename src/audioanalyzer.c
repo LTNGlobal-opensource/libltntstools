@@ -421,7 +421,9 @@ void ltntstools_audioanalyzer_stream_remove(void *hdl, uint16_t pid)
     av_packet_free(&stream->pkt);
 
     if (stream->enableNielsen) {
+#if HAVE_IMONITORSDKPROCESSOR_H
         nielsen_bindings_free(stream->nielsen);
+#endif
     }
     memset(stream, 0, sizeof(*stream));
     free(stream);
