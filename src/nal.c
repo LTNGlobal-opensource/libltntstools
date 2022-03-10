@@ -1,4 +1,5 @@
 #include "libltntstools/nal.h"
+#include "libltntstools/ts.h"
 #include <inttypes.h>
 
 #include <libavutil/internal.h>
@@ -166,6 +167,14 @@ char *ltn_nal_h264_findNalTypes(const uint8_t *buffer, int lengthBytes)
 	return arr;
 }
 
+
+struct h264_slice_data_s
+{
+	uint32_t  slice_type;
+	uint64_t  count;
+	char     *name;
+};
+
 #define MAX_H264_SLICE_TYPES 10
 struct h264_slice_data_s slice_defaults[MAX_H264_SLICE_TYPES] = {
 	{ 0, 0, "P", },
@@ -180,53 +189,65 @@ struct h264_slice_data_s slice_defaults[MAX_H264_SLICE_TYPES] = {
 	{ 9, 0, "SI", },
 };
 
-void h264_slice_counter_reset(struct h264_slice_data_s *s)
+struct h264_slice_counter_s
 {
-	memcpy(s, slice_defaults, sizeof(slice_defaults));
+	uint16_t pid;
+	struct h264_slice_data_s slice[MAX_H264_SLICE_TYPES];
+};
+
+void h264_slice_counter_reset(void *ctx)
+{
+	struct h264_slice_counter_s *s = (struct h264_slice_counter_s *)ctx;
+	memcpy(s->slice, slice_defaults, sizeof(slice_defaults));
 }
 
-struct h264_slice_data_s *h264_slice_counter_alloc()
+void *h264_slice_counter_alloc(uint16_t pid)
 {
-	struct h264_slice_data_s *s = malloc(sizeof(slice_defaults));
+	struct h264_slice_counter_s *s = malloc(sizeof(*s));
+	s->pid = pid;
 	h264_slice_counter_reset(s);
-	return s;
+	return (void *)s;
 }
 
-void h264_slice_counter_free(struct h264_slice_data_s *s)
+void h264_slice_counter_free(void *ctx)
 {
+	struct h264_slice_counter_s *s = (struct h264_slice_counter_s *)ctx;
 	free(s);
 }
 
-void h264_slice_counter_update(struct h264_slice_data_s *s, int slice_type)
+void h264_slice_counter_update(void *ctx, int slice_type)
 {
-	s[ slice_type ].count++;
+	struct h264_slice_counter_s *s = (struct h264_slice_counter_s *)ctx;
+	s->slice[ slice_type ].count++;
 }
 
-void h264_slice_counter_dprintf(struct h264_slice_data_s *s, int fd, int printZeroCounts)
+void h264_slice_counter_dprintf(void *ctx, int fd, int printZeroCounts)
 {
-	dprintf(fd, "Type  Name  Count (H264 slice types)\n");
+	struct h264_slice_counter_s *s = (struct h264_slice_counter_s *)ctx;
+	dprintf(fd, "Type  Name  Count (H264 slice types for pid 0x%04x)\n", s->pid);
 	for (int i = MAX_H264_SLICE_TYPES - 1; i >= 0 ; i--) {
-		struct h264_slice_data_s *sl = s + i;
+		struct h264_slice_data_s *sl = &s->slice[i];
 		if (sl->count == 0 && !printZeroCounts)
 			continue;
 		dprintf(fd, "%4d  %4s  %" PRIu64 "\n", sl->slice_type, sl->name, sl->count);
 	}
 }
 
-void h264_slice_counter_write(struct h264_slice_data_s *s, const unsigned char *pkts, int pktCount)
+static void h264_slice_counter_write_packet(void *ctx, const unsigned char *pkt)
 {
+	struct h264_slice_counter_s *s = (struct h264_slice_counter_s *)ctx;
 	int offset = 0;
-	while (offset < ((pktCount * 188) - 5)) {
-		if (ltn_nal_findHeader(pkts, pktCount * 188, &offset) == 0) {
+	while (offset < ((1 * 188) - 5)) {
+		if (ltn_nal_findHeader(pkt, 188, &offset) == 0) {
 #if 0
 			printf("nal at 0x%04x: ", offset);
 			for (int i = 0; i < 6; i++)
 				printf("%02x ", *(pkts + offset + i));
 #endif
-			if ((*(pkts + offset + 3) & 0x1f) == 0x01) {
+			if ((*(pkt + offset + 3) & 0x1f) == 0x01) {
 				GetBitContext gb;
-				init_get_bits8(&gb, pkts + offset + 4, 4);
-				int first_mb_in_slice = get_ue_golomb(&gb);
+				init_get_bits8(&gb, pkt + offset + 4, 4);
+				get_ue_golomb(&gb); /* first_mb_in_slice */
 				int slice_type = get_ue_golomb(&gb);
 
 				h264_slice_counter_update(s, slice_type);
@@ -237,5 +258,16 @@ void h264_slice_counter_write(struct h264_slice_data_s *s, const unsigned char *
 #endif
 		} else
 			break;
+	}
+}
+
+void h264_slice_counter_write(void *ctx, const unsigned char *pkts, int pktCount)
+{
+	struct h264_slice_counter_s *s = (struct h264_slice_counter_s *)ctx;
+	for (int i = 0; i < pktCount; i++) {
+		uint16_t pid = ltntstools_pid(pkts + (i * 188));
+		if (s->pid == 0x2000 || pid == s->pid) {
+			h264_slice_counter_write_packet(s, pkts + (i * 188));
+		}
 	}
 }

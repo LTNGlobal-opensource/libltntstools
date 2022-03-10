@@ -30,18 +30,40 @@ char *ltn_nal_hevc_findNalTypes(const uint8_t *buf, int lengthBytes);
 
 char *ltn_nal_h264_findNalTypes(const uint8_t *buf, int lengthBytes);
 
-struct h264_slice_data_s
-{
-	uint32_t  slice_type;
-	uint64_t  count;
-	char     *name;
-};
+/**
+ * @brief         A machanism to find h264 slices in a bitstream, count the number of respective I/P/B frames.
+ * @param[in]     uint16_t pid - Specific video pid to analyze. Use 0x2000 to analyze all pids.
+ * @return        void * - Success, use this on all future calls into the framework.
+ * @return        NULL - Error
+ */
+void *h264_slice_counter_alloc(uint16_t pid);
 
-struct h264_slice_data_s *h264_slice_counter_alloc();
-void h264_slice_counter_free(struct h264_slice_data_s *s);
-void h264_slice_counter_reset(struct h264_slice_data_s *s);
-void h264_slice_counter_update(struct h264_slice_data_s *s, int slice_type);
-void h264_slice_counter_dprintf(struct h264_slice_data_s *s, int fd, int printZeroCounts);
-void h264_slice_counter_write(struct h264_slice_data_s *s, const unsigned char *pkts, int packetCount);
+/**
+ * @brief         A machanism to find h264 slices in a bitstream, count the number of respective I/P/B frames.
+ * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ */
+void h264_slice_counter_free(void *ctx);
+
+/**
+ * @brief         Reset the internal I/P/B frame counts to zero.
+ * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ */
+void h264_slice_counter_reset(void *ctx);
+
+/**
+ * @brief         Reset the internal I/P/B frame counts to zero.
+ * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     int fd - file descriptor that the prinf will occur to.
+ * @param[in]     int printZeroCounts - Ensure totals that are zero are printed (1) or discarded(0)
+ */
+void h264_slice_counter_dprintf(void *ctx, int fd, int printZeroCounts);
+
+/**
+ * @brief         Scan the buffer, update the I/P/B counts based on slices found within the buffer. 
+ * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     const unsigned char *pkts - A fully aligned buffer of transport packets.
+ * @param[in]     int packetCount - Number of 188 bytes transport packets in the buffer.
+ */
+void h264_slice_counter_write(void *ctx, const unsigned char *pkts, int packetCount);
 
 #endif /* NAL_H */
