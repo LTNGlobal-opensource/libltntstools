@@ -63,6 +63,8 @@ if DEBUG
   libltntstools_la_CFLAGS += -g
 endif
 
+libltntstools_la_CFLAGS += -I../../ffmpeg
+
 libltntstools_la_CXXFLAGS  = $(libltntstools_la_CFLAGS)
 libltntstools_la_CXXFLAGS += -std=c++11
 

@@ -28,4 +28,20 @@ int ltn_nal_findHeader(const uint8_t *buf, int lengthBytes, int *offset);
 
 char *ltn_nal_hevc_findNalTypes(const uint8_t *buf, int lengthBytes);
 
+char *ltn_nal_h264_findNalTypes(const uint8_t *buf, int lengthBytes);
+
+struct h264_slice_data_s
+{
+	uint32_t  slice_type;
+	uint64_t  count;
+	char     *name;
+};
+
+struct h264_slice_data_s *h264_slice_counter_alloc();
+void h264_slice_counter_free(struct h264_slice_data_s *s);
+void h264_slice_counter_reset(struct h264_slice_data_s *s);
+void h264_slice_counter_update(struct h264_slice_data_s *s, int slice_type);
+void h264_slice_counter_dprintf(struct h264_slice_data_s *s, int fd, int printZeroCounts);
+void h264_slice_counter_write(struct h264_slice_data_s *s, const unsigned char *pkts, int packetCount);
+
 #endif /* NAL_H */
