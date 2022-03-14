@@ -30,6 +30,8 @@ char *ltn_nal_hevc_findNalTypes(const uint8_t *buf, int lengthBytes);
 
 char *ltn_nal_h264_findNalTypes(const uint8_t *buf, int lengthBytes);
 
+const char *h264Nals_lookupName(int nalType);
+
 /**
  * @brief         A machanism to find h264 slices in a bitstream, count the number of respective I/P/B frames.
  * @param[in]     uint16_t pid - Specific video pid to analyze. Use 0x2000 to analyze all pids.
@@ -37,6 +39,13 @@ char *ltn_nal_h264_findNalTypes(const uint8_t *buf, int lengthBytes);
  * @return        NULL - Error
  */
 void *h264_slice_counter_alloc(uint16_t pid);
+
+/**
+ * @brief         Query the pid assocuated with the current counter;
+ * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @return        0 thru 0x2000
+ */
+uint16_t h264_slice_counter_get_pid(void *ctx);
 
 /**
  * @brief         A machanism to find h264 slices in a bitstream, count the number of respective I/P/B frames.
@@ -49,6 +58,13 @@ void h264_slice_counter_free(void *ctx);
  * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
  */
 void h264_slice_counter_reset(void *ctx);
+
+/**
+ * @brief         Reset the internal I/P/B frame counts to zero, adn establish a pid to slice count;
+ * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     uint16_t pid - Specific video pid to analyze. Use 0x2000 to analyze all pids.
+ */
+void h264_slice_counter_reset_pid(void *ctx, uint16_t pid);
 
 /**
  * @brief         Reset the internal I/P/B frame counts to zero.
@@ -65,5 +81,20 @@ void h264_slice_counter_dprintf(void *ctx, int fd, int printZeroCounts);
  * @param[in]     int packetCount - Number of 188 bytes transport packets in the buffer.
  */
 void h264_slice_counter_write(void *ctx, const unsigned char *pkts, int packetCount);
+
+struct h264_slice_counter_results_s
+{
+    uint64_t i;
+    uint64_t b;
+    uint64_t p;
+    uint64_t si;
+    uint64_t sp;
+
+#define H264_SLICE_COUNTER_HISTORY_LENGTH 20
+    char sliceHistory[H264_SLICE_COUNTER_HISTORY_LENGTH + 1];
+};
+void h264_slice_counter_query(void *ctx, struct h264_slice_counter_results_s *results);
+
+const char *h274_slice_name_ascii(int slice_type);
 
 #endif /* NAL_H */

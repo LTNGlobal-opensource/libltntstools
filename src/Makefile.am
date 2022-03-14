@@ -55,6 +55,8 @@ libltntstools_la_SOURCES += proc-net-udp.c
 libltntstools_la_SOURCES += audioanalyzer.c
 libltntstools_la_SOURCES += nielsen-bindings.cpp
 libltntstools_la_SOURCES += nielsen-bindings.h
+libltntstools_la_SOURCES += h264_codec_metadata.h
+libltntstools_la_SOURCES += h264_codec_metadata.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -97,4 +99,5 @@ libltntstools_include_HEADERS += libltntstools/pes-extractor.h
 libltntstools_include_HEADERS += libltntstools/smoother-pcr.h
 libltntstools_include_HEADERS += libltntstools/proc-net-udp.h
 libltntstools_include_HEADERS += libltntstools/audioanalyzer.h
+libltntstools_include_HEADERS += libltntstools/h264_codec_metadata.h
 

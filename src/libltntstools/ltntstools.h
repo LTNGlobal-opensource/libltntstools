@@ -46,3 +46,4 @@
 #include <libltntstools/smoother-pcr.h>
 #include <libltntstools/proc-net-udp.h>
 #include <libltntstools/audioanalyzer.h>
+#include <libltntstools/h264_codec_metadata.h>
