@@ -1,5 +1,5 @@
-#ifndef NAL_H
-#define NAL_H
+#ifndef NAL_H264_H
+#define NAL_H264_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -97,4 +97,4 @@ void h264_slice_counter_query(void *ctx, struct h264_slice_counter_results_s *re
 
 const char *h274_slice_name_ascii(int slice_type);
 
-#endif /* NAL_H */
+#endif /* NAL_H264_H */

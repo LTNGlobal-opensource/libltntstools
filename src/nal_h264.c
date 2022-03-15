@@ -1,4 +1,4 @@
-#include "libltntstools/nal.h"
+#include "libltntstools/nal_h264.h"
 #include "libltntstools/ts.h"
 #include <inttypes.h>
 
@@ -189,7 +189,7 @@ struct h264_slice_data_s slice_defaults[MAX_H264_SLICE_TYPES] = {
 	{ 9, 0, "i", },
 };
 
-const char *h274_slice_name_ascii(int slice_type)
+const char *h264_slice_name_ascii(int slice_type)
 {
 	return &slice_defaults[ slice_type % MAX_H264_SLICE_TYPES ].name[0];
 }
@@ -348,3 +348,6 @@ void h264_slice_counter_reset_pid(void *ctx, uint16_t pid)
 	s->pid = pid;
 	h264_slice_counter_reset(ctx);
 }
+
+/* HEVC */
+

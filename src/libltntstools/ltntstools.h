@@ -33,7 +33,7 @@
 #include <libltntstools/throughput_hires.h>
 #include <libltntstools/time.h>
 #include <libltntstools/segmentwriter.h>
-#include <libltntstools/nal.h>
+#include <libltntstools/nal_h264.h>
 #include <libltntstools/tr101290.h>
 #include <libltntstools/pat.h>
 #include <libltntstools/streammodel.h>
