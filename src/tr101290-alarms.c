@@ -41,9 +41,9 @@ void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltnts
 
 void ltntstools_tr101290_alarm_raise_all(struct ltntstools_tr101290_s *s)
 {
-        int count = _event_table_entry_count(s);
-        for (int i = 1; i < count; i++) {
-                struct tr_event_s *ev = &s->event_tbl[i];
+    int count = _event_table_entry_count(s);
+    for (int i = 1; i < count; i++) {
+        struct tr_event_s *ev = &s->event_tbl[i];
 		ltntstools_tr101290_alarm_raise(s, ev->id);
 	}
 }
