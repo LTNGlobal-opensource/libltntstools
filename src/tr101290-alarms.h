@@ -16,6 +16,9 @@ extern "C" {
 #include "libltntstools/tr101290.h"
 #include "libltntstools/time.h"
 
+/* These calls set and clear bits in the ctx->event_tbl array.
+ * Those bits are then acted upon by a background thread.
+ */
 void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 

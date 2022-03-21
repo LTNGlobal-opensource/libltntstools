@@ -14,6 +14,9 @@
 #define LOCAL_DEBUG 0
 #define TIMER_FIELD_DEFAULTS    .timerRequired = 0, .timerAlarmPeriodms = 0, .timerId = 0
 
+/* A static table of default events, their triggering values, default values and such.
+ * This table is never directly modified, it's cloned and copies are modified.
+ */
 struct tr_event_s tr_events_tbl[] =
 {
 	[E101290_UNDEFINED] = {
@@ -158,7 +161,6 @@ struct tr_event_s *ltntstools_tr101290_event_table_copy()
 	memcpy(arr, tr_events_tbl, sizeof(tr_events_tbl));
 	return arr;
 }
-
 
 const char *ltntstools_tr101290_event_name_ascii(enum ltntstools_tr101290_event_e event)
 {

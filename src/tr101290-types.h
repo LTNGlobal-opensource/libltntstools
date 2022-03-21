@@ -30,24 +30,24 @@ typedef unsigned int timer_t;
 struct tr_event_s
 {
 	int enabled;
-	int priorityNr;
+	int priorityNr;	/* 1, 2 are the only permissable values. These related to 101290 p1, p2 or p3 levels. */
 	enum ltntstools_tr101290_event_e id;
 	char name[64];
 
-	int raised;
-	int reportXX;
+	int raised;    /* Boolean */
+	int reportXX;  /*: TODO, this can be removed, if the events defaults table is edited to remove it. */
 	struct timeval lastChanged;	/* When the raised state changes, we bump this timestamp. */
 	struct timeval lastReported;	/* Last time we sent this alarm via the user callback. */
-	struct timeval nextReportXX;
+	struct timeval nextReportXX;    /*: TODO, this can be removed, if the events defaults table is edited to remove it. */
 	struct timeval reportInterval;
-	int autoClearAlarmAfterReport;  /* Automatically clear the alarm, if possible, 5 seconds after it returned to normal. */
+	int autoClearAlarmAfterReport;  /* Number of seconds. Automatically clear the alarm, if possible, zero implies never autoclear. */
 
 	/* One timer per event, used to ensure time based events are properly tracked.
 	 * Timers are used per event, and fire when an event that was supposed to occur every
 	 * Nms doesn't occur, so the timer fires and an alarm condition is raised.
 	 */
 	int timerRequired; /* Boolean */
-	int timerAlarmPeriodms; /* If the timer isn't cancelled within this period, it fires and an alarm is raised. */
+	int timerAlarmPeriodms; /* If the timer isn't cancelled within this period (ms), it fires and an alarm is raised. */
 	timer_t timerId;
 };
 
