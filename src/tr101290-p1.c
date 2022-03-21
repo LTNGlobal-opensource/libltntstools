@@ -19,9 +19,13 @@ static ssize_t p1_process_p1_5(struct ltntstools_tr101290_s *s, const uint8_t *b
 	/* PMT checking */
 	int complete = 0;
 	ltntstools_streammodel_write(s->smHandle, buf, packetCount, &complete);
+
+	/* TODO: What should we be doing here? */
+	
 	return packetCount;
 }
 
+/* P1_4: Incorrect packet order */
 static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
 {
 	uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(&s->streamStatistics);
@@ -59,6 +63,7 @@ static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *b
 	return packetCount;
 }
 
+/* P1.3 - PAT_error */
 static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
 {
 	/* Look for a PAT */
@@ -97,13 +102,13 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 	/* P1.1 is taken care of by the background thread.
 	 * It monitors calls to _write, and if they stop, we declare that
 	 * TS_SYNC_LOSS. We're generally more flexible in this design because we
-	 * aren't dealing with RF< we're dealing with IP networks, and the metric
+	 * aren't dealing with RF, we're dealing with IP networks, and the metric
 	 * we truly care about is, the the network stall for more than X ms?
 	 */
 
 	/* P1.2 - Sync Byte Error, sync byte != 0x47.
 	 * Most TR101290 processors assume this condition rises when P1.1 is bad,
-	 * it's not true, especially in a IP network. IN the event of a packet stall,
+	 * it's not true, especially in a IP network. In the event of a packet stall,
 	 * or jitter, transport is lost for N ms, but resumes perfectly with zero
 	 * packet loss, in this case we never want to declare P1.2.
 	 */

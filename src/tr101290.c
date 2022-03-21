@@ -44,6 +44,15 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 	return lost;
 }
 
+/*
+ * A general event loop that raises and clears alarms based on various
+ * conditions.
+ * Alarms are passed to the upper layers by way of a callback.
+ * The users callback could block this thread, which isn't nice.
+ * 
+ * Alarms can be raised and cleared by this thread, or by
+ * calls to ltntstools_tr101290_write().
+ */
 void *ltntstools_tr101290_threadFunc(void *p)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)p;
@@ -87,7 +96,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			if (ev->enabled == 0)
 				continue;
 
-			/* Find all events we should be reproting on,  */
+			/* Find all events we should be reporting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
 				ev->lastReported = now;
 
@@ -139,6 +148,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		pthread_mutex_unlock(&s->mutex);
 
 		if (bytes && cpy && s->cb_notify) {
+			/* The user is responsible for the lifespan of this object. */
 			s->cb_notify(s->userContext, cpy, count);
 			s->alarmCount = 0;
 		}
@@ -221,8 +231,10 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	/* The thread needs to understand how frequently we're getting write calls. */
 	gettimeofday(&s->lastWriteCall, NULL);
 
+	/* Update general stream statistics, packet loss, CC's, birates etc. */
 	ltntstools_pid_stats_update(&s->streamStatistics, buf, packetCount);
 
+	/* Pass all of the packets to the P1 analysis layer. */
 	p1_write(s, buf, packetCount);
 
 	pthread_mutex_unlock(&s->mutex);

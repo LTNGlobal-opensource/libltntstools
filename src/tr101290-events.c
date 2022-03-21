@@ -254,7 +254,7 @@ int ltntstools_tr101290_event_clear(void *hdl, enum ltntstools_tr101290_event_e 
 	return 0;
 }
 
-/* For a given event in the user context, see if its enable, expected to be reported,
+/* For a given event in the user context, see if its enabled, expected to be reported,
  * and the report window dictates that we should be reproting it, react accordingly.
  */
 int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event)

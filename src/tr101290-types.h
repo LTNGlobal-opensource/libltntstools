@@ -66,7 +66,11 @@ struct ltntstools_tr101290_s
 	pthread_mutex_t mutex;
 	struct tr_event_s *event_tbl;
 
-	/* Alarm list for reporting to user */
+	/* Alarm list for reporting to user. This is a dymanic table
+	 * maintained by the event thread. It's resized according to
+	 * conditions. A COPY of this allocation is made and passed
+	 * to the applications upper layers for inspection.
+	 */
 	int alarmCount;
 	struct ltntstools_tr101290_alarm_s *alarm_tbl;
 
