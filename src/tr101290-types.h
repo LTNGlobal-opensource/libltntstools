@@ -59,8 +59,12 @@ struct ltntstools_tr101290_s
 	ltntstools_tr101290_notification cb_notify;
 	void *userContext;
 
+	/* A cloned and modified version of the tr_events_tbl. The original table contains
+	 * context default, sane static settings.
+	 * We dup the table into our context then tamper/modify it to trace state.
+	 */
 	pthread_mutex_t mutex;
-	struct tr_event_s *event_tbl; /* A cloned and modified version of the tr_events_tbl */
+	struct tr_event_s *event_tbl;
 
 	/* Alarm list for reporting to user */
 	int alarmCount;
