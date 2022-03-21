@@ -60,6 +60,7 @@ struct ltntstools_tr101290_alarm_s
 };
 void ltntstools_tr101290_event_dprintf(int fd, struct ltntstools_tr101290_alarm_s *alarm);
 
+/* When the framework calls your callback, you own the array and are responsible for its destruction. */
 typedef void (*ltntstools_tr101290_notification)(void *userContext, struct ltntstools_tr101290_alarm_s *array, int count);
 
 /**
@@ -67,6 +68,7 @@ typedef void (*ltntstools_tr101290_notification)(void *userContext, struct ltnts
  *              Free this handle with a call to ltntstools_tr101290_free().
  * @param[out]  void **hdl - Handle returned to the caller.
  * @param[in]   ltntstools_tr101290_notification cb_notify - User supplied callback where alarms are posted to.
+ *              When the framework calls your callback, you own the array and are responsible for its destruction.
  * @param[in]   void *userContext - User supplied opaque context, passed during callback calls.
  * @return      0 on success else < 0.
  */
