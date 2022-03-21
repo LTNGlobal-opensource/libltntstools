@@ -79,7 +79,11 @@ struct ltntstools_tr101290_s
 	uint64_t PATCountLastTimer;
 	uint64_t CCCounterLastWrite;
 
-	void *smHandle; /* handle to a running PSIP stream modelling collector. */
+	/* handle to a running PSIP stream modelling collector.
+	 * The streammodel parses pats, PMTs, and pulls apart
+	 * service metadata. We use this to find missing pids and such.
+	 */
+	void *smHandle;
 };
 
 #include "tr101290-events.h"
