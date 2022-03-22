@@ -20,7 +20,11 @@ extern "C" {
 /* Set to 1 to include code that triggers test routines when certain files are present in /tmp.
  * Production builds should ALWAYS be sero to zero.
  */
-#define ENABLE_TESTING 1
+#define ENABLE_TESTING 0
+
+#if ENABLE_TESTING
+#pragma message "TR101290 WARNING: ENABLE_TESTING IS ACTIVE, remove before flight."
+#endif
 
 /* TR101290 isn't supported on MAC Yet, but keep the compiler happy. */
 #if defined(__APPLE__)
