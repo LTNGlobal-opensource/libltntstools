@@ -34,7 +34,7 @@ struct tr_event_s tr_events_tbl[] =
 		E101290_P1_1__TS_SYNC_LOSS, "E101290_P1_1__TS_SYNC_LOSS",
 		.raised = 0 /*  */, 1,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
-		.autoClearAlarmAfterReport = 5, /* Seconds */
+		.autoClearAlarmAfterReport = 200, /* ms */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_2__SYNC_BYTE_ERROR] = {
@@ -42,7 +42,7 @@ struct tr_event_s tr_events_tbl[] =
 		E101290_P1_2__SYNC_BYTE_ERROR, "E101290_P1_2__SYNC_BYTE_ERROR",
 		.raised = 0 /*  */, 1,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
-		.autoClearAlarmAfterReport = 5, /* Seconds */
+		.autoClearAlarmAfterReport = 200, /* ms */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_3__PAT_ERROR] = {
@@ -50,58 +50,57 @@ struct tr_event_s tr_events_tbl[] =
 		E101290_P1_3__PAT_ERROR, "E101290_P1_3__PAT_ERROR",
 		.raised = 0 /*  */, 0,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
-		.autoClearAlarmAfterReport = 5, /* Seconds */
-		.timerRequired = 1,
-		.timerAlarmPeriodms = 500, /* As per the spec */
-		.timerId = 0,
+		.autoClearAlarmAfterReport = 500, /* ms */
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_3a__PAT_ERROR_2] = {
 		.enabled = 1, .priorityNr = 1,
 		E101290_P1_3a__PAT_ERROR_2, "E101290_P1_3a__PAT_ERROR_2",
 		.raised = 0 /*  */, 0,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
-		.autoClearAlarmAfterReport = 5, /* Seconds */
-		.timerRequired = 0,
-		.timerAlarmPeriodms = 500, /* As per the spec */
-		.timerId = 0,
+		.autoClearAlarmAfterReport = 500, /* ms */
+		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_4__CONTINUITY_COUNTER_ERROR] = {
 		.enabled = 1, .priorityNr = 1,
 		E101290_P1_4__CONTINUITY_COUNTER_ERROR, "E101290_P1_4__CONTINUITY_COUNTER_ERROR",
 		.raised = 0 /*  */, 0,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
-		.autoClearAlarmAfterReport = 5, /* Seconds */
+		.autoClearAlarmAfterReport = 1000, /* ms */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_5__PMT_ERROR] = {
-		.enabled = 0, .priorityNr = 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_5__PMT_ERROR, "E101290_P1_5__PMT_ERROR",
 		.raised = 0 /*  */, 0,
 		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
-		.autoClearAlarmAfterReport = 5, /* Seconds */
+		.autoClearAlarmAfterReport = 2000, /* ms */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_5a__PMT_ERROR_2] = {
-		.enabled = 0, .priorityNr = 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_5a__PMT_ERROR_2, "E101290_P1_5a__PMT_ERROR_2",
 		.raised = 0 /*  */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 2000, /* ms */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P1_6__PID_ERROR] = {
-		.enabled = 0, .priorityNr = 1,
+		.enabled = 1, .priorityNr = 1,
 		E101290_P1_6__PID_ERROR, "E101290_P1_6__PID_ERROR",
 		.raised = 0 /*  */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 2000, /* Seconds */
 		TIMER_FIELD_DEFAULTS,
 	},
 
         /* Priority 2 */
 	[E101290_P2_1__TRANSPORT_ERROR] = {
-		.enabled = 0, .priorityNr = 2,
+		.enabled = 1, .priorityNr = 2,
 		E101290_P2_1__TRANSPORT_ERROR, "E101290_P2_1__TRANSPORT_ERROR",
 		.raised = 0 /*  */, 0,
-		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 }, 0,
+		{ 0, 0 }, { 0, 0 }, { 0, 0 }, { 1, 0 },
+		.autoClearAlarmAfterReport = 2000, /* Seconds */
 		TIMER_FIELD_DEFAULTS,
 	},
 	[E101290_P2_2__CRC_ERROR] = {

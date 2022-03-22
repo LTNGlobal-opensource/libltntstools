@@ -20,6 +20,7 @@ extern "C" {
  * Those bits are then acted upon by a background thread.
  */
 void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
+void ltntstools_tr101290_alarm_raise_with_arg(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event, const char *msg);
 void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 
 void ltntstools_tr101290_alarm_raise_all(struct ltntstools_tr101290_s *s);

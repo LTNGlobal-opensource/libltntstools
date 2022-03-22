@@ -14,7 +14,7 @@
 
 #include "tr101290-types.h"
 
-#define LOCAL_DEBUG 1
+#define LOCAL_DEBUG 0
 
 int64_t _timeval_to_ms(struct timeval *tv)
 {
@@ -35,11 +35,10 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 	int64_t ms = _timeval_to_ms(&diff);
 	if (ms < 20) {
 		lost = 0;
-	} else {
-#if LOCAL_DEBUG
-		//printf("LOS for %" PRIi64 " ms\n", ms);
-#endif
 	}
+#if LOCAL_DEBUG
+	//printf("LOS for %" PRIi64 " ms\n", ms);
+#endif
 
 	return lost;
 }
@@ -68,24 +67,10 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		gettimeofday(&now, NULL);
 
 		int conditionLOS = didExperienceTransportLoss(s);
-		if (conditionLOS) {
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
+		if (!conditionLOS) {
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
 		} else {
-			/* If the period of time between the last report and this clear is more than
-			 * five seconds, automatically clear the alarm.
-			 */
-
-			struct tr_event_s *ev = &s->event_tbl[E101290_P1_1__TS_SYNC_LOSS];
-
-			if (ev->autoClearAlarmAfterReport) {
-				struct timeval interval = { ev->autoClearAlarmAfterReport, 0 };
-				struct timeval final;
-				timeradd(&ev->lastReported, &interval, &final);
-			
-				if (timercmp(&now, &final, >= )) {
-					ltntstools_tr101290_alarm_clear(s, ev->id);
-				}
-			}
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
 		}
 
 		/* For each possible event, determine if we need to build and alarm
@@ -98,10 +83,9 @@ void *ltntstools_tr101290_threadFunc(void *p)
 
 			/* Find all events we should be reporting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
-				ev->lastReported = now;
 
 				/* Mark the last reported time slight int the future, to avoid duplicate
-				 * reports within a few useconds of each other
+				 * reports within a few seconds of each other
 				 */
 				struct timeval interval10ms = { 0, 1 * 1000 };
 				timeradd(&now, &interval10ms, &ev->lastReported);
@@ -124,14 +108,20 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
 
 				sprintf(alarm->description, "%s: Alarm %s", ts, alarm->raised ? "raised" : "cleared");
-
+				strcpy(alarm->arg, ev->arg);
+				
 				s->alarmCount++;
 
 			}
-#if 0
-			if (ev->autoClearAlarmAfterReport)
-				_tr101290_event_clear(s, ev->id);
-#endif
+
+			/* All events naturally want to be in a raise state,
+			 * in the event of no data, or something holding them clear.
+			 */
+			if (timercmp(&now, &ev->nextAlarm, >= )) {
+				ltntstools_tr101290_alarm_raise(s, ev->id);
+			}
+
+
 		}
 
 		/* Pass any alarms to the callback */
@@ -211,8 +201,7 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
 
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	gettimeofday(&s->now, NULL);
 
 #if LOCAL_DEBUG
 	//printf("%s(%d)\n", __func__, packetCount);
@@ -231,11 +220,16 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	/* The thread needs to understand how frequently we're getting write calls. */
 	gettimeofday(&s->lastWriteCall, NULL);
 
+	s->preTEIErrors = ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics);
+
 	/* Update general stream statistics, packet loss, CC's, birates etc. */
 	ltntstools_pid_stats_update(&s->streamStatistics, buf, packetCount);
 
 	/* Pass all of the packets to the P1 analysis layer. */
 	p1_write(s, buf, packetCount);
+
+	/* Pass all of the packets to the P1 analysis layer. */
+	p2_write(s, buf, packetCount);
 
 	pthread_mutex_unlock(&s->mutex);
 

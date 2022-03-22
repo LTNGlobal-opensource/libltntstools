@@ -42,9 +42,9 @@ struct tr_event_s
 	int reportXX;  /*: TODO, this can be removed, if the events defaults table is edited to remove it. */
 	struct timeval lastChanged;	/* When the raised state changes, we bump this timestamp. */
 	struct timeval lastReported;	/* Last time we sent this alarm via the user callback. */
-	struct timeval nextReportXX;    /*: TODO, this can be removed, if the events defaults table is edited to remove it. */
+	struct timeval nextAlarm;       /*: Every time a caller calls _raise(). Bump this expirey time to now plus interval. We'll use this to expire stale alerts. */
 	struct timeval reportInterval;
-	int autoClearAlarmAfterReport;  /* Number of seconds. Automatically clear the alarm, if possible, zero implies never autoclear. */
+	int autoClearAlarmAfterReport;  /* Number of MS seconds. Automatically clear the alarm, if possible, zero implies never autoclear. */
 
 	/* One timer per event, used to ensure time based events are properly tracked.
 	 * Timers are used per event, and fire when an event that was supposed to occur every
@@ -53,6 +53,7 @@ struct tr_event_s
 	int timerRequired; /* Boolean */
 	int timerAlarmPeriodms; /* If the timer isn't cancelled within this period (ms), it fires and an alarm is raised. */
 	timer_t timerId;
+	char arg[128];
 };
 
 struct ltntstools_tr101290_s
@@ -86,18 +87,22 @@ struct ltntstools_tr101290_s
 	struct ltntstools_stream_statistics_s streamStatistics;
 	uint64_t PATCountLastTimer;
 	uint64_t CCCounterLastWrite;
+	uint64_t preTEIErrors;
+	struct timeval lastPAT;
 
 	/* handle to a running PSIP stream modelling collector.
 	 * The streammodel parses pats, PMTs, and pulls apart
 	 * service metadata. We use this to find missing pids and such.
 	 */
 	void *smHandle;
+	time_t lastCompleteTime;
 };
 
 #include "tr101290-events.h"
 #include "tr101290-alarms.h"
 #include "tr101290-timers.h"
 #include "tr101290-p1.h"
+#include "tr101290-p2.h"
 
 #ifdef __cplusplus
 };

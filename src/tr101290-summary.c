@@ -34,6 +34,7 @@ int ltntstools_tr101290_summary_get(void *hdl, struct ltntstools_tr101290_summar
 		si->priorityNr = ev->priorityNr,
 		si->last_update = ev->lastChanged;
 		si->raised = ev->raised;
+		strcpy(si->arg, ev->arg);
 	}
 	pthread_mutex_unlock(&s->mutex);
 
