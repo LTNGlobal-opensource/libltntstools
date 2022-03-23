@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <time.h>
+#include <stdarg.h>
 
 #include "libltntstools/tr101290.h"
 #include "libltntstools/time.h"
@@ -43,6 +44,91 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 	return lost;
 }
 
+int ltntstools_tr101290_log_append(struct ltntstools_tr101290_s *s, int addTimestamp, const char *format, ...)
+{
+	int ret = 0;
+
+	pthread_mutex_lock(&s->logMutex);
+	if (!s->logFilename) {
+		pthread_mutex_unlock(&s->logMutex);
+		return ret; /* Silently discard message */
+	}
+
+	char buf[2048];
+	buf[0] = 0;
+
+	if (addTimestamp) {
+		time_t now = time(NULL);
+		struct tm *whentm = localtime(&now);
+		char ts[64];
+		strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
+
+		sprintf(buf, "%s: ", ts);
+	}
+
+    va_list vl;
+    va_start(vl, format);
+    vsprintf(&buf[strlen(buf)], format, vl);
+    va_end(vl);
+
+	sprintf(buf + strlen(buf), "\n");
+    //printf("%s", buf);
+
+	FILE *fh = fopen(s->logFilename, "a+");
+	if (fh) {
+
+		/* we're a super user, obtain any SUDO uid and change file ownership to it - if possible. */
+		if (!s->logOwnershipOK && fh && getuid() == 0 && getenv("SUDO_UID") && getenv("SUDO_GID")) {
+			s->logOwnershipOK = 1;
+			uid_t o_uid = atoi(getenv("SUDO_UID"));
+			gid_t o_gid = atoi(getenv("SUDO_GID"));
+
+			if (chown(s->logFilename, o_uid, o_gid) != 0) {
+				/* Error */
+				fprintf(stderr, "Error changing %s ownership to uid %d gid %d, ignoring\n",
+					s->logFilename, o_uid, o_gid);
+			}
+		}
+
+	    fprintf(fh, buf);
+		fclose(fh);
+	} else {
+		ret = -1;
+	}
+
+	pthread_mutex_unlock(&s->logMutex);
+
+	return ret;
+}
+
+/* Write the state of all enabled events to the logger.
+ * In terms of serialization, make sure this is ONLY called
+ * from the thread, to avoid an ugly looking log.
+ */
+static void ltntstools_tr101290_log_summary(struct ltntstools_tr101290_s *s)
+{
+	char buf[256];
+
+	for (int i = 1; i < (int)E101290_MAX; i++) {
+		struct tr_event_s *ev = &s->event_tbl[i];
+		if (ev->enabled == 0)
+			continue;
+
+		sprintf(buf, "%-40s - Status %s ", ltntstools_tr101290_event_name_ascii(ev->id), ev->raised ? " raised" : "cleared");
+
+		if (strlen(ev->arg)) {
+			if (ev->raised) {
+				ltntstools_tr101290_log_append(s, 1, "%s [ %s ]", buf, ev->arg);
+			} else {
+				ltntstools_tr101290_log_append(s, 1, buf);
+			}
+		} else {
+			ltntstools_tr101290_log_append(s, 1, buf);
+		}
+
+	}
+}
+
 /*
  * A general event loop that raises and clears alarms based on various
  * conditions.
@@ -55,7 +141,10 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 void *ltntstools_tr101290_threadFunc(void *p)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)p;
+	struct timeval nextSummaryTime = { 0 };
 
+#define PERIODIC_STATUS_REPORT_SECS 60
+	int reportPeriod = PERIODIC_STATUS_REPORT_SECS;
 	s->threadRunning = 1;
 
 	/* Raise alert on every event */
@@ -80,6 +169,15 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			struct tr_event_s *ev = &s->event_tbl[i];
 			if (ev->enabled == 0)
 				continue;
+
+			if (timercmp(&now, &nextSummaryTime, >= )) {
+				struct timeval interval = { reportPeriod, 0 };
+				timeradd(&now, &interval, &nextSummaryTime);
+
+				ltntstools_tr101290_log_append(s, 1, "Periodic Status Report --------------------------------------------------------------------------------");
+				ltntstools_tr101290_log_summary(s);
+				ltntstools_tr101290_log_append(s, 1, "-------------------------------------------------------------------------------------------------------");
+			}
 
 			/* Find all events we should be reporting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
@@ -107,11 +205,21 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				char ts[64];
 				strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
 
-				sprintf(alarm->description, "%s: Alarm %s", ts, alarm->raised ? "raised" : "cleared");
+				sprintf(alarm->description, "%s: %-40s -  Alarm %s ", ts,
+					ltntstools_tr101290_event_name_ascii(alarm->id),
+					alarm->raised ? " raised" : "cleared");
 				strcpy(alarm->arg, ev->arg);
-				
-				s->alarmCount++;
 
+				if (strlen(alarm->arg)) {
+					if (alarm->raised) {
+						ltntstools_tr101290_log_append(s, 0, "%s [ %s ]", alarm->description, alarm->arg);
+					} else {
+						ltntstools_tr101290_log_append(s, 0, alarm->description);
+					}
+				} else {
+					ltntstools_tr101290_log_append(s, 0, alarm->description);
+				}			
+				s->alarmCount++;
 			}
 
 			/* All events naturally want to be in a raise state,
@@ -120,7 +228,6 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			if (timercmp(&now, &ev->nextAlarm, >= )) {
 				ltntstools_tr101290_alarm_raise(s, ev->id);
 			}
-
 
 		}
 
@@ -156,6 +263,7 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 	s->userContext = userContext;
 	s->cb_notify = cb_notify;
 	pthread_mutex_init(&s->mutex, NULL);
+	pthread_mutex_init(&s->logMutex, NULL);
 
 	ltntstools_pid_stats_reset(&s->streamStatistics);
 
@@ -188,12 +296,20 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 void ltntstools_tr101290_free(void *hdl)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
+
 	if (s->threadRunning) {
 		s->threadTerminate = 1;
 		while (!s->threadTerminated)
 			usleep(1 * 1000);
 	}
+
+	ltntstools_tr101290_log_append(s, 1, "TR101290 Logging stopped");
+
 	free(s->event_tbl);
+	if (s->logFilename) {
+		free(s->logFilename);
+		s->logFilename = NULL;
+	}
 	free(s);
 }
 
@@ -236,3 +352,33 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	return packetCount;
 }
 
+int ltntstools_tr101290_log_enable(void *hdl, const char *afname)
+{
+	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
+
+	pthread_mutex_lock(&s->logMutex);
+	if (s->logFilename) {
+		pthread_mutex_unlock(&s->logMutex);
+		return -1; /* Invalid to change the log directory once set. */
+	}
+
+	free(s->logFilename);
+	s->logFilename = strdup(afname);
+
+	pthread_mutex_unlock(&s->logMutex);
+
+	int ret = ltntstools_tr101290_log_append(s, 1, "TR101290 Logging started");
+
+	return ret;
+}
+
+int ltntstools_tr101290_log_rotate(void *hdl)
+{
+	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
+
+	pthread_mutex_lock(&s->logMutex);
+	/* TODO: */
+	pthread_mutex_unlock(&s->logMutex);
+
+	return -1;
+}

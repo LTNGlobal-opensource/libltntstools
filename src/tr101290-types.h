@@ -96,6 +96,11 @@ struct ltntstools_tr101290_s
 	 */
 	void *smHandle;
 	time_t lastCompleteTime;
+
+	/* Logging - Take this muxten when writing to file or adjust any of these logging vars. */
+	pthread_mutex_t logMutex;
+	char *logFilename;
+	int logOwnershipOK;
 };
 
 #include "tr101290-events.h"
@@ -103,6 +108,8 @@ struct ltntstools_tr101290_s
 #include "tr101290-timers.h"
 #include "tr101290-p1.h"
 #include "tr101290-p2.h"
+
+int ltntstools_tr101290_log_append(struct ltntstools_tr101290_s *s, int addTimestamp, const char *format, ...);
 
 #ifdef __cplusplus
 };

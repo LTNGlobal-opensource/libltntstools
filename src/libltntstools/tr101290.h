@@ -8,6 +8,15 @@
  *              See ETSI TR101290 v1.2.1 (2001-05)
  */
 
+/* Usage:
+ * 1. Setup your application callback, typed from ltntstools_tr101290_notification.
+ *      int     ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_notify, void *userContext);
+ * 2. Write the entire transport mux to the layer.
+ *      ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount);
+ * 3. Free the context once you're done using the functionality.
+ *      ltntstools_tr101290_free(void *hdl);
+*/
+
 #ifndef _TR101290_H
 #define _TR101290_H
 
@@ -57,6 +66,7 @@ struct ltntstools_tr101290_alarm_s
 	int raised;
 
 	char description[256];
+	char arg[128];
 };
 void ltntstools_tr101290_event_dprintf(int fd, struct ltntstools_tr101290_alarm_s *alarm);
 
@@ -97,6 +107,11 @@ int ltntstools_tr101290_event_priority(enum ltntstools_tr101290_event_e event);
 
 int ltntstools_tr101290_event_clear(void *hdl, enum ltntstools_tr101290_event_e event);
 
+/**
+ * @brief       Permit the application to enable and disable specific events.
+ * @param[in]   void **hdl - Handle returned to the caller.
+ * @return      0 on success, else error.
+ */
 int ltntstools_tr101290_event_processing_disable(void *hdl, enum ltntstools_tr101290_event_e event);
 int ltntstools_tr101290_event_processing_enable(void *hdl, enum ltntstools_tr101290_event_e event);
 int ltntstools_tr101290_event_processing_disable_all(void *hdl);
@@ -110,6 +125,7 @@ struct ltntstools_tr101290_summary_item_s
 	int priorityNr; /* 1 or 2, p3 not current supported. */
 	struct timeval last_update;
 	int raised;	/* Boolean, is the considered to be in alarm? */
+	char arg[128];
 };
 void ltntstools_tr101290_summary_item_dprintf(int fd, struct ltntstools_tr101290_summary_item_s *summary_item);
 
@@ -126,6 +142,17 @@ void ltntstools_tr101290_summary_item_dprintf(int fd, struct ltntstools_tr101290
 int ltntstools_tr101290_summary_get(void *hdl, struct ltntstools_tr101290_summary_item_s **item, int *itemCount);
 
 int ltntstools_tr101290_summary_report_dprintf(void *hdl, int fd);
+
+/**
+ * @brief       Enable the creation of an alarm logfile, user supplied name.
+ *              The log will include the raising and clearing of alarms, as they occur.
+ *              Existing logs will be appended to on startup.
+ * @param[out]  void *hdl - Handle returned to the caller.
+ * @param[in]   const char *afname - Absolute filename that will be created or appended to.
+ * @return      0 on success else < 0.
+ */
+int ltntstools_tr101290_log_enable(void *hdl, const char *afname);
+int ltntstools_tr101290_log_rotate(void *hdl);
 
 #ifdef __cplusplus
 };
