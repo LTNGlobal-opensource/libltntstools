@@ -74,6 +74,11 @@ void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 	clk->currentTime_ticks = ticks;
 }
 
+int64_t ltntstools_clock_get_ticks(struct ltntstools_clock_s *clk)
+{
+	return clk->currentTime_ticks;
+}
+
 void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
 	clk->currentTime_ticks += ticks;

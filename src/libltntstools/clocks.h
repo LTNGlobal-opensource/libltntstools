@@ -52,6 +52,8 @@ int  ltntstools_clock_is_established_wallclock(struct ltntstools_clock_s *clk);
  */
 void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks);
 
+int64_t ltntstools_clock_get_ticks(struct ltntstools_clock_s *clk);
+
 /* While normally _set_ticks is used to syncronize the timebase, you may wish
  * to closely control a clock and add N ticks to the timebase.
  * You may add a positive or negative value to bend the timebase value, if desired.
