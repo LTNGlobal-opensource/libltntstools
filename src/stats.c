@@ -121,6 +121,12 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			}
 		}
 
+		uint8_t sc = ltntstools_transport_scrambling_control(pkts + offset);
+		if (sc != 0) {
+			pid->scrambledCount++;
+			stream->scrambledCount++;
+		}
+
 		pid->lastCC = cc;
 
 		if (ltntstools_tei_set(pkts + offset)) {
@@ -306,3 +312,18 @@ uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_stat
 	return stream->ccErrors;
 }
 
+uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->teiErrors;
+}
+
+time_t ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	return pid->pps_last_update;
+}
+
+uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->scrambledCount;
+}

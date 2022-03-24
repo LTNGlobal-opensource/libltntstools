@@ -18,6 +18,7 @@ struct ltntstools_pid_statistics_s
 	uint64_t packetCount;
 	uint64_t ccErrors;
 	uint64_t teiErrors;
+	uint64_t scrambledCount;
 
 	uint8_t lastCC;
 
@@ -41,6 +42,7 @@ struct ltntstools_stream_statistics_s
 	uint64_t packetCount;
 	uint64_t teiErrors;
 	uint64_t ccErrors;
+	uint64_t scrambledCount;
 
 	/* Maintain a packets per second count, we can convert this into Mb/ps */
 	time_t pps_last_update;
@@ -71,12 +73,15 @@ uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics
 uint32_t ltntstools_ctp_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream);
+uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream);
+uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statistics_s *stream);
 
 double   ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+time_t   ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
