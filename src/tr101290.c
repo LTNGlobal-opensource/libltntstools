@@ -267,7 +267,7 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 
 	ltntstools_pid_stats_reset(&s->streamStatistics);
 
-	ltntstools_streammodel_alloc(&s->smHandle);
+	ltntstools_streammodel_alloc(&s->smHandle, s);
 
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {

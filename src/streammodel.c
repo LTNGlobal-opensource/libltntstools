@@ -394,9 +394,11 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 }
 /* End: DVBPSI */
 
-int ltntstools_streammodel_alloc(void **hdl)
+int ltntstools_streammodel_alloc(void **hdl, void *userContext)
 {
 	struct streammodel_ctx_s *ctx = calloc(1, sizeof(*ctx));
+	if (!ctx)
+		return -1;
 
 	pthread_mutex_init(&ctx->rom_mutex, NULL);
 

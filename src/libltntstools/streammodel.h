@@ -33,7 +33,7 @@ extern "C" {
  * @return        0 - Success
  * @return      < 0 - Error
  */
-int ltntstools_streammodel_alloc(void **hdl);
+int ltntstools_streammodel_alloc(void **hdl, void *userContext);
 
 /**
  * @brief         Free a previously allocated context. Don't attempt to use the context after its freed.
@@ -94,6 +94,8 @@ int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat
  * @return      < 0 - Error
  */
 int ltntstools_streammodel_query_first_program_pcr_pid(void *hdl, struct ltntstools_pat_s *pat, uint16_t *PCRPID);
+
+typedef void (*tsudp_receiver_callback)(void *userContext, unsigned char *buf, int byteCount);
 
 /**
  * @brief         TR101290 helper function. Have the strem model check the
