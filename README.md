@@ -26,7 +26,6 @@
 	See the included lgpl-2.1.txt for the complete license agreement.
 
 ## Dependencies
-	* libltntstools
 	* Proprietary Nielsen SDK for one specific tool (disabled when not found).
 	* libdvbpsi
 
