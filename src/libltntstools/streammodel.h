@@ -1,6 +1,22 @@
 #ifndef STREAMMODEL_H
 #define STREAMMODEL_H
 
+/**
+ * @file        streammodel.h
+ * @author      Steven Toth <steven.toth@ltnglobal.com>
+ * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
+ * @brief       A module to examine ISO13818 transport packets, extact PAT/PMT information
+ *              with just a few calls. The stream model is designed to constantly parse the stream
+ *              in an efficient an memory leak/free way, so its safe to constantly feed the api
+ *              7x24 fully formed transport streams and monitor for changes to service information.
+ * 
+ * Usage:
+ *              Typically an application will allocate a context, feed packets into the frame and
+ *              monitor the _write 'complete' result. When this goes high (1), it's safe to
+ *              query the model _query_model() until the next _write call takes place.
+ *              The caller of _query_model is responsible for freeing any resulting pat object.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
