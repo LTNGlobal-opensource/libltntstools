@@ -19,7 +19,7 @@ extern "C" {
 #endif
 
 int     ltntstools_sectionextractor_alloc(void **hdl, uint16_t pid, uint8_t tableID);
-ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkt, size_t packetCount, int *complete);
+ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkt, size_t packetCount, int *complete, int *crcValid);
 void    ltntstools_sectionextractor_free(void *hdl);
 int     ltntstools_sectionextractor_query(void *hdl, uint8_t *dst, int lengthBytes);
 

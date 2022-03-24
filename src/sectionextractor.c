@@ -11,6 +11,7 @@
 
 #include "libltntstools/sectionextractor.h"
 #include "libltntstools/ts.h"
+#include "libltntstools/crc32.h"
 
 struct sectionextractor_ctx_s
 {
@@ -45,9 +46,10 @@ int ltntstools_sectionextractor_alloc(void **hdl, uint16_t PID, uint8_t tableID)
 }
 
 static ssize_t ltntstools_sectionextractor_write_packet(struct sectionextractor_ctx_s *ctx,
-	const uint8_t *pkt, int *complete)
+	const uint8_t *pkt, int *complete, int *crcValid)
 {
 	int section_offset = 4;
+	*crcValid = 0;
 
 	/* Limitations. The entire section has to fit within a single packet. */
 
@@ -137,6 +139,14 @@ static ssize_t ltntstools_sectionextractor_write_packet(struct sectionextractor_
 	ctx->sectionLengthCurrent += copylength;
 
 	if (ctx->sectionLength == ctx->sectionLengthCurrent) {
+
+		if (ltntstools_checkCRC32(ctx->section, ctx->sectionLength + 3) == 0) {
+			/* CRC is correct. */
+			*crcValid = 1;
+		} else {
+			*crcValid = 0;
+		}
+
 		ctx->complete = 1;
 		ctx->appending = 0;
 		*complete = 1;
@@ -145,7 +155,7 @@ static ssize_t ltntstools_sectionextractor_write_packet(struct sectionextractor_
 	return copylength;
 }
 
-ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkt, size_t packetCount, int *complete)
+ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkt, size_t packetCount, int *complete, int *crcValid)
 {
 	struct sectionextractor_ctx_s *ctx = (struct sectionextractor_ctx_s *)hdl;
 
@@ -155,7 +165,7 @@ ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkt, size_t 
 	for (int i = 0; i < packetCount; i++) {
 		if (ltntstools_pid(&pkt[i * 188]) != ctx->PID)
 			continue;
-		ret += ltntstools_sectionextractor_write_packet(ctx, &pkt[i * 188], complete);
+		ret += ltntstools_sectionextractor_write_packet(ctx, &pkt[i * 188], complete, crcValid);
 	}
 
 	if (*complete)
@@ -177,4 +187,3 @@ int ltntstools_sectionextractor_query(void *hdl, uint8_t *dst, int lengthBytes)
 	ctx->appending = 0;
 	return ctx->sectionLength + 3;
 }
-
