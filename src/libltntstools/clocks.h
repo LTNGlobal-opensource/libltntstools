@@ -29,8 +29,7 @@ extern "C" {
  */
 
 /**
- * @brief API context
- * 
+ * @brief API context related to walltime vs timebase clock monitoring.
  */
 struct ltntstools_clock_s
 {
