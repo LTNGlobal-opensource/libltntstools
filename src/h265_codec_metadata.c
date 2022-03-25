@@ -478,10 +478,12 @@ static int h265_parse_slice_segment_layer(struct h265_codec_metadata_ctx_s *ctx,
     int first_slice_segment_in_pic_flag = get_bits1(&ctx->gb);
     if ((nalType >= 16) && (nalType <= 23)) {
         int no_output_of_prior_pics_flag = get_bits1(&ctx->gb);
+        if (no_output_of_prior_pics_flag) { }
         //printf("no_output_of_prior_pics_flag = %d\n", no_output_of_prior_pics_flag);
     }
 
     int slice_pic_parameter_set_id = get_ue_golomb(&ctx->gb);
+    if (slice_pic_parameter_set_id) { }
     //printf("slice_pic_parameter_set_id = %d\n", slice_pic_parameter_set_id);
 
     int dependent_slice_segment_flag = 0;
@@ -491,6 +493,7 @@ static int h265_parse_slice_segment_layer(struct h265_codec_metadata_ctx_s *ctx,
         }
         int slice_address_length = 0; //av_ceil_log2(s->ps.sps->ctb_width * s->ps.sps->ctb_height);
         int slice_segment_address = get_bitsz(&ctx->gb, slice_address_length);
+        if (slice_segment_address) { }
         //printf("slice_segment_address = %d\n", slice_segment_address);
     }
 
@@ -507,6 +510,9 @@ static int h265_parse_slice_segment_layer(struct h265_codec_metadata_ctx_s *ctx,
             slice_type == 2 ? "I" : "?");
         #endif
         /* Abort parsing */
+    }
+    if (slice_type == -1) {
+
     }
     /* Abort parsing */
 
