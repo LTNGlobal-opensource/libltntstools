@@ -18,6 +18,18 @@
 /** Conventions:
  * 
  * All clocks are expressed as int64_t
+ *    TODO: those expressed currently as uint64_t need to be adjusted.
+ *
+ * Transport packet ID's are uint16_t
+ * 
+ * The argument 'pkt' assumes one or more aligned transport packets in a buffer.
+ * 
+ * The argument 'buf' as it relates to transport packets, means it's a buffer
+ * of aligned OR unaligned packets, or just a general buffer of NALS, ES type data.
+ * 
+ * Buffers of bytes are uint8_t, no exceptions.
+ * 
+ * Buffers that are not expected to change are const typed, no exceptions.
  */
 
 /**
@@ -224,6 +236,9 @@ void ltntstools_generateNullPacket(uint8_t *pkt);
  */
 int ltntstools_findSyncPosition(const uint8_t *buf, int lengthBytes);
 
+/**
+ * @brief       Enumerator struct used with ltntstools_queryPCR_pid()
+ */
 struct ltntstools_pcr_position_s
 {
 	int64_t  pcr;
@@ -231,6 +246,9 @@ struct ltntstools_pcr_position_s
 	uint16_t pid;
 };
 
+/**
+ * @brief       Enumerator function to assist with using ltntstools_queryPCR_pid()
+ */
 __inline__ void ltntstools_pcr_position_reset(struct ltntstools_pcr_position_s *p)
 {
 	p->pcr = -1;
@@ -277,7 +295,41 @@ int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstoo
  */
 int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t pcr);
 
-int ltntstools_generatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter);
-int ltntstools_verifyPacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint64_t lastCounter, uint64_t *currentCounter);
+
+/**
+ * @brief       One of two functions that are used by tools to generate and validate transport packet content,
+ *              as being bit-for-bit perfect after move the packets through a transport medium.
+ *              The ltntstools_generatePacketWith64bCounter() function will generate a new packet
+ *              with correct CC counter information to pass any TR101290 test.
+ *              The ltntstools_verifyPacketWith64bCounter() function is the downstream verification function
+ *              used to check that no bits have been flipped or data lost.
+ *              This is generally used by test tools that want to downstream inspect PCRs.
+ *              The 'pkt' buffer needs to be 188 bytes long.
+ * @param[in]   uint8_t *pkt - destination buffer.
+ * @param[in]   int lengthBytes - length of buffer in bytes.
+ * @param[in]   uint16_t pid - transport packet identifier
+ * @param[in]   uint8_t *cc - Use and update the continuity counter pointer.
+ * @param[in]   uint64_t counter - a user specific count value (increment by 1) so packets are sequenced correctly.
+ * @return      0 on success else < 0.
+ */
+int ltntstools_generatePacketWith64bCounter(uint8_t *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter);
+
+/**
+ * @brief       One of two functions that are used by tools to generate and validate transport packet content,
+ *              as being bit-for-bit perfect after move the packets through a transport medium.
+ *              The ltntstools_generatePacketWith64bCounter() function will generate a new packet
+ *              with correct CC counter information to pass any TR101290 test.
+ *              The ltntstools_verifyPacketWith64bCounter() function is the downstream verification function
+ *              used to check that no bits have been flipped or data lost.
+ *              This is generally used by test tools that want to downstream inspect PCRs.
+ *              The 'pkt' buffer needs to be 188 bytes long.
+ * @param[in]   uint8_t *pkt - destination buffer.
+ * @param[in]   int lengthBytes - length of buffer in bytes.
+ * @param[in]   uint16_t pid - transport packet identifier
+ * @param[in]   uint64_t lastCounter - The previous 'currentCounter' so discontinuities can be measured.
+ * @param[in]   uint64_t *currentCounter - a user specific count value (increment by 1) so packets are sequenced correctly.
+ * @return      0 on success else < 0 indicating fault/damage to the packet.
+ */
+int ltntstools_verifyPacketWith64bCounter(uint8_t *pkt, int lengthBytes, uint16_t pid, uint64_t lastCounter, uint64_t *currentCounter);
 
 #endif /* TS_H */
