@@ -8,6 +8,11 @@
  * @brief       Parse and analyze MPEG-TS transport streams, collect and expose
  *              multiplex and pid specific statistics.
  * 
+ * This frame also handles generic network streams (BYTESTREAM)
+ * and ATSC3.0 A/324 Common TUnneling Protocol (CTP) streams.
+ * You should expect to see some API differences for these type types of streams
+ * and, clearly, statsistics will be limited in these use cases.
+ * 
  * Usage example, demuxing and parsing Video frames on pid 0x31:
  * 
  *    struct ltntstools_stream_statistics_s myStats;
