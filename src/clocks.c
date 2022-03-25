@@ -1,20 +1,25 @@
 /* Copyright LiveTimeNet, Inc. 2017. All Rights Reserved. */
 
 #include "libltntstools/ltntstools.h"
+
+#if 0
 static int64_t _timeval_to_ms(struct timeval *tv)
 {
         return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
 }
+#endif
 
 static int64_t _timeval_to_us(struct timeval *tv)
 {
         return (tv->tv_sec * 1000000) + tv->tv_usec;
 }
 
+#if 0
 static int64_t _timeval_to_pcr(struct timeval *tv)
 {
 		return ((tv->tv_sec * 1000000) + tv->tv_usec) * 27;
 }
+#endif
 
 static int _timeval_subtract(struct timeval *result, struct timeval *x, struct timeval *y)
 {
@@ -126,4 +131,14 @@ printf("clk->currentTime_ticks %" PRIi64 ",	clk->establishedTime_ticks %" PRIi64
 int64_t ltntstools_clock_get_drift_ms(struct ltntstools_clock_s *clk)
 {
 	return ltntstools_clock_get_drift_us(clk) / 1000;
+}
+
+int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t ticksnow, int64_t ticksthen)
+{
+	/* We have to be able to deal with clock wrapping. */
+	if (ticksnow >= ticksthen) {
+		return ticksnow - ticksthen;
+	}
+
+	return (clk->ticks_per_second - ticksthen) + ticksnow;
 }

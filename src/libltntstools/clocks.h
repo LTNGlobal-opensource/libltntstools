@@ -64,6 +64,8 @@ void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks);
 int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk);
 int64_t ltntstools_clock_get_drift_ms(struct ltntstools_clock_s *clk);
 
+int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t ticksnow, int64_t ticksthen);
+
 #ifdef __cplusplus
 };
 #endif

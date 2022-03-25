@@ -19,6 +19,8 @@ struct ltntstools_pid_statistics_s
 	uint64_t ccErrors;
 	uint64_t teiErrors;
 	uint64_t scrambledCount;
+	uint64_t pcrExceeds40ms;
+	uint64_t prev_pcrExceeds40ms;
 
 	uint8_t lastCC;
 
@@ -43,6 +45,8 @@ struct ltntstools_stream_statistics_s
 	uint64_t teiErrors;
 	uint64_t ccErrors;
 	uint64_t scrambledCount;
+	uint64_t pcrExceeds40ms;
+	uint64_t prev_pcrExceeds40ms;
 
 	/* Maintain a packets per second count, we can convert this into Mb/ps */
 	time_t pps_last_update;
@@ -76,12 +80,13 @@ uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_stat
 uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream);
 uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream);
 uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statistics_s *stream);
-
+int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream);
 double   ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 time_t   ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+int      ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
@@ -89,6 +94,7 @@ int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistic
 /* A324 stats wedged into this framework, better than nothing. */
 void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
 void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
+
 
 #ifdef __cplusplus
 };

@@ -155,6 +155,18 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 					ltntstools_clock_establish_wallclock(pcrclk, pcr);
 				}
 
+				/* Compute the interval in ticks, raise stats errors if they exceeed.
+				 * a) 100ms without a stated discontinuity or
+				 * b) 40ms.
+				 */
+				int64_t delta = ltntstools_clock_compute_delta(pcrclk, pcr, ltntstools_clock_get_ticks(pcrclk));
+				pid->prev_pcrExceeds40ms = pid->pcrExceeds40ms;
+				stream->prev_pcrExceeds40ms = stream->pcrExceeds40ms;
+				if (delta > (27000 * 40)) {
+					pid->pcrExceeds40ms++;
+					stream->pcrExceeds40ms++;
+				}
+
 				/* Update current value and re-compute drifts. */
 				ltntstools_clock_set_ticks(pcrclk, pcr);
 				ltntstools_clock_get_drift_us(pcrclk);
@@ -326,4 +338,18 @@ time_t ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statist
 uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream)
 {
 	return stream->scrambledCount;
+}
+
+int ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream)
+{
+	/* If the last _write cause the pcr's to be violated, exceeding 40ms, it's not always great. */
+	return stream->prev_pcrExceeds40ms != stream->pcrExceeds40ms;
+}
+
+int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	/* If the last _write cause the pcr's to be violated, exceeding 40ms, it's not always great. */
+
+	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	return pid->prev_pcrExceeds40ms != pid->pcrExceeds40ms;
 }
