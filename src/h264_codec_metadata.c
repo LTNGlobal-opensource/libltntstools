@@ -96,8 +96,8 @@ static char *h264_chroma_format_idc_lookup(uint32_t idc)
 
 static void scaling_list(struct h264_codec_metadata_ctx_s *ctx, uint32_t *scaling_list, int sizeOfScalingList, uint32_t *useDefaultScalingMatrixFlag)
 {
-    struct h264_codec_metadata_results_s *r = &ctx->results;
-    struct h264_seq_parameter_set_rbsp_s *sps = &r->sps;
+    //struct h264_codec_metadata_results_s *r = &ctx->results;
+    //struct h264_seq_parameter_set_rbsp_s *sps = &r->sps;
 
     int lastScale = 8;
     int nextScale = 8;
@@ -351,7 +351,7 @@ static void *pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
     /* Pes payload may contain zero or more complete H264 nals. */ 
     int offset = -1;
     while (1) {
-        int ret = ltn_nal_findHeader(pes->data, pes->dataLengthBytes, &offset);
+        int ret = ltn_nal_h264_findHeader(pes->data, pes->dataLengthBytes, &offset);
         if (ret < 0) {
             break;
         }
@@ -437,7 +437,7 @@ ssize_t ltntstools_h264_codec_metadata_write(void *hdl, const uint8_t *pkt, size
 
     if (ctx->parseComplete == 0) {
 #endif
-        ssize_t ret = ltntstools_pes_extractor_write(ctx->pes, pkt, packetCount);
+        ltntstools_pes_extractor_write(ctx->pes, pkt, packetCount);
     }
 
     *complete = ctx->parseComplete;
