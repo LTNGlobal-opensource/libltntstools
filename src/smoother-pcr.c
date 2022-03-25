@@ -266,7 +266,7 @@ static void * _threadFunc(void *p)
 }
 
 int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callback cb,
-	int itemsPerSecond, int itemLengthBytes, uint64_t pcrPID, int inputMuxrate_bps)
+	int itemsPerSecond, int itemLengthBytes, uint16_t pcrPID, int inputMuxrate_bps)
 {
 	struct smoother_pcr_context_s *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx)
