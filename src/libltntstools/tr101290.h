@@ -59,18 +59,25 @@ enum ltntstools_tr101290_event_e
 
 struct ltntstools_tr101290_alarm_s
 {
-	enum ltntstools_tr101290_event_e id;
-
-	int priorityNr;
-	struct timeval timestamp;
-	int raised;
-
-	char description[256];
-	char arg[128];
+	enum   ltntstools_tr101290_event_e id;  /**< Eg. E101290_P1_1__TS_SYNC_LOSS */
+	int    priorityNr;                      /**< TR101290 formal Priority level. IE. 1, 2 or 3 */
+	struct timeval timestamp;               /**< timestamp of the notification */
+	int    raised;                          /**< Boolean. 0 alarm clear, 1 raised. */
+	char   description[256];                /**< Text description of the alarm */
+	char   arg[128];                        /**< Some alarms have args, here in text form. */
 };
+
+/**
+ * @brief       Helper function. Print to a file descriptor the contents of the alarm.
+ * @param[in]   int - file descriptor
+ * @param[in]   struct ltntstools_tr101290_alarm_s * - alarm
+ */
 void ltntstools_tr101290_event_dprintf(int fd, struct ltntstools_tr101290_alarm_s *alarm);
 
-/* When the framework calls your callback, you own the array and are responsible for its destruction. */
+/**
+ * @brief       User specific callback for TR101290 notifications.
+ *              When the framework calls your callback, you own the array and are responsible for its destruction.
+ */
 typedef void (*ltntstools_tr101290_notification)(void *userContext, struct ltntstools_tr101290_alarm_s *array, int count);
 
 /**
@@ -97,7 +104,7 @@ void    ltntstools_tr101290_free(void *hdl);
  *              Analysis of these packets is deferred and processed by a background thread.
  *              Notifications/Errors generated as a result of these packets are passed to your application
  *              via the ltntstools_tr101290_event_callback mechanism.
- * @param[in]   void **hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
  * @return      The number of packets inspected, or < 0 on error.
  */
 ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount);
@@ -121,11 +128,11 @@ struct ltntstools_tr101290_summary_item_s
 {
 	enum ltntstools_tr101290_event_e id;
 
-	int enabled;	/* Is the stat actively being monitored. */
-	int priorityNr; /* 1 or 2, p3 not current supported. */
-	struct timeval last_update;
-	int raised;	/* Boolean, is the considered to be in alarm? */
-	char arg[128];
+	int enabled;	             /**< Boolean. Is the stat actively being monitored. */
+	int priorityNr;              /**< TR101290 formal Priority level. IE. 1, 2 or 3 */
+	struct timeval last_update;  /**< timestamp of the notification */
+	int raised;	                 /**< Boolean. 0 alarm clear, 1 raised. */
+	char arg[128];               /**< Some alarms have args, here in text form. */
 };
 void ltntstools_tr101290_summary_item_dprintf(int fd, struct ltntstools_tr101290_summary_item_s *summary_item);
 
