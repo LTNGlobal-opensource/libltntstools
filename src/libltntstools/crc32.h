@@ -1,6 +1,13 @@
 #ifndef LTNTSTOOLS_CRC32_H
 #define LTNTSTOOLS_CRC32_H
 
+/**
+ * @file        crc32.h
+ * @author      Steven Toth <steven.toth@ltnglobal.com>
+ * @copyright   Copyright (c) 2017-2022 Kernel Labs Inc. All Rights Reserved.
+ * @brief       CRC MPEG generation and validation
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
