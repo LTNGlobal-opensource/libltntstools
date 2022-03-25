@@ -1,6 +1,15 @@
 #ifndef _THROUGHPUT_H
 #define _THROUGHPUT_H
 
+/**
+ * @file        throughput.h
+ * @author      Steven Toth <steven.toth@ltnglobal.com>
+ * @copyright   Copyright (c) 2020 LTN Global, Inc. All Rights Reserved.
+ * @brief       A computationally less expensive and thus less accurate version
+ *              of throughput_hires.h Broadly speaking, things are measured over
+ *              a one second period (with some slop), but it's good and close enough
+ *              for many use cases with little or no processing overhead.
+ */
 #include <time.h>
 #include <inttypes.h>
 
