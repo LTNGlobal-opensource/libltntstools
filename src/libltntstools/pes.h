@@ -1,6 +1,13 @@
 #ifndef PES_H
 #define PES_H
 
+/**
+ * @file        pes.h
+ * @author      Steven Toth <steven.toth@ltnglobal.com>
+ * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
+ * @brief       A framework to handle and manipulate ISO13818-1 PES headers
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
