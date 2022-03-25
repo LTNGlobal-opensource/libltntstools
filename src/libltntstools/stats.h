@@ -86,36 +86,195 @@ struct ltntstools_stream_statistics_s
 	double a324_bps;               /**< Updated once per second. */
 };
 
+/**
+ * @brief       For a given packet, and a known previous continuity counter value, determine
+ *              if pkt is sequentually continious, or not.
+ * @param[in]   const uint8_t *pkt - A fully aligned single transport packet.
+ * @param[in]   uint8_t oldCC - Previous CC value for this packet pid.
+ * @return      Boolean.
+ */
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC);
+
+/**
+ * @brief       Write an entire MPTS into the framework, update the stream and pid statistics.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   const uint8_t *pkts - one or more aligned transport packets
+ * @param[in]   uint32_t packetCount - number of packets
+ */
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount);
+
+/**
+ * @brief       Reset all statistics.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ */
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream);
 
+/**
+ * @brief       Query CTP stream bitrate in Mb/ps
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      double - bitrate
+ */
 double   ltntstools_ctp_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
-double   ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
-double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
-uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream);
-uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
-uint32_t ltntstools_ctp_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
-uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
-uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream);
-uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream);
-uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream);
-uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statistics_s *stream);
-int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream);
-double   ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
-uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
-uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
-uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
-time_t   ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
-int      ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
+/**
+ * @brief       Query BYTESTREAM stream bitrate in Mb/ps
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      double - bitrate
+ */
+double   ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream bitrate in Mb/ps
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      double - bitrate
+ */
+double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - transport packets per second.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint32_t  - packets per second
+ */
+uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - transport bits per second.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint32_t  - bits per second
+ */
+uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query CTP stream - transport bits per second.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint32_t  - bits per second
+ */
+uint32_t ltntstools_ctp_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query BYTESTREAM stream - transport bits per second.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint32_t  - bits per second
+ */
+uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - CC error count since last ltntstools_pid_stats_reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - count
+ */
+uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - Transport error indicator count since last ltntstools_pid_stats_reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - count
+ */
+uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - Scrambled packets detected since last ltntstools_pid_stats_reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - count
+ */
+uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - overall stream padding percentage for the entire mux.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint32_t - percent
+ */
+uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - Did any pids violate PCR transport timing windows?
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      Boolean.
+ */
+int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT, bitrate in Mb/ps, specifically for input pid.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      double - bitrate
+ */
+double   ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT, packets per second (188), specifically for input pid.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      packets per second
+ */
+uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT, bits per second (188), specifically for input pid.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      bps
+ */
+uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT, packet count, specifically for input pid.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      packet count
+ */
+uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT, last time the pid statistics were updated, specifically for input pid.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      time_t lastUpdate
+ */
+time_t   ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT - Did input pid violate PCR transport timing windows?
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      Boolean.
+ */
+int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT - Inform framework that this pid contains a PCR and PCR clocks math should be performed.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ */
 void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT - Check if input PID is expected to have a PCR.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      Boolean.
+ */
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
-/* A324 stats wedged into this framework, better than nothing. */
+/**
+ * @brief       Write a CTP buffer into the stats layer.
+ *              Limited but useful stats will be collected and exposed.
+ *              ATSC3.0 A/324 stats wedged into this framework, better than nothing.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   const uint8_t *buf - CTP buffer of bytes
+ * @param[in]   uint32_t lengthBytes - length of CTP buffer in bytes
+ */
 void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
-void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
 
+/**
+ * @brief       Write a generic BYTESTREAM buffer into the stats layer.
+ *              Limited but useful stats will be collected and exposed.
+ *              Use for SMPTE2110 for example.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   const uint8_t *buf - CTP buffer of bytes
+ * @param[in]   uint32_t lengthBytes - length of CTP buffer in bytes
+ */
+void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
 
 #ifdef __cplusplus
 };
