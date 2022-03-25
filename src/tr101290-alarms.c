@@ -61,9 +61,9 @@ void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltnts
 	struct tr_event_s *ev = &s->event_tbl[event];
 
 	if (ev->raised == 1) {
-		/* If its already raised, don't allow a clear for 3 seconds */
+		/* If its already raised, don't allow a clear for N seconds */
 		/* Clear events come in all the time, many times per second, allow the raise to linger. */
-		struct timeval interval = { 3, 0 };
+		struct timeval interval = { ev->autoClearAlarmAfterReport / 1000, (ev->autoClearAlarmAfterReport * 1000) % 1000000 };
 		struct timeval now, future;
 		gettimeofday(&now, NULL);
 		timeradd(&interval, &ev->lastChanged, &future);
@@ -74,7 +74,9 @@ void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltnts
 		}
 	}
 
-	/* Setup an timer, in N seconds this event goes into alarm again. */
+	/* Setup an timer, in N seconds this event goes into alarm again.
+	 * Some other event will specifically need to clear it, before then.
+	 */
 	struct timeval interval = { ev->autoClearAlarmAfterReport / 1000, (ev->autoClearAlarmAfterReport * 1000) % 1000000 };
 	struct timeval now;
 	gettimeofday(&now, NULL);

@@ -1,22 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <sys/time.h>
-#include <pthread.h>
-#include <inttypes.h>
-
-#include <stdbool.h>
-#include <dvbpsi/dvbpsi.h>
-#include <dvbpsi/psi.h>
-#include <dvbpsi/descriptor.h>
-#include <dvbpsi/pat.h>
-#include <dvbpsi/pmt.h>
-#include <dvbpsi/dr.h>
-
-#include "libltntstools/streammodel.h"
-#include "libltntstools/ts.h"
-#include "libltntstools/pat.h"
+#include "streammodel-types.h"
 
 #if 0
 #define DVBPSI_REPORTING (DVBPSI_MSG_DEBUG)
@@ -24,91 +6,7 @@
 #define DVBPSI_REPORTING (DVBPSI_MSG_ERROR)
 #endif
 
-/* Any given PID could have multiple PMTs on a single pid.
- * We need to track all of this state.
- */
-struct streammodel_pid_parser_s
-{
-	dvbpsi_t *p_dvbpsi;
-	dvbpsi_pmt_t *p_pmt;
-	int programNumber;
-};
-
-/* Running Object Model: A model of an entire ISO13818 stream,
- * Including PAT/PMT configurations, PIDS being used, when and how.
- * Caveats:
- *   Descriptors not supported.
- *   This isn't a statistical collection process, its a PAT/PMT and other
- *   suite of parsers enabling higher level applications to quickly understand
- *   the structure of any given stream.
- */
-struct streammodel_pid_s
-{
-	int pid;
-	int present;	/* Boolean: Are packets for this pid present in the stream */
-
-	enum {
-		PT_UNKNOWN = 0,
-		PT_PAT,
-		PT_PMT,
-		PT_ES, /* Elementary stream. */
-	} pidType;
-
-	/* Elementary Stream details */
-	//int estype;
-
-	/* DVBPSI Cached Data */
-#define MAX_PID_PARSERS 24
-	struct streammodel_pid_parser_s parser[MAX_PID_PARSERS];
-	dvbpsi_pat_t *p_pat;
-
-	/* Housekeeping */
-	struct streammodel_rom_s *rom;
-	uint64_t packetCount;
-	struct timeval lastUpdate;
-};
-
-/* No pointers allowed in here.... */
-struct streammodel_rom_s
-{
-	int nr;
-	int totalPMTsInPAT;	/* Total number of program stream PMT entries in the pat. */
-	int parsedPMTs;		/* Total number of PMT callbacks we've processed, we need them all to finish the model. */
-	int modelComplete;	/* Boolean. */
-
-	struct timeval allowableWriteTime;
-	struct timeval pmtCollectionTimer; /* We have until this time expires to collect all PMTs, else
-					    * We have a mis-configured stream, or the stream changed behind the frameworks back
-					    * during PMT collection, and the new PMT never arrived.
-					    */
-
-#define MAX_ROM_PIDS 0x2000
-	struct streammodel_pid_s pids[MAX_ROM_PIDS];
-
-	/* Housekeeping */
-	struct streammodel_ctx_s *ctx;
-};
-
-struct streammodel_ctx_s
-{
-	/* The framework builds two working models of the incoming stream, A and B.
-	 * The stream is assumed to change every 500ms, so we constantly build a current model.
-	 * 'current' points to the last known good model. 
-	 * into 'current' when its considered complete and its safe to switch pointers.
-	 */
-	uint64_t currentModelVersion;
-	pthread_mutex_t rom_mutex;
-	struct streammodel_rom_s *current;	/* Model any user queries will run against. */
-	struct streammodel_rom_s *next;		/* Model currently being build by the framework, never user accessible. */
-	struct streammodel_rom_s roms[2];	/* Storage for the models. */
-
-	/* Housekeeping */
-	struct timeval now;			/* Each write() call updates this */
-
-	/* */
-	int writePackets;
-	int restartModel;
-};
+extern void extractors_free(struct streammodel_ctx_s *ctx);
 
 static void message(dvbpsi_t *handle, const dvbpsi_msg_level_t level, const char* msg);
 static int _streammodel_query_model(struct streammodel_ctx_s *ctx, struct streammodel_rom_s *rom, struct ltntstools_pat_s **pat);
@@ -219,10 +117,12 @@ static struct streammodel_pid_s *_rom_find_pid(struct streammodel_rom_s *rom, ui
 	return &rom->pids[pid];
 }
 
+#if 0
 static struct streammodel_pid_s *_rom_current_find_pid(struct streammodel_ctx_s *ctx, uint16_t pid)
 {
 	return _rom_find_pid(ctx->current, pid);
 }
+#endif
 
 static struct streammodel_pid_s *_rom_next_find_pid(struct streammodel_ctx_s *ctx, uint16_t pid)
 {
@@ -345,6 +245,11 @@ static void cb_pat(void *p_zero, dvbpsi_pat_t *p_pat)
 
 		/* Program# 0 is reserved for NIT tables. We don't expect a PMT for these. */
 		if (p_program->i_number > 0) {
+
+			if (ctx->enableSectionCRCChecks) {
+				extractors_add(ctx, p_program->i_pid, 0x02 /* TableID */, "PMT", STREAMMODEL_CB_CONTEXT_PMT);
+			}
+
 			/* Build a new parser for the PMT. */
 			struct streammodel_pid_s *m = _rom_next_find_pid(ctx, p_program->i_pid);
 
@@ -406,6 +311,7 @@ int ltntstools_streammodel_alloc(void **hdl, void *userContext)
 	_rom_initialize(ctx, &ctx->roms[1], 1);
 	ctx->current = &ctx->roms[0];
 	ctx->next = &ctx->roms[1];
+	ctx->userContext = userContext;
 
 	_rom_activate(ctx);
 
@@ -416,8 +322,15 @@ int ltntstools_streammodel_alloc(void **hdl, void *userContext)
 void ltntstools_streammodel_free(void *hdl)
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
+
+	/* Take the lock forever */
+	pthread_mutex_lock(&ctx->rom_mutex);
+
 	_rom_initialize(ctx, &ctx->roms[0], 0);
 	_rom_initialize(ctx, &ctx->roms[1], 1);
+
+	extractors_free(ctx);
+
 	free(ctx);
 }
 
@@ -443,6 +356,8 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 			printf("Stream PMT didn't arrive %d vs %d, aborting\n", ctx->next->totalPMTsInPAT, ctx->next->parsedPMTs);
 			_rom_initialize(ctx, ctx->next, ctx->next->nr);
 			ctx->writePackets = 1;
+			//*complete = 0;
+			ctx->current->modelComplete = 0;
 		}
 	}
 
@@ -450,6 +365,13 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 	if (!ctx->writePackets)
 		printf("Not writing packets\n");
 #endif
+
+	if (ctx->enableSectionCRCChecks) {
+		if (ctx->seCount == 0) {
+			extractors_alloc(ctx);
+		}
+		extractors_write(ctx, pkt, packetCount);
+	}
 
 	for (int i = 0; ctx->writePackets && i < packetCount; i++) {
 
@@ -474,6 +396,7 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 				fprintf(stderr, "%s() PAT attach. Should never happen\n", __func__);
 				exit(1);
 			}
+
 		}
 
 		if (ps->present) {
@@ -645,4 +568,13 @@ int ltntstools_streammodel_query_first_program_pcr_pid(void *hdl, struct ltntsto
 	}
 
 	return -1; /* Failed */
+}
+
+int ltntstools_streammodel_enable_tr101290_section_checks(void *hdl, ltntstools_streammodel_callback cb)
+{
+	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
+	ctx->enableSectionCRCChecks = 1;
+	ctx->cb = cb;
+
+	return 0;
 }

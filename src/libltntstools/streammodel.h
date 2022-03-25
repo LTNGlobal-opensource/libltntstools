@@ -95,7 +95,28 @@ int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat
  */
 int ltntstools_streammodel_query_first_program_pcr_pid(void *hdl, struct ltntstools_pat_s *pat, uint16_t *PCRPID);
 
-typedef void (*tsudp_receiver_callback)(void *userContext, unsigned char *buf, int byteCount);
+
+#define STREAMMODEL_CB_CRC_STATUS    1
+#define             CRC_ARG_INVALID  0
+#define             CRC_ARG_VALID    1
+
+#define STREAMMODEL_CB_CONTEXT_PAT   1
+#define STREAMMODEL_CB_CONTEXT_PMT   2
+#define STREAMMODEL_CB_CONTEXT_CAT   3
+#define STREAMMODEL_CB_CONTEXT_SDT   4
+#define STREAMMODEL_CB_CONTEXT_BAT   5
+#define STREAMMODEL_CB_CONTEXT_NIT   6
+#define STREAMMODEL_CB_CONTEXT_TOT   7
+#define STREAMMODEL_CB_CONTEXT_EIT   8
+
+struct streammodel_callback_args_s
+{
+    uint32_t  status;    /* STREAMMODEL_CB_CRC_STATUS */
+    uint32_t  context;   /* STREAMMODEL_CB_CONTEXT_PMT */
+    uint32_t  arg;       /* CRC_ARG_VALID */
+    void     *ptr;
+};
+typedef void (*ltntstools_streammodel_callback)(void *userContext, struct streammodel_callback_args_s *args);
 
 /**
  * @brief         TR101290 helper function. Have the strem model check the
@@ -107,7 +128,7 @@ typedef void (*tsudp_receiver_callback)(void *userContext, unsigned char *buf, i
  * @return        0 - Success, the request was activated.
  * @return      < 0 - Error
  */
-int ltntstools_streammodel_enable_tr101290_section_checks(void *hdl);
+int ltntstools_streammodel_enable_tr101290_section_checks(void *hdl, ltntstools_streammodel_callback cb);
 
 #ifdef __cplusplus
 };

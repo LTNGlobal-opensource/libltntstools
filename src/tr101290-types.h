@@ -9,6 +9,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <libltntstools/stats.h>
+#include "libltntstools/histogram.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,6 +89,7 @@ struct ltntstools_tr101290_s
 	uint64_t PATCountLastTimer;
 	uint64_t CCCounterLastWrite;
 	uint64_t preTEIErrors;
+	uint64_t preScrambledCount;
 	struct timeval lastPAT;
 
 	/* handle to a running PSIP stream modelling collector.
@@ -101,6 +103,20 @@ struct ltntstools_tr101290_s
 	pthread_mutex_t logMutex;
 	char *logFilename;
 	int logOwnershipOK;
+
+	/* P2.2 specific - CRC errors, checking our last reception of a callback.*/
+	struct {
+		struct timeval lastPAT;
+		struct timeval lastPMT;
+		struct timeval lastCAT;
+		struct timeval lastSDT;
+		struct timeval lastBAT;
+		struct timeval lastNIT;
+		struct timeval lastTOT;
+		struct timeval lastEIT;
+	} p2;
+
+	struct ltn_histogram_s *h1;
 };
 
 #include "tr101290-events.h"

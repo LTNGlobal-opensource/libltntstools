@@ -37,6 +37,9 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 	if (ms < 20) {
 		lost = 0;
 	}
+	if (lost) {
+		printf("LOS for %" PRIi64 " ms\n", ms);
+	}
 #if LOCAL_DEBUG
 	//printf("LOS for %" PRIi64 " ms\n", ms);
 #endif
@@ -159,6 +162,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		if (!conditionLOS) {
 			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
 		} else {
+			printf("Flagging a sync loss event\n");
 			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
 		}
 
@@ -170,6 +174,8 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			if (ev->enabled == 0)
 				continue;
 
+			p2_process_p2_2(s);
+#if 1
 			if (timercmp(&now, &nextSummaryTime, >= )) {
 				struct timeval interval = { reportPeriod, 0 };
 				timeradd(&now, &interval, &nextSummaryTime);
@@ -178,7 +184,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				ltntstools_tr101290_log_summary(s);
 				ltntstools_tr101290_log_append(s, 1, "-------------------------------------------------------------------------------------------------------");
 			}
-
+#endif
 			/* Find all events we should be reporting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
 
@@ -265,9 +271,12 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 	pthread_mutex_init(&s->mutex, NULL);
 	pthread_mutex_init(&s->logMutex, NULL);
 
+	ltn_histogram_alloc_video_defaults(&s->h1, "write arrival latency");
+
 	ltntstools_pid_stats_reset(&s->streamStatistics);
 
 	ltntstools_streammodel_alloc(&s->smHandle, s);
+	ltntstools_streammodel_enable_tr101290_section_checks(s->smHandle, (ltntstools_streammodel_callback)p2_streammodel_callback);
 
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {
@@ -319,9 +328,8 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 
 	gettimeofday(&s->now, NULL);
 
-#if LOCAL_DEBUG
-	//printf("%s(%d)\n", __func__, packetCount);
-#endif
+	ltn_histogram_interval_update(s->h1);
+	ltn_histogram_interval_print(STDOUT_FILENO, s->h1, 10);
 
 #if ENABLE_TESTING
 	FILE *fh = fopen("/tmp/droppayload", "rb");
@@ -337,6 +345,7 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	gettimeofday(&s->lastWriteCall, NULL);
 
 	s->preTEIErrors = ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics);
+	s->preScrambledCount = ltntstools_pid_stats_stream_get_scrambled_count(&s->streamStatistics);
 
 	/* Update general stream statistics, packet loss, CC's, birates etc. */
 	ltntstools_pid_stats_update(&s->streamStatistics, buf, packetCount);
@@ -381,4 +390,15 @@ int ltntstools_tr101290_log_rotate(void *hdl)
 	pthread_mutex_unlock(&s->logMutex);
 
 	return -1;
+}
+
+int ltntstools_tr101290_reset_alarms(void *hdl)
+{
+	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
+
+	pthread_mutex_lock(&s->logMutex);
+	ltntstools_tr101290_alarm_raise_all(s);
+	pthread_mutex_unlock(&s->logMutex);
+
+	return 0; /* Success */
 }

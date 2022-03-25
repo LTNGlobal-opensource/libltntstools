@@ -103,6 +103,12 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 
 			struct ltntstools_pat_s *pat;
 			if (ltntstools_streammodel_query_model(s->smHandle, &pat) == 0) {
+
+				/* Some of the P2 PCR checks need to know which pics have PCRs.
+				 * Give the P2 processor a sneak peak at the model.
+				 */
+				p2_process_pat_model(s, pat);
+
 				/* Check 1.6 Now that we have a stream model. */
 				p1_process_p1_6(s, pat, now);
 				free(pat);

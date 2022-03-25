@@ -154,6 +154,8 @@ int ltntstools_tr101290_summary_report_dprintf(void *hdl, int fd);
 int ltntstools_tr101290_log_enable(void *hdl, const char *afname);
 int ltntstools_tr101290_log_rotate(void *hdl);
 
+int ltntstools_tr101290_reset_alarms(void *hdl);
+
 #ifdef __cplusplus
 };
 #endif

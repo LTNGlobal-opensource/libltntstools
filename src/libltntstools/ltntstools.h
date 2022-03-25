@@ -34,6 +34,7 @@
 #include <libltntstools/time.h>
 #include <libltntstools/segmentwriter.h>
 #include <libltntstools/nal_h264.h>
+#include <libltntstools/nal_h265.h>
 #include <libltntstools/tr101290.h>
 #include <libltntstools/pat.h>
 #include <libltntstools/streammodel.h>
@@ -47,3 +48,4 @@
 #include <libltntstools/proc-net-udp.h>
 #include <libltntstools/audioanalyzer.h>
 #include <libltntstools/h264_codec_metadata.h>
+#include <libltntstools/h265_codec_metadata.h>
