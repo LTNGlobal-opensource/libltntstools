@@ -1,8 +1,26 @@
-/* Copyright LiveTimeNet, Inc. 2017. All Rights Reserved. */
-
 #ifndef _STATS_H
 #define _STATS_H
 
+/**
+ * @file        stats.h
+ * @author      Steven Toth <steven.toth@ltnglobal.com>
+ * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
+ * @brief       Parse and analyze MPEG-TS transport streams, collect and expose
+ *              multiplex and pid specific statistics.
+ * 
+ * Usage example, demuxing and parsing Video frames on pid 0x31:
+ * 
+ *    struct ltntstools_stream_statistics_s myStats;
+ *    ltntstools_pid_stats_reset(&myStats);
+ * 
+ *    while (1) {
+ *      ltntstools_pid_stats_update(&myStats, pkts, 7);
+ * 
+ *      // Query CC issues on an ongoing basis.
+ *      uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(&myStats);
+ *    }
+ * 
+ */
 #include <time.h>
 #include <inttypes.h>
 #include <libltntstools/clocks.h>
@@ -12,57 +30,60 @@ extern "C" {
 #endif
 
 #define MAX_PID 8192
+
+/**
+ * @brief A pid specific statistics container, contained within struct ltntstools_stream_statistics_s
+ */
 struct ltntstools_pid_statistics_s
 {
-	int enabled;
-	uint64_t packetCount;
-	uint64_t ccErrors;
-	uint64_t teiErrors;
-	uint64_t scrambledCount;
-	uint64_t pcrExceeds40ms;
-	uint64_t prev_pcrExceeds40ms;
+	int      enabled;              /**< Boolean. is the pid available in the multiplex. */
+	uint64_t packetCount;          /**< Number of packets processed. */
+	uint64_t ccErrors;             /**< Number of continuity counter issues processed */
+	uint64_t teiErrors;            /**< Number of transport error indicator issues processed */
+	uint64_t scrambledCount;       /**< Number of times we've seen scrambled/encrypted packets */
+	uint64_t pcrExceeds40ms;       /**< Number of times the PCR interval has exceeded 40ms */
+	uint64_t prev_pcrExceeds40ms;  /**< Prior value of pcrExceeds40ms, updated every ltntstools_pid_stats_update() call */
 
-	uint8_t lastCC;
+	uint8_t  lastCC;               /**< Last CC value sobserved */
 
-	/* Maintain a packets per second count, we can convert this into Mb/ps */
-	time_t pps_last_update;
-	uint32_t pps;
-	uint32_t pps_window;
-	double mbps; /* Updated once per second. */
+	time_t   pps_last_update;      /**< Maintain a packets per second count, we can convert this into Mb/ps */
+	uint32_t pps;                  /**< Helper var for computing bitrate */
+	uint32_t pps_window;           /**< Helper var for computing bitrate */
+	double   mbps;                 /**< Updated once per second. */
 
-	int hasPCR;
-	int seenPCR;
+	int hasPCR;                    /**< User specifically told is this PID will contain a PCR */
+	int seenPCR;                   /**< Helper var to track PCR values seen, and skipped during startup for stability. */
 #define ltntstools_CLOCK_PCR 0
 #define ltntstools_CLOCK_PTS 1
 #define ltntstools_CLOCK_DTS 2
-	struct ltntstools_clock_s clocks[3];
+	struct ltntstools_clock_s clocks[3]; /**< Three clocks potentially per pid. See ltntstools_CLOCK_PCR, ltntstools_CLOCK_PTS and ltntstools_CLOCK_DTS */
 };
 
+/**
+ * @brief A larger statistics container, representing all pids in an entire SPTS/MPTS.
+ */
 struct ltntstools_stream_statistics_s
 {
 	struct ltntstools_pid_statistics_s pids[MAX_PID];
-	uint64_t packetCount;
-	uint64_t teiErrors;
-	uint64_t ccErrors;
-	uint64_t scrambledCount;
-	uint64_t pcrExceeds40ms;
-	uint64_t prev_pcrExceeds40ms;
+	uint64_t packetCount;          /**< Total number of packets processed. */
+	uint64_t teiErrors;            /**< Total number of transport error indicator issues processed */
+	uint64_t ccErrors;             /**< Total number of continuity counter issues processed */
+	uint64_t scrambledCount;       /**< Total number of times we've seen scrambled/encrypted packets */
+	uint64_t pcrExceeds40ms;       /**< Total number of times the PCR interval has exceeded 40ms */
+	uint64_t prev_pcrExceeds40ms;  /**< Prior value of pcrExceeds40ms, updated every ltntstools_pid_stats_update() call */
 
-	/* Maintain a packets per second count, we can convert this into Mb/ps */
-	time_t pps_last_update;
-	uint32_t pps;
-	uint32_t pps_window;
-	double mbps; /* Updated once per second. */
+	time_t pps_last_update;        /**< Maintain a packets per second count, we can convert this into Mb/ps */
+	uint32_t pps;                  /**< Helper var for computing bitrate */
+	uint32_t pps_window;           /**< Helper var for computing bitrate */
+	double mbps;                   /**< Updated once per second. */
 
-	/* A/324 specific */
-	uint16_t a324_sequence_number;
+	uint16_t a324_sequence_number; /**< A/324 - Last seqeuence number observed. */
 
-	/* A/324 Maintain a packets per second count, we can convert this into Mb/ps */
-	time_t Bps_last_update;
-	uint32_t Bps;
-	uint32_t Bps_window;
-	double a324_mbps;
-	double a324_bps;
+	time_t Bps_last_update;        /**< A/324 Maintain a packets per second count, we can convert this into Mb/ps */
+	uint32_t Bps;                  /**< Helper var for computing bitrate */
+	uint32_t Bps_window;           /**< Helper var for computing bitrate */
+	double a324_mbps;              /**< Updated once per second. */
+	double a324_bps;               /**< Updated once per second. */
 };
 
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC);
