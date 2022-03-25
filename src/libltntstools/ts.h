@@ -1,6 +1,13 @@
 #ifndef TS_H
 #define TS_H
 
+/**
+ * @file        ts.h
+ * @author      Steven Toth <steven.toth@ltnglobal.com>
+ * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
+ * @brief       Helper functions to query and inspect ISO138-1 MPEG-TS transport packets.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

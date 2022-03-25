@@ -24,6 +24,9 @@
 extern "C" {
 #endif
 
+/**
+ * @brief       PMT table entry. an ES stream type and related descriptors.
+ */
 struct ltntstools_pmt_entry_s
 {
 	uint32_t stream_type;
@@ -33,6 +36,9 @@ struct ltntstools_pmt_entry_s
 };
 int ltntstools_pmt_entry_compare(struct ltntstools_pmt_entry_s *a, struct ltntstools_pmt_entry_s *b);
 
+/**
+ * @brief       PMT table. A collection of ES streams and descriptors
+ */
 struct ltntstools_pmt_s
 {
 	uint32_t version_number;
@@ -48,7 +54,9 @@ struct ltntstools_pmt_s
 };
 int ltntstools_pmt_compare(struct ltntstools_pmt_s *a, struct ltntstools_pmt_s *b);
 
-/* See ISO13818-1 "program_association_section()" */
+/**
+ * @brief       PAT table entry
+ */
 struct ltntstools_pat_program_s
 {
 	uint32_t program_number;
@@ -58,6 +66,9 @@ struct ltntstools_pat_program_s
 };
 int ltntstools_pat_program_compare(struct ltntstools_pat_program_s *a, struct ltntstools_pat_program_s *b);
 
+/**
+ * @brief       PAT table. A collection of PMTs. See ISO13818-1 "program_association_section()"
+ */
 struct ltntstools_pat_s
 {
 	uint32_t transport_stream_id;
