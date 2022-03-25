@@ -1,6 +1,15 @@
 #ifndef _CLOCKS_H
 #define _CLOCKS_H
 
+/**
+ * @file        clocks.h
+ * @author      Steven Toth <steven.toth@ltnglobal.com>
+ * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
+ * @brief       Track walltime bs another timebase and compute drift deltas between the them.
+ *              Useful when measuring how a stream of video is drifting or how much jitter the
+ *              clocks have, compared to reality.
+ */
+
 #include <time.h>
 #include <inttypes.h>
 
