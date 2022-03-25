@@ -23,6 +23,8 @@ struct ltntstools_clock_s
 	int64_t drift_us_lwm;
 	int64_t drift_us_hwm;
 	int64_t drift_us_max;
+
+	int64_t clockWrapValue; /* Upper limited so we can compute wrapping clocks. */
 };
 
 /* First call any user should make, it to initialize the context. */

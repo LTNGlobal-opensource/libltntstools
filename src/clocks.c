@@ -59,6 +59,14 @@ void ltntstools_clock_establish_timebase(struct ltntstools_clock_s *clk, int64_t
 	clk->ticks_per_second = ticks_per_second;
 	clk->establishedTime_ticks = 0;
 	clk->currentTime_ticks = 0;
+
+	if (clk->ticks_per_second == 90000)
+		clk->clockWrapValue = MAX_PTS_VALUE;
+	else
+	if (clk->ticks_per_second == 27000000)
+		clk->clockWrapValue = MAX_SCR_VALUE;
+	else
+		clk->clockWrapValue = (2^32); /* Todo, is this reasonable? */
 }
 
 int ltntstools_clock_is_established_wallclock(struct ltntstools_clock_s *clk)
@@ -140,5 +148,5 @@ int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t t
 		return ticksnow - ticksthen;
 	}
 
-	return (clk->ticks_per_second - ticksthen) + ticksnow;
+	return (clk->clockWrapValue - ticksthen) + ticksnow;
 }
