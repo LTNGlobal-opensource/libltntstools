@@ -8,7 +8,7 @@
  * reserved                            6bits
  * program_clock_reference_extension   9bits
  */
-uint64_t ltntstools_pcrToScr(unsigned char *ptr, int len)
+uint64_t ltntstools_pcrToScr(const uint8_t *ptr, int len)
 {
         uint64_t pcr_base;
         pcr_base  = (((uint64_t)*(ptr + 0)) << 25);
@@ -26,7 +26,7 @@ uint64_t ltntstools_pcrToScr(unsigned char *ptr, int len)
         return (pcr_base * 300) + pcr_ext;
 }
 
-int ltntstools_scr(uint8_t *pkt, uint64_t *scr)
+int ltntstools_scr(const uint8_t *pkt, uint64_t *scr)
 {
 	if (ltntstools_sync_present(pkt) == 0)
 		return -1;
@@ -91,7 +91,7 @@ int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid
 	return 0;
 }
 
-int ltntstools_contains_pes_header_reverse(uint8_t *buf, int lengthBytes)
+int ltntstools_contains_pes_header_reverse(const uint8_t *buf, int lengthBytes)
 {
 	const char pattern[] = { 0x00, 0x00, 0x01 };
 	for (int i = lengthBytes - 3; i >= 0; i--) {
@@ -102,7 +102,7 @@ int ltntstools_contains_pes_header_reverse(uint8_t *buf, int lengthBytes)
 	return -1;
 }
 
-int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes)
+int ltntstools_contains_pes_header(const uint8_t *buf, int lengthBytes)
 {
 	const char pattern[] = { 0x00, 0x00, 0x01 };
 	for (int i = 0; i < lengthBytes - 3; i++) {
@@ -113,7 +113,7 @@ int ltntstools_contains_pes_header(uint8_t *buf, int lengthBytes)
 	return -1;
 }
 
-unsigned int ltntstools_get_section_tableid(unsigned char *pkt)
+unsigned int ltntstools_get_section_tableid(const uint8_t *pkt)
 {
 	int section_offset = 5;
 	if (ltntstools_has_adaption(pkt)) {
@@ -124,7 +124,7 @@ unsigned int ltntstools_get_section_tableid(unsigned char *pkt)
 	return *(pkt + section_offset);
 }
 
-const char *ltntstools_GetESPayloadTypeDescription(unsigned char esPayloadType)
+const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType)
 {
     switch (esPayloadType)
     {
@@ -203,7 +203,7 @@ const char *ltntstools_GetESPayloadTypeDescription(unsigned char esPayloadType)
     }
 }
 
-void ltntstools_generateNullPacket(unsigned char *pkt)
+void ltntstools_generateNullPacket(uint8_t *pkt)
 {
         memset(pkt, 0xff, 188);
         *(pkt + 0) = 0x47;
