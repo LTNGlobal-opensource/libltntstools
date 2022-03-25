@@ -1,6 +1,6 @@
 /* Copyright Kernel Labs Inc 2015-2021. All Rights Reserved. */
 
-#include <stdio.h>
+#include "libltntstools/crc32.h"
 
 /* CRC - Section checksumming helpers - common for ATSC/DVB */
 static unsigned int crc32_table[256] =
@@ -71,15 +71,15 @@ static unsigned int crc32_table[256] =
 	0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4
 };
 
-int ltntstools_checkCRC32(unsigned char *buf, int len)
+int ltntstools_checkCRC32(const uint8_t *buf, int lengthBytes)
 {
-	unsigned int crc = 0xffffffff;
-	unsigned char *p = buf;
+	uint32_t crc = 0xffffffff;
+	const uint8_t *p = buf;
 
-	if ((!buf) || (len < 4))
+	if ((!buf) || (lengthBytes < 4))
 		return -1;
 
-	while (p < buf + len) {
+	while (p < buf + lengthBytes) {
 		crc = (crc << 8) ^ crc32_table[(crc >> 24) ^ (*p)];
 		p++;
 	}
@@ -87,15 +87,15 @@ int ltntstools_checkCRC32(unsigned char *buf, int len)
 	return (crc == 0) ? 0 : -1;
 }
 
-int ltntstools_getCRC32(unsigned char *buf, int len, unsigned int *crc32)
+int ltntstools_getCRC32(const uint8_t *buf, int lengthBytes, uint32_t *crc32)
 {
-	unsigned int crc = 0xffffffff;
-	unsigned char *p = buf;
+	uint32_t crc = 0xffffffff;
+	const uint8_t *p = buf;
 
-	if ((!buf) || (len < 1) || (!crc32))
+	if ((!buf) || (lengthBytes < 1) || (!crc32))
 		return -1;
 
-	while (p < buf + len) {
+	while (p < buf + lengthBytes) {
 		crc = (crc << 8) ^ crc32_table[(crc >> 24) ^ (*p)];
 		p++;
 	}
