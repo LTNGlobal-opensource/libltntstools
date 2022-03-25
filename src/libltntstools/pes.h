@@ -6,12 +6,14 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct klbs_context_s;
 
-/* See ISO13818 table 2.18 */
-/* Implement enough of a PES header and parsing funcs
- * that we can extract PTS/DTS fields.
- * Struct is created for optimal cpu register speed, not for memory efficiency.
+/**
+ * @brief ISO13818-1 PES packet. See ISO13818 spec table 2.18.
  */
 struct ltn_pes_packet_s
 {
@@ -53,20 +55,67 @@ struct ltn_pes_packet_s
 	uint32_t dataLengthBytes;
 };
 
+/**
+ * @brief       Allocate a pes packet, with no payload data.
+ * @return      struct ltn_pes_packet_s *pkt - new allocation.
+ */
 struct ltn_pes_packet_s *ltn_pes_packet_alloc();
+
+/**
+ * @brief       Initialize previously allocate packet, and destroy any previously allocated payload data.
+ * @param[in]   struct ltn_pes_packet_s *pkt - object
+ */
 void ltn_pes_packet_init(struct ltn_pes_packet_s *pkt);
+
+/**
+ * @brief       Free a previously allocate packet, and any attached payload
+ * @param[in]   struct ltn_pes_packet_s *pkt - object
+ */
 void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt);
 
 /* Parse an existing bitstream into an existing pkt, returning the number of bits parsed,
  * or < 0 on error.
  */
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData);
+
+/**
+ * @brief       Helper function. Dump the packet content to console in readable format.
+ * @param[in]   struct ltn_pes_packet_s *pkt - object
+ * @param[in]   const char *indent - Optional indent string to prefix the printfs with.
+ */
 void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent);
+
+/**
+ * @brief       Duplicate the PES packet and any attached payload.
+ * @param[in]   struct ltn_pes_packet_s *dst - object
+ * @param[in]   struct ltn_pes_packet_s *src - object
+ */
 void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *src);
 
+/**
+ * @brief       Helper function. Determine if this PES packet represents audio.
+ * @param[in]   struct ltn_pes_packet_s *pes - object
+ * @return      Boolean. True or false.
+ */
 int ltn_pes_packet_is_audio(struct ltn_pes_packet_s *pes);
+
+/**
+ * @brief       Helper function. Determine if this PES packet represents video
+ * @param[in]   struct ltn_pes_packet_s *pes - object
+ * @return      Boolean. True or false.
+ */
 int ltn_pes_packet_is_video(struct ltn_pes_packet_s *pes);
 
+/**
+ * @brief       Pack the pes into a bytestream container
+ * @param[in]   struct ltn_pes_packet_s *pes - object
+ * @param[in]   struct klbs_context_s *bs - existing bytestream container
+ * @return      number of bits packed.
+ */
 ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pes, struct klbs_context_s *bs);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* PES_H */
