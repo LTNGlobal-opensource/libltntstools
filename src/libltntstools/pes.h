@@ -80,8 +80,12 @@ void ltn_pes_packet_init(struct ltn_pes_packet_s *pkt);
  */
 void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt);
 
-/* Parse an existing bitstream into an existing pkt, returning the number of bits parsed,
- * or < 0 on error.
+/**
+ * @brief       Parse an existing bitstream into an existing pkt, returning the number of bits parsed.
+ * @param[in]   struct ltn_pes_packet_s *pkt - object
+ * @param[in]   struct klbs_context_s *bs - existing bytestream container
+ * @param[in]   int skipData - Boolean. Should the parse avoid (for performance reasons) parsing the associated payload data?
+ * @return      number of bits parsed, or < 0 on error.
  */
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData);
 
