@@ -33,11 +33,11 @@ struct klqueue_item_s
 struct klqueue_s
 {
 	/* Private, users should not inspect. */
-	pthread_mutex_t  mutex;
-	pthread_cond_t   item_add;
-	pthread_cond_t   item_remove;
-	struct xorg_list head;
-	uint64_t         item_count;
+	pthread_mutex_t  mutex;         /**< Locking */
+	pthread_cond_t   item_add;      /**< signalling on queue addition */
+	pthread_cond_t   item_remove;   /**< signalling on queue removal */
+	struct xorg_list head;          /**< The list */
+	uint64_t         item_count;    /**< # items on the list */
 };
 
 /**
@@ -47,16 +47,16 @@ struct klqueue_s
 void klqueue_initialize(struct klqueue_s *q);
 
 /**
- * @brief	    TODO - Brief description goes here.
+ * @brief	    Count the number of items on the queue.
  * @param[in]	struct klqueue_s *q - Brief description goes here.
  * @return	    number of items on the queue.
  */
 uint64_t klqueue_count(struct klqueue_s *q);
 
 /**
- * @brief	    TODO - Brief description goes here.
+ * @brief	    Check if the queue is empty.
  * @param[in]	struct klqueue_s *q - Brief description goes here.
- * @return      0 - Success, else < 0 on error.
+ * @return      Boolean. (empty) True or False.
  */
 int  klqueue_empty(struct klqueue_s *q);
 
