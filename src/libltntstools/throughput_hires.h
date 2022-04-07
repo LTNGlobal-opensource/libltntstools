@@ -74,6 +74,22 @@ int  throughput_hires_expire(void *hdl, struct timeval *ts);
 int64_t throughput_hires_sumtotal_i64(void *hdl, uint32_t channel, struct timeval *from, struct timeval *to);
 
 /**
+ * @brief       Compute a min, max, average, the values of all the int64_t for a given channel.
+ * @param[in]   void *hdl - Handle / context.
+ * @param[in]   uint32_t channel - items can be group into channels, categories. If you're not sure use value 0.
+ * @param[in]   struct timeval *from - From is null then from default to 1 second ago.
+ * @param[in]   struct timeval *to - end is null then end details to now.
+ * @param[in]   struct timeval *ts - time of event, or, if NULL the framework assumed walltime.
+ * @param[out]  int64_t *min - minimum value 
+ * @param[out]  int64_t *max - maximum value
+ * @param[out]  int64_t *avg - average value
+ */
+int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *from, struct timeval *to,
+    int64_t *vmin,
+    int64_t *vmax,
+    int64_t *vavg);
+
+/**
  * @brief       Free a previously allocate packet, and any attached payload
  * @param[in]   void *hdl - object
  */

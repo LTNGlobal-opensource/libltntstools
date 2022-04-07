@@ -178,3 +178,46 @@ int64_t throughput_hires_sumtotal_i64(void *hdl, uint32_t channel, struct timeva
 	return total;
 }
 
+int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *from, struct timeval *to, int64_t *vmin, int64_t *vmax, int64_t *vavg)
+{
+	struct throughput_hires_context_s *ctx = (struct throughput_hires_context_s *)hdl;
+
+	uint64_t begin, end;
+	*vmin = 2^62;
+	*vmax = -1;
+	*vavg = -1;
+	int64_t items = 0;
+
+	if (from)
+		begin = makeTimestampFromTimeval(from);
+	else
+		begin = makeTimestampFrom1SecondAgo();
+
+	if (to)
+		end = makeTimestampFromTimeval(to);
+	else
+		end = makeTimestampFromNow();
+
+	struct throughput_hires_item_s *e = NULL, *next = NULL;
+	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
+		if (e->channel == channel && e->timestamp >= begin && e->timestamp <= end) {
+			items++;
+
+			if (e->value_i64 > *vmax)
+				*vmax = e->value_i64;
+			if (e->value_i64 <= *vmin)
+				*vmin = e->value_i64;
+
+			*vavg += e->value_i64;
+		}
+	}
+
+	if (items)
+		*vavg /= items;
+	else
+		*vavg = -1;
+
+	return 0; /* Success */
+
+}
+
