@@ -131,16 +131,22 @@ static ssize_t ltntstools_sectionextractor_write_packet(struct sectionextractor_
 #endif
 
 #if 0
-	printf("Section 0x%02x length 0x%02x/0x%x bytes\n",
+	printf("Section 0x%02x length 0x%02x/0x%x bytes, copying 0x%x, sectionLengthCurrent = 0x%x\n",
 		ctx->tableID, ctx->sectionLengthCurrent + copylength,
-		ctx->sectionLength);
+		ctx->sectionLength, copylength, ctx->sectionLengthCurrent);
 #endif
 	memcpy(&ctx->section[ctx->sectionLengthCurrent], pkt + section_offset, copylength);
 	ctx->sectionLengthCurrent += copylength;
 
 	if (ctx->sectionLength == ctx->sectionLengthCurrent) {
 
-		if (ltntstools_checkCRC32(ctx->section, ctx->sectionLength + 3) == 0) {
+#if 0
+		printf("Checking CRC of len 0x%04x : ", ctx->sectionLength);
+		for (int i = 0; i < ctx->sectionLength; i++)
+			printf("%02x ", ctx->section[i]);
+		printf("\n");
+#endif
+		if (ltntstools_checkCRC32(ctx->section, ctx->sectionLength) == 0) {
 			/* CRC is correct. */
 			*crcValid = 1;
 		} else {
