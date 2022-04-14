@@ -37,9 +37,6 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 	if (ms < 20) {
 		lost = 0;
 	}
-	if (lost) {
-		printf("LOS for %" PRIi64 " ms\n", ms);
-	}
 #if LOCAL_DEBUG
 	//printf("LOS for %" PRIi64 " ms\n", ms);
 #endif
@@ -162,7 +159,6 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		if (!conditionLOS) {
 			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
 		} else {
-			printf("Flagging a sync loss event\n");
 			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
 		}
 
@@ -329,7 +325,7 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	gettimeofday(&s->now, NULL);
 
 	ltn_histogram_interval_update(s->h1);
-	ltn_histogram_interval_print(STDOUT_FILENO, s->h1, 10);
+	//ltn_histogram_interval_print(STDOUT_FILENO, s->h1, 10);
 
 #if ENABLE_TESTING
 	FILE *fh = fopen("/tmp/droppayload", "rb");
