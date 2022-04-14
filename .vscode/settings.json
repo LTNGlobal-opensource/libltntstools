@@ -27,6 +27,7 @@
         "ltmain.sh": true,
         "missing": true,
         "depcomp": true,
+        "**/core.*": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
