@@ -64,6 +64,7 @@ libltntstools_la_SOURCES += h264_codec_metadata.h
 libltntstools_la_SOURCES += h264_codec_metadata.c
 libltntstools_la_SOURCES += h265_codec_metadata.h
 libltntstools_la_SOURCES += h265_codec_metadata.c
+libltntstools_la_SOURCES += kafka-platform.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -109,4 +110,5 @@ libltntstools_include_HEADERS += libltntstools/proc-net-udp.h
 libltntstools_include_HEADERS += libltntstools/audioanalyzer.h
 libltntstools_include_HEADERS += libltntstools/h264_codec_metadata.h
 libltntstools_include_HEADERS += libltntstools/h265_codec_metadata.h
+libltntstools_include_HEADERS += libltntstools/kafka-platform.h
 
