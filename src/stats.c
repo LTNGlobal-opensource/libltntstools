@@ -353,3 +353,20 @@ int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_sta
 	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
 	return pid->prev_pcrExceeds40ms != pid->pcrExceeds40ms;
 }
+
+void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream, int fd)
+{
+	dprintf(fd, "----------PID ---------Pkts -----CCErrors --Mbps\n");
+
+	for (int i = 0; i < MAX_PID; i++) {
+		if (!stream->pids[i].enabled)
+			continue;
+
+		dprintf(fd, "0x%04x (%4d) %13" PRIu64 " %13" PRIu64 " %6.02f\n",
+			i,
+			i,
+			stream->pids[i].packetCount,
+			stream->pids[i].ccErrors,
+			stream->pids[i].mbps);
+	}
+}

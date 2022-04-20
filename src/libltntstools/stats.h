@@ -109,6 +109,13 @@ int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC);
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount);
 
 /**
+ * @brief       Write a basic ascii pid report to the file descriptor;
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   int fd - file descriptor
+ */
+void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream, int fd);
+
+/**
  * @brief       Reset all statistics.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  */
