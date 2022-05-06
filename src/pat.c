@@ -233,3 +233,54 @@ int ltntstools_pat_compare(struct ltntstools_pat_s *a, struct ltntstools_pat_s *
 
 	return 0; /* Identical */
 }
+
+int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t *pid)
+{
+	if (!pat || !pmtptr || !e || !pid)
+		return -1;
+
+	if ((*e) + 1 > pat->program_count)
+		return -1;
+
+	*pmtptr = NULL;
+	*pid = 0;
+
+	for (int i = 0; i < pat->program_count; i++) {
+
+		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+
+		if (ltntstools_descriptor_list_contains_scte35_cue_registration(&pmt->descr_list) == 0) {
+			continue;
+		}
+
+		/* Find the SCTE35 pid */
+		for (int j = 0; j < pmt->stream_count; j++) {
+			if (pmt->streams[j].stream_type == 0x86) {
+				*pid = pmt->streams[j].elementary_PID;
+				*pmtptr = pmt;
+				(*e)++;
+				return 0; /* Success */
+			}
+		}
+
+	}
+
+	return -1; /* Error */
+}
+
+int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype)
+{
+	if (!pmt || !pid || !estype)
+		return -1;
+
+	for (int j = 0; j < pmt->stream_count; j++) {
+		if (ltntstools_is_ESPayloadType_Video(pmt->streams[j].stream_type)) {
+			*pid = pmt->streams[j].elementary_PID;
+			*estype = pmt->streams[j].stream_type;
+
+			return 0; /* Success */
+		}
+	}
+
+	return -1; /* Failed */
+}

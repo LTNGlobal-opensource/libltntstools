@@ -93,8 +93,20 @@ struct ltntstools_pat_s * ltntstools_pat_alloc_from_existing(dvbpsi_pat_t *pat);
 typedef struct dvbpsi_pmt_s dvbpsi_pmt_t;
 void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t *pmt);
 
+/**
+ * @brief       Enumerate all services in the PAT object, find any SCTE35 pids and return the associated PMT (and pid).
+ * @param[in]   struct ltntstools_pat_s *pat - object
+ * @param[in]   int *e - used internally to enumerate objects. Pass 0 value int on first call then don't modify afterwards
+ * @param[out]  struct ltntstools_pmt_s **pmt - ptr to the pmt object containing in the PAT
+ * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
+ */
+int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmt, uint16_t *pid);
+
+int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
+
 #ifdef __cplusplus
 };
 #endif
 
 #endif /* TR101290_PAT_H */
+int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
