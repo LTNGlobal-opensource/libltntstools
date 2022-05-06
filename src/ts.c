@@ -124,6 +124,27 @@ unsigned int ltntstools_get_section_tableid(const uint8_t *pkt)
 	return *(pkt + section_offset);
 }
 
+int ltntstools_is_ESPayloadType_Video(uint8_t esPayloadType)
+{
+    switch (esPayloadType)
+    {
+        case 0x01: // ISO/IEC 11172 Video
+        case 0x02: // ISO/IEC 13818-2 Video
+        case 0x1B: // H.264 Video
+        case 0x21: // JPEG 2000"
+        case 0x24:
+        case 0x25:
+        case 0x27:
+        case 0x28:
+        case 0x29:
+        case 0x2A: // HEVC Video
+        case 0xdb: // H.264 Video (HLS TS Encryption)
+			return 1;
+        default:
+			return 0;
+    }
+}
+
 const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType)
 {
     switch (esPayloadType)

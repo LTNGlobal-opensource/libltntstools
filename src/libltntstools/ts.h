@@ -229,6 +229,13 @@ unsigned int ltntstools_get_section_tableid(const uint8_t *pkt);
 const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType);
 
 /**
+ * @brief       For a PMT streamType field, if the payload is deemed video, return 1 true else 0 false.
+ * @param[in]   uint8_t esPayloadType - pmt elementary stream type.
+ * @return      Boolean.
+ */
+int ltntstools_is_ESPayloadType_Video(uint8_t esPayloadType);
+
+/**
  * @brief       For a given buffer atleast 188 bytes long, create a null padding packet.
  * @param[in]   uint8_t *pkt - Destination buffer.
  */
