@@ -50,3 +50,4 @@
 #include <libltntstools/h264_codec_metadata.h>
 #include <libltntstools/h265_codec_metadata.h>
 #include <libltntstools/kafka-platform.h>
+#include <libltntstools/source-pcap.h>
