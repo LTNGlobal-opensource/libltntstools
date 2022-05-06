@@ -243,7 +243,10 @@ static void decode(struct ltntstools_audioanalyzer_ctx_s *ctx, struct ltntstools
     }
 }
 
+#if defined(__linux__)
 extern int pthread_setname_np(pthread_t thread, const char *name);
+#endif
+
 static void *ltntstools_audioanalyzer_stream_threadfunc(void *p)
 {
     struct ltntstools_audioanalyzer_ctx_s *ctx = (struct ltntstools_audioanalyzer_ctx_s *)p;
