@@ -62,6 +62,17 @@ struct ltntstools_audioanalyzer_ctx_s
     struct ltntstools_audioanalyzer_stream_s *streams[8192];
 };
 
+int ltnpthread_setname_np(pthread_t thread, const char *name)
+{
+#if defined(__linux__)
+        return ltnpthread_setname_np(thread, name);
+#endif
+#if defined(__APPLE__)
+        /* We don't support thread naming on OSX, yet. */
+        return 0;
+#endif
+}
+
 static void _compute_dbFS_s16p(struct ltntstools_audioanalyzer_stream_s *stream, int channelNr, int16_t *samples, int sampleCount)
 {
     /* I don't need dbFS for every sample, because these that's arent that timely,
@@ -241,7 +252,7 @@ static void *ltntstools_audioanalyzer_stream_threadfunc(void *p)
 #endif
 
     pthread_detach(ctx->threadId);
-    pthread_setname_np(ctx->threadId, "thread-nielsen");
+    ltnpthread_setname_np(ctx->threadId, "thread-nielsen");
 
     ctx->threadTerminate = 0;
 	ctx->threadRunning = 1;
