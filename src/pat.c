@@ -268,6 +268,42 @@ int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, st
 	return -1; /* Error */
 }
 
+int ltntstools_pat_enum_services_smpte2038(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t *pid)
+{
+	if (!pat || !pmtptr || !e || !pid)
+		return -1;
+
+	if ((*e) + 1 > pat->program_count)
+		return -1;
+
+	*pmtptr = NULL;
+	*pid = 0;
+
+	for (int i = 0; i < pat->program_count; i++) {
+
+		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+
+		for (int j = 0; j < pmt->stream_count; j++) {
+			struct ltntstools_pmt_entry_s *se = &pmt->streams[j];
+
+			if (se->stream_type != 0x06) {
+				continue;
+			}
+
+			if (ltntstools_descriptor_list_contains_smpte2038_registration(&se->descr_list) == 0) {
+				continue;
+			}
+
+			*pid = se->elementary_PID;
+			*pmtptr = pmt;
+			(*e)++;
+			return 0; /* Success */
+		}
+	}
+
+	return -1; /* Error */
+}
+
 int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype)
 {
 	if (!pmt || !pid || !estype)

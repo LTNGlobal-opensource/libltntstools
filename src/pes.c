@@ -17,6 +17,9 @@ struct ltn_pes_packet_s *ltn_pes_packet_alloc()
 
 void ltn_pes_packet_init(struct ltn_pes_packet_s *pkt)
 {
+	if (pkt->rawBuffer) {
+		free(pkt->rawBuffer);
+	}
 	if (pkt->data) {
 		free(pkt->data);
 	}
@@ -25,6 +28,11 @@ void ltn_pes_packet_init(struct ltn_pes_packet_s *pkt)
 
 void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt)
 {
+	if (pkt->rawBuffer) {
+		free(pkt->rawBuffer);
+		pkt->rawBuffer = NULL;
+		pkt->rawBufferLengthBytes = 0;
+	}
 	if (pkt->data) {
 		free(pkt->data);
 		pkt->data = NULL;
@@ -219,6 +227,8 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData)
 {
 	ssize_t bits = 0;
+
+	/* Clone the entire buffer into a raw duplicate. */
 
 	pkt->skipPayloadParsing = skipData;
 
@@ -459,6 +469,10 @@ void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *
 	if (src->data) {
 		dst->data = malloc(src->dataLengthBytes);
 		memcpy(dst->data, src->data, src->dataLengthBytes);
+	}
+	if (src->rawBuffer) {
+		dst->rawBuffer = malloc(src->rawBufferLengthBytes);
+		memcpy(dst->rawBuffer, src->rawBuffer, src->rawBufferLengthBytes);
 	}
 }
 

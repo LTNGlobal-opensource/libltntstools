@@ -30,6 +30,7 @@ struct ltntstools_descriptor_list_s
 
 int ltntstools_descriptor_list_add(struct ltntstools_descriptor_list_s *list, uint8_t tag, uint8_t *src, uint8_t lengthBytes);
 int ltntstools_descriptor_list_contains_scte35_cue_registration(struct ltntstools_descriptor_list_s *list);
+int ltntstools_descriptor_list_contains_smpte2038_registration(struct ltntstools_descriptor_list_s *list);
 int ltntstools_descriptor_list_contains_ltn_encoder_sw_version(struct ltntstools_descriptor_list_s *list,
 	unsigned int *major, unsigned int *minor, unsigned int *patch);
 

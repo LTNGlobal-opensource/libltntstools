@@ -45,6 +45,25 @@ int ltntstools_descriptor_list_contains_scte35_cue_registration(struct ltntstool
 	return found;
 }
 
+int ltntstools_descriptor_list_contains_smpte2038_registration(struct ltntstools_descriptor_list_s *list)
+{
+	int found = 0;
+
+	for (int i = 0; i < list->count; i++) {
+		struct ltntstools_descriptor_entry_s *d = &list->array[i];
+
+		if (d->tag == 0xc4 && d->len == 0x09) {
+			char *s = "SMPTE2038";
+			if (memcmp(d->data, s, strlen(s)) == 0) {
+				found = 1;
+				break;
+			}
+		}
+	}
+
+	return found;
+}
+
 int ltntstools_descriptor_list_contains_ltn_encoder_sw_version(struct ltntstools_descriptor_list_s *list,
 	unsigned int *major, unsigned int *minor, unsigned int *patch)
 {

@@ -104,6 +104,15 @@ int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, st
 
 int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
 
+/**
+ * @brief       Enumerate all services in the PAT object, find any SMPTE2038 pids and return the associated PMT (and pid).
+ * @param[in]   struct ltntstools_pat_s *pat - object
+ * @param[in]   int *e - used internally to enumerate objects. Pass 0 value int on first call then don't modify afterwards
+ * @param[out]  struct ltntstools_pmt_s **pmt - ptr to the pmt object containing in the PAT
+ * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
+ */
+int ltntstools_pat_enum_services_smpte2038(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmt, uint16_t *pid);
+
 #ifdef __cplusplus
 };
 #endif

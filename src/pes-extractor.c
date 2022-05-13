@@ -108,6 +108,11 @@ static int _processRing(struct pes_extractor_s *ctx)
 			ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
 
 			if (ctx->cb) {
+				
+				pes->rawBufferLengthBytes = rlen - (rlen - offset);
+				pes->rawBuffer = malloc(pes->rawBufferLengthBytes);
+				memcpy(pes->rawBuffer, buf, pes->rawBufferLengthBytes);
+
 				ctx->cb(ctx->userContext, pes);
 				/* User owns the lifetime of the object */
 			} else {

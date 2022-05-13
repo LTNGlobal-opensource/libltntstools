@@ -63,6 +63,12 @@ struct ltn_pes_packet_s
 
 	/* When True, user isn't interested in spending CPU cycles collecting data, optimize it away. */
 	uint32_t skipPayloadParsing;
+
+	/* Duplicate buffer of the data used originally to create this PES.
+	 * May contain trailing junk that falls outside of this PES, and that's OK.
+	 */
+	unsigned char *rawBuffer;
+	uint32_t rawBufferLengthBytes;
 };
 
 /**
