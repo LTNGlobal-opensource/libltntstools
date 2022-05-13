@@ -60,6 +60,9 @@ struct ltn_pes_packet_s
 
 	unsigned char *data;
 	uint32_t dataLengthBytes;
+
+	/* When True, user isn't interested in spending CPU cycles collecting data, optimize it away. */
+	uint32_t skipPayloadParsing;
 };
 
 /**

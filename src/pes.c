@@ -5,6 +5,7 @@
 #include <libltntstools/ltntstools.h>
 
 #define DISPLAY_U32(indent, fn) printf("%s%s = %d (0x%x)\n", indent, #fn, fn, fn);
+#define DISPLAY_U32_NOCR(indent, fn) printf("%s%s = %d (0x%x)", indent, #fn, fn, fn);
 #define DISPLAY_U64(indent, fn) printf("%s%s = %" PRIu64 " (0x%" PRIx64 ")\n", indent, #fn, fn, fn);
 #define DISPLAY_U32_SUFFIX(indent, fn, str) printf("%s%s = %d (0x%x) %s\n", indent, #fn, fn, fn, str);
 
@@ -218,6 +219,8 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData)
 {
 	ssize_t bits = 0;
+
+	pkt->skipPayloadParsing = skipData;
 
 	/* TODO: This still needs a little work, esp around trick play.
 	 * Read the spec, see what's missing and add it.
@@ -439,7 +442,12 @@ void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent)
 		DISPLAY_U32(i, pkt->previous_PES_packet_CRC);
 	}
 
-	DISPLAY_U32(i, pkt->dataLengthBytes);
+	if (pkt->skipPayloadParsing) {
+		DISPLAY_U32_NOCR(i, pkt->dataLengthBytes);
+		printf(" (operator opted out of parsing ~%d payload bytes)\n", pkt->PES_packet_length - pkt->PES_header_data_length);
+	} else {
+		DISPLAY_U32(i, pkt->dataLengthBytes);
+	}
 	if (pkt->dataLengthBytes) {
 		ltntstools_hexdump(pkt->data, pkt->dataLengthBytes, 16);
 	}
