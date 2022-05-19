@@ -65,7 +65,8 @@ struct ltntstools_audioanalyzer_ctx_s
 int ltnpthread_setname_np(pthread_t thread, const char *name)
 {
 #if defined(__linux__)
-        return ltnpthread_setname_np(thread, name);
+extern int pthread_setname_np(pthread_t thread, const char *name);
+        return pthread_setname_np(thread, name);
 #endif
 #if defined(__APPLE__)
         /* We don't support thread naming on OSX, yet. */
@@ -242,10 +243,6 @@ static void decode(struct ltntstools_audioanalyzer_ctx_s *ctx, struct ltntstools
 
     }
 }
-
-#if defined(__linux__)
-extern int pthread_setname_np(pthread_t thread, const char *name);
-#endif
 
 static void *ltntstools_audioanalyzer_stream_threadfunc(void *p)
 {
