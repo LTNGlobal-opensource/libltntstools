@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 #include <stdbool.h>
 #include <dvbpsi/dvbpsi.h>

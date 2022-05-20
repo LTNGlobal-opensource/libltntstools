@@ -1,5 +1,17 @@
 #include "streammodel-types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <libavutil/avstring.h>
+#include <libavutil/mem.h>
+#include <libavformat/avformat.h>
+
+#ifdef __cplusplus
+};
+#endif
+
 #if 0
 #define DVBPSI_REPORTING (DVBPSI_MSG_DEBUG)
 #else
@@ -317,6 +329,63 @@ int ltntstools_streammodel_alloc(void **hdl, void *userContext)
 
 	*hdl = ctx;
 	return 0;
+}
+
+int ltntstools_streammodel_alloc_from_url(const char *url, struct ltntstools_pat_s **pat)
+{
+	void *sm;
+	*pat = NULL;
+
+	if (ltntstools_streammodel_alloc(&sm, NULL) < 0) {
+		fprintf(stderr, "\nUnable to allocate streammodel object.\n\n");
+		return -1;
+	}
+
+	avformat_network_init();
+	AVIOContext *puc;
+	int ret = avio_open2(&puc, url, AVIO_FLAG_READ | AVIO_FLAG_NONBLOCK | AVIO_FLAG_DIRECT, NULL, NULL);
+	if (ret < 0) {
+		ltntstools_streammodel_free(sm);
+		fprintf(stderr, "%s() url '%s' syntax error\n", __func__, url);
+		return -1;
+	}
+
+	uint8_t buf[7 * 188];
+	int ok = 1;
+	while (ok) {
+		int rlen = avio_read(puc, &buf[0], sizeof(buf));
+		if (rlen == -EAGAIN) {
+			usleep(2 * 1000);
+			continue;
+		}
+		if (rlen < 0)
+			break;
+
+		int complete = 0;
+		ltntstools_streammodel_write(sm, &buf[0], rlen / 188, &complete);
+
+		if (complete) {
+
+			struct ltntstools_pat_s *m = NULL;
+			if (ltntstools_streammodel_query_model(sm, &m) == 0) {
+				*pat = m;
+			}
+			break;
+		}
+
+	}
+	avio_close(puc);
+
+	if (0 && *pat) {
+		ltntstools_pat_dprintf(*pat, 0);
+	}
+
+	ltntstools_streammodel_free(sm);
+	
+	if (*pat == NULL)
+		return -1; /* Error */
+
+	return 0; /* Success */
 }
 
 void ltntstools_streammodel_free(void *hdl)

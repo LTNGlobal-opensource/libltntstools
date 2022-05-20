@@ -36,6 +36,15 @@ extern "C" {
 int ltntstools_streammodel_alloc(void **hdl, void *userContext);
 
 /**
+ * @brief         Single call that opens a transport fiel, performs all the queries and returns a stream model object.
+ * @param[in]     const char *url - file to open, url to open, we support mode ffmpeg input urls.
+ * @param[out]    struct ltntstools_pat_s **pat - returned object, or NULL.
+ * @return        0 - Success
+ * @return      < 0 - Error
+ */
+int ltntstools_streammodel_alloc_from_url(const char *url, struct ltntstools_pat_s **pat);
+
+/**
  * @brief         Free a previously allocated context. Don't attempt to use the context after its freed.
  * @param[in]     void *hdl - Previously allocate context handle.
  */
