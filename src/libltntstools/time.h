@@ -12,6 +12,7 @@ extern "C" {
 
 /* Return a YYYYMMDD-HHMMSS string in buf, for when (NULL) now, or sometime in the past */
 int libltntstools_getTimestamp(char *buf, int buflen, time_t *when);
+int libltntstools_getTimestamp_seperated(char *buf, int buflen, time_t *when);
 
 #ifdef __cplusplus
 };
