@@ -6,7 +6,7 @@
 #include <libavutil/internal.h>
 #include <libavcodec/golomb.h>
 
-#define LOCAL_DEBUG 1
+#define LOCAL_DEBUG 0
 
 struct h264_codec_metadata_ctx_s
 {
