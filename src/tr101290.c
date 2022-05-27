@@ -195,6 +195,8 @@ void *ltntstools_tr101290_threadFunc(void *p)
 #endif
 				/* Create an alarm record, the thread will pass is to the caller later. */
 				s->alarm_tbl = realloc(s->alarm_tbl, (s->alarmCount + 1) * sizeof(struct ltntstools_tr101290_alarm_s));
+				if (!s->alarm_tbl)
+					continue;
 
 				struct ltntstools_tr101290_alarm_s *alarm = &s->alarm_tbl[s->alarmCount];
 				alarm->id = ev->id;
