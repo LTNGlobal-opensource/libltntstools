@@ -54,6 +54,8 @@ struct smoother_pcr_context_s
 	int itemLengthBytes;
 	pthread_t threadId;
 	int threadRunning, threadTerminate, threadTerminated;
+
+	int64_t totalSizeBytes;
 };
 
 /* based on last received PCR, and number of bytes received since then,
@@ -200,13 +202,14 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	if (count <= 0)
-		return 0; /* Nothing scheduled, bail out early. */
+		return -1; /* Nothing scheduled, bail out early. */
 
 	/* Call the callback with any scheduled packets */
 	e = NULL, next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &loclist, list) {
 		if (ctx->outputCb) {
 			ctx->outputCb(ctx->userContext, e->buf, e->lengthBytes);
+			ctx->totalSizeBytes -= e->lengthBytes;
 
 			/* Throw a packet loss warning if the queue gets confused, should never happen. */
 			if (ctx->last_seqno && ctx->last_seqno + 1 != e->seqno) {
@@ -255,7 +258,8 @@ static void * _threadFunc(void *p)
 		/* Service the output schedule queue, output any UDP packets when they're due.
 		 * Important to remember that we're calling this func while we're holding the mutex.
 		 */
-		_queueProcess(ctx, uS);
+		if (_queueProcess(ctx, uS) < 0)
+			usleep(1 * 1000);
 
 	}
 	ctx->threadRunning = 1;
@@ -376,6 +380,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 
 	pthread_mutex_lock(&ctx->listMutex);
 	item->seqno = ctx->seqno++;
+	ctx->totalSizeBytes += item->lengthBytes;
 #if 0
 	itemPrint(item);
 #endif
@@ -396,3 +401,35 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	return 0;
 }
 
+int64_t smoother_pcr_get_size(void *hdl)
+{
+	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
+	int64_t sizeBytes = 0;
+
+	pthread_mutex_lock(&ctx->listMutex);
+	if (ctx->totalSizeBytes > 0)
+		sizeBytes = ctx->totalSizeBytes;
+	pthread_mutex_unlock(&ctx->listMutex);
+
+	return sizeBytes;
+}
+
+void smoother_pcr_reset(void *hdl)
+{
+	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
+
+	pthread_mutex_lock(&ctx->listMutex);
+	ctx->walltimeFirstPCRuS = 0;
+	ctx->pcrFirst = -1;
+	ctx->pcrLast = -1;
+	ctx->totalSizeBytes = 0;
+
+	while (!xorg_list_is_empty(&ctx->itemsBusy)) {
+		struct smoother_pcr_item_s *item = xorg_list_first_entry(&ctx->itemsBusy, struct smoother_pcr_item_s, list);
+		itemReset(item);
+		xorg_list_del(&item->list);
+		xorg_list_append(&item->list, &ctx->itemsFree);
+	}
+
+	pthread_mutex_unlock(&ctx->listMutex);
+}
