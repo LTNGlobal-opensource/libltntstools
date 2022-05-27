@@ -67,11 +67,24 @@ void smoother_pcr_free(void *hdl);
  *              callback in a smooth jitter free timeline.
  * @param[in]   void *hdl - Handle / context.
  * @param[in]   const uint8_t *pkts - one or more aligned transport packets
- * @param[in]   int lengthBytes - number of packets
+ * @param[in]   int lengthBytes - number of bytes
  * @param[in]   struct timeval *ts - current timestamp.
  * @return      0 on success, else < 0
  */
 int  smoother_pcr_write(void *hdl, const uint8_t *pkts, int lengthBytes, struct timeval *ts);
+
+/**
+ * @brief       Return the number of bytes held in the smoother queue.
+ * @param[in]   void *hdl - Handle / context.
+ * @return      >= 0 on success, else < 0 on error
+ */
+int64_t smoother_pcr_get_size(void *hdl);
+
+/**
+ * @brief       DElete all queued content, reset clocks, used when rewinding files, going back in PCR time.
+ * @param[in]   void *hdl - Handle / context.
+ */
+void smoother_pcr_reset(void *hdl);
 
 //int  smoother_pcr_expire(void *hdl, struct timeval *ts);
 
