@@ -66,6 +66,7 @@ libltntstools_la_SOURCES += h265_codec_metadata.h
 libltntstools_la_SOURCES += h265_codec_metadata.c
 libltntstools_la_SOURCES += kafka-platform.c
 libltntstools_la_SOURCES += source-pcap.c
+libltntstools_la_SOURCES += source-rcts.c
 libltntstools_la_SOURCES += utils.h
 libltntstools_la_SOURCES += utils.c
 
@@ -115,4 +116,5 @@ libltntstools_include_HEADERS += libltntstools/h264_codec_metadata.h
 libltntstools_include_HEADERS += libltntstools/h265_codec_metadata.h
 libltntstools_include_HEADERS += libltntstools/kafka-platform.h
 libltntstools_include_HEADERS += libltntstools/source-pcap.h
+libltntstools_include_HEADERS += libltntstools/source-rcts.h
 
