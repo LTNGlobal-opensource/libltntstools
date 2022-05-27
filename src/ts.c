@@ -1,4 +1,5 @@
 #include "libltntstools/ts.h"
+#include "libltntstools/streammodel.h"
 #include <inttypes.h>
 
 /* Convert a pcr base + extension field back into a 27MHz System Clock reference value.
@@ -374,4 +375,82 @@ int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstoo
 	}
 
 	return ret;
+}
+
+int ltntstools_file_estimate_bitrate(const char *filename, uint32_t *bps)
+{
+	if (!filename || !bps)
+		return -1;
+
+	/* Figure out the PCR Pid */
+	struct ltntstools_pat_s *pat;
+	if (ltntstools_streammodel_alloc_from_url(filename, &pat) < 0) {
+		fprintf(stderr, "%s() Unable to query stream model for file\n", __func__);
+		return -1;
+	}
+
+	int e = 0;
+	struct ltntstools_pmt_s *pmt;
+	if (ltntstools_pat_enum_services_video(pat, &e, &pmt) < 0) {
+		fprintf(stderr, "%s() Unable to detect PCR PID from file.\n", __func__);
+		return -1;
+	}
+
+	FILE *fh = fopen(filename, "rb");
+	if (!fh) {
+		ltntstools_pat_free(pat);
+		return -1;
+	}
+
+	int rlen = 32 * 1048576;
+	uint8_t *buf = malloc(rlen);
+	if (!buf) {
+		ltntstools_pat_free(pat);
+		return -1;
+	}
+
+	int l = fread(buf, 1, rlen, fh);
+	if (l > 0) {
+		int arrayLength;
+		struct ltntstools_pcr_position_s *array;
+		if (ltntstools_queryPCRs(buf, l, 0, &array, &arrayLength) < 0) {
+			fclose(fh);
+			free(buf);
+			ltntstools_pat_free(pat);
+			return -1;
+		}
+
+		struct ltntstools_pcr_position_s first = { 0 }, next = { 0 };
+		first.pid = 0;
+
+		for (int i = 0; i < arrayLength; i++) {
+			struct ltntstools_pcr_position_s *p = &array[i];
+			if (p->pid != pmt->PCR_PID)
+				continue;
+
+			if (first.pid == 0)
+				first = *p;
+
+			next = *p;
+		}
+
+#if 0
+		printf("first   offset %12" PRIu64 "  scr %14" PRIu64 "\n", first.offset, first.pcr);
+		printf(" next   offset %12" PRIu64 "  scr %14" PRIu64 "\n", next.offset, next.pcr);
+#endif
+		uint64_t bits = (next.offset - first.offset) * 8;
+		uint64_t ticks_ms = (next.pcr - first.pcr) / 27000;
+		*bps = (bits / ticks_ms) * 1000;
+#if 0
+		printf("  time %14" PRIu64 " (ms)\n", ticks_ms);
+		printf("  bits %14" PRIu64 "\n", bits);
+		printf("   bps %14d\n", *bps);
+#endif
+	}
+
+	fclose(fh);
+	free(buf);
+	ltntstools_pat_free(pat);
+
+	return 0; /* Success */
 }

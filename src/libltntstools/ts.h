@@ -346,4 +346,12 @@ int ltntstools_generatePacketWith64bCounter(uint8_t *pkt, int lengthBytes, uint1
  */
 int ltntstools_verifyPacketWith64bCounter(uint8_t *pkt, int lengthBytes, uint16_t pid, uint64_t lastCounter, uint64_t *currentCounter);
 
+/**
+ * @brief       File a given mpegts CBR transport file. Determine the overall SPTS/MPTS bitrate quickly and efficiently.
+ * @param[in]   const char *filename - input filename
+ * @param[out]  uint32_t *bps - Calculate bps
+ * @return      0 on success else < 0 indicating fault/damage to the packet.
+ */
+int ltntstools_file_estimate_bitrate(const char *filename, uint32_t *bps);
+
 #endif /* TS_H */
