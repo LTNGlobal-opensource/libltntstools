@@ -320,3 +320,30 @@ int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, 
 
 	return -1; /* Failed */
 }
+
+int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr)
+{
+	if (!pmtptr || !e)
+		return -1;
+
+	if ((*e) + 1 > pat->program_count)
+		return -1;
+
+	for (int i = (*e); i < pat->program_count; i++) {
+
+		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+
+		for (int j = 0; j < pmt->stream_count; j++) {
+			
+			if (ltntstools_is_ESPayloadType_Video(pmt->streams[j].stream_type)) {
+				(*e)++;
+				*pmtptr = pmt;
+				return 0; /* Success */
+			}
+			
+		}
+		(*e)++;
+	}
+
+	return -1; /* Failed */
+}
