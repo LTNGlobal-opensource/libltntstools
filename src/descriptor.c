@@ -59,7 +59,7 @@ int ltntstools_descriptor_list_contains_smpte2038_registration(struct ltntstools
 				break;
 			}
 		} else 
-		if (d->tag == 0xc4 && d->len == 0x04) {
+		if (d->tag == 0x05 && d->len == 0x04) {
 			char *t = "VANC"; /* SMPTE2038:2008 specification */
 			if (memcmp(d->data, t, strlen(t)) == 0) {
 				found = 1;

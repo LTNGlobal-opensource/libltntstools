@@ -279,9 +279,14 @@ int ltntstools_pat_enum_services_smpte2038(struct ltntstools_pat_s *pat, int *e,
 	*pmtptr = NULL;
 	*pid = 0;
 
-	for (int i = 0; i < pat->program_count; i++) {
+	for (int i = *e; i < pat->program_count; i++) {
 
-		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+		struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
+
+		if (pmt->program_number == 0) {
+			(*e)++;
+			continue;
+		}
 
 		for (int j = 0; j < pmt->stream_count; j++) {
 			struct ltntstools_pmt_entry_s *se = &pmt->streams[j];
@@ -299,6 +304,7 @@ int ltntstools_pat_enum_services_smpte2038(struct ltntstools_pat_s *pat, int *e,
 			(*e)++;
 			return 0; /* Success */
 		}
+		(*e)++;
 	}
 
 	return -1; /* Error */
