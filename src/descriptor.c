@@ -53,11 +53,26 @@ int ltntstools_descriptor_list_contains_smpte2038_registration(struct ltntstools
 		struct ltntstools_descriptor_entry_s *d = &list->array[i];
 
 		if (d->tag == 0xc4 && d->len == 0x09) {
-			char *s = "SMPTE2038";
+			char *s = "SMPTE2038"; /* LTN Encoder */
 			if (memcmp(d->data, s, strlen(s)) == 0) {
 				found = 1;
 				break;
 			}
+		} else 
+		if (d->tag == 0xc4 && d->len == 0x04) {
+			char *t = "VANC"; /* SMPTE2038:2008 specification */
+			if (memcmp(d->data, t, strlen(t)) == 0) {
+				found = 1;
+				break;
+			}
+		} else 
+		if (d->tag == 0xc4 && d->len == 0) {
+			/* "This structure may be used to convey additional information about the ANC data component.
+			 *  The use is optional and currently undefined. Compliant receive devices shall ignore
+			 *  unrecognized descriptors."
+			 */
+			found = 1;
+			break;
 		}
 	}
 
