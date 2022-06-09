@@ -1,5 +1,7 @@
 #include "streammodel-types.h"
 
+#define LOCAL_DEBUG 0
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -422,7 +424,9 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 		 * stream or the stream PSI was changed underneath us.
 		 */
 		if (ctx->next->totalPMTsInPAT && ctx->next->parsedPMTs < ctx->next->totalPMTsInPAT) {
+#if LOCAL_DEBUG
 			printf("Stream PMT didn't arrive %d vs %d, aborting\n", ctx->next->totalPMTsInPAT, ctx->next->parsedPMTs);
+#endif
 			_rom_initialize(ctx, ctx->next, ctx->next->nr);
 			ctx->writePackets = 1;
 			//*complete = 0;
