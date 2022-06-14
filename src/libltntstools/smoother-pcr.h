@@ -53,7 +53,7 @@ typedef void (*smoother_pcr_output_callback)(void *userContext, unsigned char *b
  * @return      0 on success, else < 0.
  */
 int  smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callback cb,
-	int itemsPerSecond, int itemLengthBytes, uint16_t pcrPID, int inputMuxrate_bps);
+	int itemsPerSecond, int itemLengthBytes, uint16_t pcrPID, int latencyMS);
 
 /**
  * @brief       Free a previously allocate context.
