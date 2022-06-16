@@ -269,6 +269,14 @@ void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statisti
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
+ * @brief       Query the current PCR tick value, if this PID contains a PCR. Else, return 0.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      PCR tick value in a 27MHz clock.
+ */
+int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
  * @brief       Write a CTP buffer into the stats layer.
  *              Limited but useful stats will be collected and exposed.
  *              ATSC3.0 A/324 stats wedged into this framework, better than nothing.
