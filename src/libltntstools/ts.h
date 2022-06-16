@@ -168,6 +168,25 @@ __inline__ int64_t ltntstools_scr_diff(int64_t from, int64_t to)
 	return diffTicks;
 }
 
+/**
+ * @brief       Add a positive or negative number of ticks to a SCR/PCR clock, compensate for a clock wrap.
+ * @param[in]   int64_t scr - tick value
+ * @param[in]   int64_t ticks - tick value
+ * @return      int64_t - Always returns a positive number of ticks in the 27MHz clock
+ */
+__inline__ int64_t ltntstools_scr_add(int64_t scr, int64_t ticks)
+{
+	int64_t clock = scr + ticks;
+
+	if (clock > MAX_SCR_VALUE)
+		clock -= MAX_SCR_VALUE;
+	else
+	if (clock < 0)
+		clock += MAX_SCR_VALUE;
+	
+	return clock;
+}
+
 /* Always returns a positive number of ticks in the 90MHz clock */
 __inline__ int64_t ltntstools_pts_diff(int64_t from, int64_t to)
 {
@@ -259,6 +278,10 @@ struct ltntstools_pcr_position_s
 	uint64_t offset;
 	uint16_t pid;
 };
+/**
+ * @brief       For an existing array, add an additional element.
+ */
+int ltntstools_pcr_position_append(struct ltntstools_pcr_position_s **array, int *arrayLength, struct ltntstools_pcr_position_s *p);
 
 /**
  * @brief       Enumerator function to assist with using ltntstools_queryPCR_pid()
@@ -353,5 +376,23 @@ int ltntstools_verifyPacketWith64bCounter(uint8_t *pkt, int lengthBytes, uint16_
  * @return      0 on success else < 0 indicating fault/damage to the packet.
  */
 int ltntstools_file_estimate_bitrate(const char *filename, uint32_t *bps);
+
+/**
+ * @brief       Convert a pcr into a human readibly string. Either pass a buffer of atleast 16 bytes,
+ *              or pass NULL and a buffer will be allocated for you. If you pass NULL, you own the lifespan, don't
+ *              leak it.
+ * @param[out]  char **buf
+ * @param[in]   int64_t pcr - tick value
+ */
+void ltntstools_pcr_to_ascii(char **buf, int64_t pcr);
+
+/**
+ * @brief       Convert a pts into a human readibly string. Either pass a buffer of atleast 16 bytes,
+ *              or pass NULL and a buffer will be allocated for you. If you pass NULL, you own the lifespan, don't
+ *              leak it.
+ * @param[out]  char **buf
+ * @param[in]   int64_t pts - tick value
+ */
+void ltntstools_pts_to_ascii(char **buf, int64_t pts);
 
 #endif /* TS_H */

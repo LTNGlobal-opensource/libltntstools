@@ -343,6 +343,16 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
 	return 0; /* Success */
 }
 
+int ltntstools_pcr_position_append(struct ltntstools_pcr_position_s **array, int *arrayLength, struct ltntstools_pcr_position_s *p)
+{
+	*array = realloc(*array, ++(*arrayLength) * sizeof(struct ltntstools_pcr_position_s));
+	if (!*array)
+		return -1;
+
+	memcpy(*array + (*arrayLength - 1), p, sizeof(*p));
+
+	return 0; /* Success */
+}
 int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstools_pcr_position_s *pos, uint16_t pcrPID, int pktAligned)
 {
 	int offset = 0;
@@ -453,4 +463,27 @@ int ltntstools_file_estimate_bitrate(const char *filename, uint32_t *bps)
 	ltntstools_pat_free(pat);
 
 	return 0; /* Success */
+}
+
+void ltntstools_pts_to_ascii(char **buf, int64_t pts)
+{
+	if (*buf == NULL)
+			*buf = malloc(16);
+
+	/* Normalize to seconds */
+	int64_t t = pts / 90000;
+
+	int ms   = (pts / 90) % 1000;
+	int secs = t % 60;
+	int mins = (t / 60) % 60;
+	int hrs  = (t / 3600) % 24;
+	int days = t / 86400;
+
+	sprintf(*buf, "%d.%02d:%02d:%02d.%03d",
+			days, hrs, mins, secs, ms);
+}
+
+void ltntstools_pcr_to_ascii(char **buf, int64_t pcr)
+{
+    ltntstools_pts_to_ascii(buf, pcr / 300);
 }
