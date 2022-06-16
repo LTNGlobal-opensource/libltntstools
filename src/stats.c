@@ -319,6 +319,18 @@ int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistic
 	return pid->hasPCR;
 }
 
+int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+
+	int64_t pcr = 0;
+	if (pid->hasPCR) {
+		struct ltntstools_clock_s *pcrclk = &pid->clocks[ltntstools_CLOCK_PCR];
+		pcr = ltntstools_clock_get_ticks(pcrclk);
+	}
+	return pcr;
+}
+
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream)
 {
 	return stream->ccErrors;
