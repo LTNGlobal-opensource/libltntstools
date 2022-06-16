@@ -29,7 +29,8 @@ struct source_rcts_ctx_s
 
 extern int ltnpthread_setname_np(pthread_t thread, const char *name);
 
-static void *sm_pcr_output_callback(void *userContext, const uint8_t *pkts, int lengthBytes)
+static int sm_pcr_output_callback(void *userContext, unsigned char *pkts, int lengthBytes,
+	struct ltntstools_pcr_position_s *array, int arrayLength)
 {
 	struct source_rcts_ctx_s *ctx = userContext;
 
@@ -37,7 +38,7 @@ static void *sm_pcr_output_callback(void *userContext, const uint8_t *pkts, int 
 		ctx->callbacks.raw(ctx->userContext, pkts, lengthBytes / 188);
 	}
 
-	return NULL;
+	return 0;
 }
 
 static void *rcts_thread_func(void *p)
@@ -127,7 +128,7 @@ int ltntstools_source_rcts_alloc(void **hdl, void *userContext, struct ltntstool
 	ctx->filename = strdup(filename);
 	ctx->loop = fileLoop;
 
-
+#if 0
 	/* Figure out the bps, we're assuming CBR.
 	 * Bump it by 20% to keep the IATs from getting super bursty when we're assuming 400mbps
 	 * through the bitrate smoother. The smooth can and will handle 400mbps, but it
@@ -137,10 +138,14 @@ int ltntstools_source_rcts_alloc(void **hdl, void *userContext, struct ltntstool
 	uint32_t using_bps = actual_bps;
 	if (ltntstools_file_estimate_bitrate(ctx->filename, &actual_bps) == 0) {
 		using_bps = (double)actual_bps * 1.2L;
-#if 0
-		printf("%s() %s, bps = %d, using %d\n", __func__, ctx->filename, actual_bps, using_bps);
+		if (using_bps < 20*1e6)
+			using_bps = 20*1e6;
+#if 1
+		printf("%s() est... %s, bps = %d, using %d\n", __func__, ctx->filename, actual_bps, using_bps);
 #endif
 	}
+	printf("%s() %s, bps = %d, using %d\n", __func__, ctx->filename, actual_bps, using_bps);
+#endif
 
 	/* Figure out the PCR Pid */
 	if (ltntstools_streammodel_alloc_from_url(ctx->filename, &ctx->pat) < 0) {
@@ -157,11 +162,11 @@ int ltntstools_source_rcts_alloc(void **hdl, void *userContext, struct ltntstool
 		return -1;
 	}
 
-	if (smoother_pcr_alloc(&ctx->smctx, ctx, (smoother_pcr_output_callback)sm_pcr_output_callback,
+	if (smoother_pcr_alloc(&ctx->smctx, ctx, &sm_pcr_output_callback,
 		20000,
 		7 * 188,
 		pmt->PCR_PID,
-		using_bps) < 0)
+		200 /* ms of jitter protection */) < 0)
 	{
 		fprintf(stderr, "%s() Unable to allocate smoother\n", __func__);
 		free(ctx);
