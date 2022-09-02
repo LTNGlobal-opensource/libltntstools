@@ -70,7 +70,7 @@ static struct hevcNal_s {
 	[35] = { "AUD" },
 	[36] = { "EOS" },
 	[37] = { "EOB" },
-	[38] = { "FD" },
+	[38] = { "FD filler_data_rbsp()" },
 	[39] = { "PREFIX_SEI" },
 	[40] = { "SUFFIX_SEI" },
 };
