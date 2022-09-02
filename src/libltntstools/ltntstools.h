@@ -52,3 +52,4 @@
 #include <libltntstools/kafka-platform.h>
 #include <libltntstools/source-pcap.h>
 #include <libltntstools/source-rcts.h>
+#include <libltntstools/reframer.h>

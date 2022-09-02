@@ -69,6 +69,7 @@ libltntstools_la_SOURCES += source-pcap.c
 libltntstools_la_SOURCES += source-rcts.c
 libltntstools_la_SOURCES += utils.h
 libltntstools_la_SOURCES += utils.c
+libltntstools_la_SOURCES += reframer.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
@@ -117,4 +118,4 @@ libltntstools_include_HEADERS += libltntstools/h265_codec_metadata.h
 libltntstools_include_HEADERS += libltntstools/kafka-platform.h
 libltntstools_include_HEADERS += libltntstools/source-pcap.h
 libltntstools_include_HEADERS += libltntstools/source-rcts.h
-
+libltntstools_include_HEADERS += libltntstools/reframer.h
