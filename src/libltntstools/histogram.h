@@ -267,7 +267,7 @@ static __inline__ int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
 
 static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_histogram_s *ctx, unsigned int seconds)
 {
-	int blen = 4096;
+	unsigned int blen = 4096;
 
 	*buf = NULL;
 
