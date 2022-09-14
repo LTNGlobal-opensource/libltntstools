@@ -5,6 +5,35 @@
 #include <libavutil/internal.h>
 #include <libavcodec/golomb.h>
 
+int ltn_nal_h264_find_headers(const uint8_t *buf, int lengthBytes, struct ltn_nal_headers_s **array, int *arrayLength)
+{
+	int idx = 0;
+	int maxitems = 64;
+	struct ltn_nal_headers_s *a = malloc(sizeof(struct ltn_nal_headers_s) * maxitems);
+	if (!a)
+		return -1;
+
+	int offset = -1;
+	struct ltn_nal_headers_s *curr = a, *prev = a;
+	while (ltn_nal_h264_findHeader(buf, lengthBytes, &offset) == 0) {
+		curr->ptr = buf + offset;
+		curr->nalType = buf[offset + 3] & 0x1f;
+		curr->nalName = h264Nals_lookupName(curr->nalType);
+		if (curr != prev) {
+			prev->lengthBytes = curr->ptr - prev->ptr;
+		}
+		
+		prev = curr;
+		curr++;
+		idx++;
+	}
+	prev->lengthBytes = (buf + lengthBytes) - prev->ptr;
+
+	*array = a;
+	*arrayLength = idx;
+	return 0; /* Success */
+}
+
 int ltn_nal_h264_findHeader(const uint8_t *buffer, int lengthBytes, int *offset)
 {
 	const uint8_t sig[] = { 0, 0, 1 };

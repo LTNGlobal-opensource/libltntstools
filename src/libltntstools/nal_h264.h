@@ -14,6 +14,15 @@ extern "C" {
 };
 #endif
 
+struct ltn_nal_headers_s
+{
+    const uint8_t *ptr;
+    uint32_t       lengthBytes;
+    uint8_t        nalType;
+    const char    *nalName;
+};
+int ltn_nal_h264_find_headers(const uint8_t *buf, int lengthBytes, struct ltn_nal_headers_s **array, int *arrayLength);
+
 /**
  * @brief         Search buffer for the byte sequence 000001, a NAL header signature.
  * @param[in]     const uint8_t *buf - Buffer of data, possibly containing none or more NAL packets.
