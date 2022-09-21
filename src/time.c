@@ -44,7 +44,7 @@ int libltntstools_getTimestamp_seperated(char *buf, int buflen, time_t *when)
 
 	localtime_r(&now, &tm);
 
-	sprintf(buf, "%04d/%02d/%02d-%02d:%02d:%02d",
+	sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d",
 		tm.tm_year + 1900,
 		tm.tm_mon  + 1,
 		tm.tm_mday,
