@@ -253,6 +253,10 @@ static int h264_parse_sps(struct h264_codec_metadata_ctx_s *ctx)
                 sps->time_scale  = get_bits(&ctx->gb, 16) << 16;
                 sps->time_scale |= get_bits(&ctx->gb, 16);
                 sps->fixed_frame_rate_flag = get_bits(&ctx->gb, 1);
+
+                /* StreamEye Studio shows time_scale as 120000 but interprets it as div by 2 */
+                if (sps->time_scale == 120000)
+                    sps->time_scale /= 2;
         }
 
         sps->nal_hrd_parameters_present_flag = get_bits(&ctx->gb, 1);
