@@ -322,9 +322,9 @@ out1:
     printf("chroma_loc_info_present_flag         = %d\n", sps->chroma_loc_info_present_flag);
     printf("timing_info_present_flag             = %d\n", sps->timing_info_present_flag);
     if (sps->timing_info_present_flag) {
-        printf(" num_units_in_tick                    = %d\n", sps->num_units_in_tick);
-        printf(" time_scale                           = %d\n", sps->time_scale);
-        printf(" fixed_frame_rate_flag                = %d\n", sps->fixed_frame_rate_flag);
+        printf(" num_units_in_tick                   = %d\n", sps->num_units_in_tick);
+        printf(" time_scale                          = %d\n", sps->time_scale);
+        printf(" fixed_frame_rate_flag               = %d\n", sps->fixed_frame_rate_flag);
     }
 
     printf("nal_hrd_parameters_present_flag      = %d\n", sps->nal_hrd_parameters_present_flag);
