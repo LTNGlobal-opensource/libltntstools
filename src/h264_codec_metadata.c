@@ -193,91 +193,91 @@ static int h264_parse_sps(struct h264_codec_metadata_ctx_s *ctx)
 
     }
 
-   sps->frame_mbs_only_flag = get_bits(&ctx->gb, 1);
-        sps->mb_adaptive_frame_field_flag = 0;
-        if (!sps->frame_mbs_only_flag) {
-                sps->mb_adaptive_frame_field_flag = get_bits(&ctx->gb, 1);
-        }
+    sps->frame_mbs_only_flag = get_bits(&ctx->gb, 1);
+    sps->mb_adaptive_frame_field_flag = 0;
+    if (!sps->frame_mbs_only_flag) {
+            sps->mb_adaptive_frame_field_flag = get_bits(&ctx->gb, 1);
+    }
 
-        sps->direct_8x8_inference_flag = get_bits(&ctx->gb, 1);
-        sps->frame_cropping_flag = get_bits(&ctx->gb, 1);
-        if (sps->frame_cropping_flag) {
-                sps->frame_cropping_left_offset = get_ue_golomb(&ctx->gb);
-                sps->frame_cropping_right_offset = get_ue_golomb(&ctx->gb);
-                sps->frame_cropping_top_offset = get_ue_golomb(&ctx->gb);
-                sps->frame_cropping_bottom_offset = get_ue_golomb(&ctx->gb);
-        }
+    sps->direct_8x8_inference_flag = get_bits(&ctx->gb, 1);
+    sps->frame_cropping_flag = get_bits(&ctx->gb, 1);
+    if (sps->frame_cropping_flag) {
+            sps->frame_cropping_left_offset = get_ue_golomb(&ctx->gb);
+            sps->frame_cropping_right_offset = get_ue_golomb(&ctx->gb);
+            sps->frame_cropping_top_offset = get_ue_golomb(&ctx->gb);
+            sps->frame_cropping_bottom_offset = get_ue_golomb(&ctx->gb);
+    }
 
-        sps->vui_parameters_present_flag = get_bits(&ctx->gb, 1);
-        if (sps->vui_parameters_present_flag) {
-                sps->aspect_ratio_info_present_flag = get_bits(&ctx->gb, 1);
-                if (sps->aspect_ratio_info_present_flag) {
-                        sps->aspect_ratio_idc = get_bits(&ctx->gb, 8);
-                        if (sps->aspect_ratio_idc == 0) {
-                                sps->sar_width = get_bits(&ctx->gb, 16);
-                                sps->sar_height = get_bits(&ctx->gb, 16);
-                        }
-                }
+    sps->vui_parameters_present_flag = get_bits(&ctx->gb, 1);
+    if (sps->vui_parameters_present_flag) {
+            sps->aspect_ratio_info_present_flag = get_bits(&ctx->gb, 1);
+            if (sps->aspect_ratio_info_present_flag) {
+                    sps->aspect_ratio_idc = get_bits(&ctx->gb, 8);
+                    if (sps->aspect_ratio_idc == 0) {
+                            sps->sar_width = get_bits(&ctx->gb, 16);
+                            sps->sar_height = get_bits(&ctx->gb, 16);
+                    }
+            }
 
-                sps->overscan_info_present_flag = get_bits(&ctx->gb, 1);
-                if (sps->overscan_info_present_flag)
-                        sps->overscan_appropriate_flag = get_bits(&ctx->gb, 1);
+            sps->overscan_info_present_flag = get_bits(&ctx->gb, 1);
+            if (sps->overscan_info_present_flag)
+                    sps->overscan_appropriate_flag = get_bits(&ctx->gb, 1);
 
-                sps->video_signal_type_present_flag = get_bits(&ctx->gb, 1);
-                if (sps->video_signal_type_present_flag) {
-                        sps->video_format = get_bits(&ctx->gb, 3);
-                        sps->video_full_range_flag = get_bits(&ctx->gb, 1);
-                        sps->colour_description_present_flag = get_bits(&ctx->gb, 1);
-                        if (sps->colour_description_present_flag) {
-                                sps->colour_primaries = get_bits(&ctx->gb, 8);
-                                sps->transfer_characteristics = get_bits(&ctx->gb, 8);
-                                sps->matrix_coefficients = get_bits(&ctx->gb, 8);
-                        }
-                }
+            sps->video_signal_type_present_flag = get_bits(&ctx->gb, 1);
+            if (sps->video_signal_type_present_flag) {
+                    sps->video_format = get_bits(&ctx->gb, 3);
+                    sps->video_full_range_flag = get_bits(&ctx->gb, 1);
+                    sps->colour_description_present_flag = get_bits(&ctx->gb, 1);
+                    if (sps->colour_description_present_flag) {
+                            sps->colour_primaries = get_bits(&ctx->gb, 8);
+                            sps->transfer_characteristics = get_bits(&ctx->gb, 8);
+                            sps->matrix_coefficients = get_bits(&ctx->gb, 8);
+                    }
+            }
 
-                sps->chroma_loc_info_present_flag = get_bits(&ctx->gb, 1);
-                if (sps->chroma_loc_info_present_flag) {
-                        sps->chroma_sample_loc_type_top_field = get_ue_golomb(&ctx->gb);
-                        sps->chroma_sample_loc_type_bottom_field = get_ue_golomb(&ctx->gb);
-                }
+            sps->chroma_loc_info_present_flag = get_bits(&ctx->gb, 1);
+            if (sps->chroma_loc_info_present_flag) {
+                    sps->chroma_sample_loc_type_top_field = get_ue_golomb(&ctx->gb);
+                    sps->chroma_sample_loc_type_bottom_field = get_ue_golomb(&ctx->gb);
+            }
 
-                sps->timing_info_present_flag = get_bits(&ctx->gb, 1);
-                if (sps->timing_info_present_flag) {
-                        /* This doesn't match the 2004 spec, but it does match the intel and elecard parsing. */
-                        /* Note that we can't read 32bit via the ffmpeg macro, so we're reading 2 * 16. */
-                        sps->num_units_in_tick  = get_bits(&ctx->gb, 16) << 16;
-                        sps->num_units_in_tick |= get_bits(&ctx->gb, 16);
+            sps->timing_info_present_flag = get_bits(&ctx->gb, 1);
+            if (sps->timing_info_present_flag) {
+                    /* This doesn't match the 2004 spec, but it does match the intel and elecard parsing. */
+                    /* Note that we can't read 32bit via the ffmpeg macro, so we're reading 2 * 16. */
+                    sps->num_units_in_tick  = get_bits(&ctx->gb, 16) << 16;
+                    sps->num_units_in_tick |= get_bits(&ctx->gb, 16);
 
-                        sps->time_scale  = get_bits(&ctx->gb, 16) << 16;
-                        sps->time_scale |= get_bits(&ctx->gb, 16);
-                        sps->fixed_frame_rate_flag = get_bits(&ctx->gb, 1);
-                }
+                    sps->time_scale  = get_bits(&ctx->gb, 16) << 16;
+                    sps->time_scale |= get_bits(&ctx->gb, 16);
+                    sps->fixed_frame_rate_flag = get_bits(&ctx->gb, 1);
+            }
 
-                sps->nal_hrd_parameters_present_flag = get_bits(&ctx->gb, 1);
-                if (sps->nal_hrd_parameters_present_flag) {
-                        //printf("todo sps->nal_hrd_parameters_present_flag\n");
-                        goto out1;
-                }
+            sps->nal_hrd_parameters_present_flag = get_bits(&ctx->gb, 1);
+            if (sps->nal_hrd_parameters_present_flag) {
+                    //printf("todo sps->nal_hrd_parameters_present_flag\n");
+                    goto out1;
+            }
 
-                sps->vcl_hrd_parameters_present_flag = get_bits(&ctx->gb, 1);
-                if (sps->vcl_hrd_parameters_present_flag) {
-                        //printf("todo sps->vcl_hrd_parameters_present_flag\n");
-                        goto out1;
-                }
+            sps->vcl_hrd_parameters_present_flag = get_bits(&ctx->gb, 1);
+            if (sps->vcl_hrd_parameters_present_flag) {
+                    //printf("todo sps->vcl_hrd_parameters_present_flag\n");
+                    goto out1;
+            }
 
-                sps->pic_struct_present_flag = get_bits(&ctx->gb, 1);
+            sps->pic_struct_present_flag = get_bits(&ctx->gb, 1);
 
-                sps->bitstream_restriction_flag = get_bits(&ctx->gb, 1);
-                if (sps->bitstream_restriction_flag) {
-                        sps->motion_vectors_over_pic_boundaries_flag = get_bits(&ctx->gb, 1);
-                        sps->max_bytes_per_pic_denom = get_ue_golomb(&ctx->gb);
-                        sps->max_bits_per_mb_denom = get_ue_golomb(&ctx->gb);
-                        sps->log2_max_mv_length_vertical = get_ue_golomb(&ctx->gb);
-                        sps->log2_max_mv_length_horizontal = get_ue_golomb(&ctx->gb);
-                        sps->num_reorder_frames = get_ue_golomb(&ctx->gb);
-                        sps->max_dec_frame_buffering = get_ue_golomb(&ctx->gb);
-                }
-        }
+            sps->bitstream_restriction_flag = get_bits(&ctx->gb, 1);
+            if (sps->bitstream_restriction_flag) {
+                    sps->motion_vectors_over_pic_boundaries_flag = get_bits(&ctx->gb, 1);
+                    sps->max_bytes_per_pic_denom = get_ue_golomb(&ctx->gb);
+                    sps->max_bits_per_mb_denom = get_ue_golomb(&ctx->gb);
+                    sps->log2_max_mv_length_vertical = get_ue_golomb(&ctx->gb);
+                    sps->log2_max_mv_length_horizontal = get_ue_golomb(&ctx->gb);
+                    sps->num_reorder_frames = get_ue_golomb(&ctx->gb);
+                    sps->max_dec_frame_buffering = get_ue_golomb(&ctx->gb);
+            }
+    }
 
 out1:
 
