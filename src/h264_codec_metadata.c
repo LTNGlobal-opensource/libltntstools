@@ -169,6 +169,9 @@ static int h264_parse_sps(struct h264_codec_metadata_ctx_s *ctx)
                 }
             }
         }
+    } else {
+        /* It's undefined outside of the above profiles, and is thus 4:2:0 */
+        sps->chroma_format_idc = 1; /* 4:2:0 */
     }
 
     sps->log2_max_frame_num_minus4 = get_ue_golomb(&ctx->gb);
