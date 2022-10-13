@@ -249,6 +249,7 @@ static void h264_slice_counter_write_packet(void *ctx, const unsigned char *pkt)
 					 * in 0x2000 mode we catch audio using this filter
 					 * and we need to ignore it.
 					 */
+#if 0
 					printf("PKT : ");
 					for (int i = 0; i < 8; i++)
 						printf("%02x ", *(pkt + i));
@@ -256,6 +257,7 @@ static void h264_slice_counter_write_packet(void *ctx, const unsigned char *pkt)
 					for (int i = 0; i < 12; i++)
 						printf("%02x ", *(pkt + offset + i));
 					printf("\n");
+#endif
 				}
 				break;
 			}
