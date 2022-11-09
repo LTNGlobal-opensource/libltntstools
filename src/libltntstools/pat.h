@@ -63,6 +63,12 @@ struct ltntstools_pat_program_s
 	uint32_t program_map_PID;
 
 	struct ltntstools_pmt_s pmt;
+
+	/* Service type, name and provider, if available. */
+	uint16_t service_id;
+	uint8_t  service_type;
+	uint8_t  service_name[32];
+	uint8_t  service_provider[32];
 };
 int ltntstools_pat_program_compare(struct ltntstools_pat_program_s *a, struct ltntstools_pat_program_s *b);
 

@@ -16,7 +16,9 @@
 #include <dvbpsi/descriptor.h>
 #include <dvbpsi/pat.h>
 #include <dvbpsi/pmt.h>
+#include <dvbpsi/sdt.h>
 #include <dvbpsi/dr.h>
+#include <dvbpsi/demux.h>
 
 #include "libltntstools/streammodel.h"
 #include "libltntstools/ts.h"
@@ -56,6 +58,7 @@ struct streammodel_pid_s
 		PT_PAT,
 		PT_PMT,
 		PT_ES, /* Elementary stream. */
+		PT_SDT,
 	} pidType;
 
 	/* Elementary Stream details */
@@ -70,6 +73,15 @@ struct streammodel_pid_s
 	struct streammodel_rom_s *rom;
 	uint64_t packetCount;
 	struct timeval lastUpdate;
+};
+
+#define MAX_SDT_ENTRIES 128
+struct streammodel_sdt_s
+{
+	uint16_t service_id;
+	uint8_t service_type;
+	char service_name[128];
+	char service_provider[128];
 };
 
 /* No pointers allowed in here.... */
@@ -88,6 +100,9 @@ struct streammodel_rom_s
 
 #define MAX_ROM_PIDS 0x2000
 	struct streammodel_pid_s pids[MAX_ROM_PIDS];
+
+	int sdtCount;
+	struct streammodel_sdt_s sdt[MAX_SDT_ENTRIES];
 
 	/* Housekeeping */
 	struct streammodel_ctx_s *ctx;

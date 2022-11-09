@@ -43,6 +43,18 @@ void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd)
 			pat->programs[i].program_number);
 		dprintf(fd, "\tpat.entry[%d].program_map_PID = 0x%04x\n", i,
 			pat->programs[i].program_map_PID);
+		
+		if (pat->programs[i].service_id == 0) {
+			dprintf(fd, "\tsdt.service_id       = n/a\n");
+			dprintf(fd, "\tsdt.service_type     = n/a\n");
+			dprintf(fd, "\tsdt.service_name     = n/a\n");
+			dprintf(fd, "\tsdt.service_provider = n/a\n");
+		} else {
+			dprintf(fd, "\tsdt.service_id       = 0x%04x\n", pat->programs[i].service_id);
+			dprintf(fd, "\tsdt.service_type     = 0x%02x\n", pat->programs[i].service_type);
+			dprintf(fd, "\tsdt.service_name     = %s\n", pat->programs[i].service_name);
+			dprintf(fd, "\tsdt.service_provider = %s\n", pat->programs[i].service_provider);
+		}
 
 		struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
 		dprintf(fd, "\tpat.entry[%d].pmt\n", i);

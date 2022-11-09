@@ -48,6 +48,9 @@ static void _rom_initialize(struct streammodel_ctx_s *ctx, struct streammodel_ro
 		if (ps->pidType == PT_PAT && ps->parser[0].p_dvbpsi) {
 			dvbpsi_pat_detach(ps->parser[0].p_dvbpsi);
 		}
+		if (ps->pidType == PT_SDT && ps->parser[0].p_dvbpsi) {
+			dvbpsi_DetachDemux(ps->parser[0].p_dvbpsi);
+		}
 
 		for (int j = 0; j < MAX_PID_PARSERS ; j++) {
 			if (ps->parser[j].p_pmt) {
@@ -159,6 +162,90 @@ static void message(dvbpsi_t *handle, const dvbpsi_msg_level_t level, const char
 }
 
 #define CHATTY_CALLBACKS 0
+
+static int sdt_add(struct streammodel_rom_s *rom, struct streammodel_sdt_s *sdt)
+{
+	if (rom->sdtCount >= 128)
+		return -1;
+
+	for (int i = 0; i < rom->sdtCount; i++) {
+		if (memcmp(&rom->sdt[i], sdt, sizeof(*sdt)) == 0) {
+			return 0; /* Already in the cache */
+		}
+	}
+
+	/* Add it */
+	memcpy(&rom->sdt[rom->sdtCount], sdt, sizeof(*sdt));
+//	printf("Added service id 0x%04x, count = %d to rom %p\n", sdt->service_id, rom->sdtCount, rom);
+	rom->sdtCount++;
+
+	return 0;
+}
+
+static void cb_sdt(void *p_zero, dvbpsi_sdt_t *p_sdt)
+{
+	struct streammodel_pid_s *ps = p_zero;
+	struct streammodel_rom_s *rom = ps->rom;
+
+	dvbpsi_sdt_service_t* p_service = p_sdt->p_first_service;
+
+#if CHATTY_CALLBACKS
+	printf("%s(%p, sdt %p) pid 0x%x model#%d\n", __func__, ps, p_sdt, ps->pid, ps->rom->nr);
+#endif
+
+
+	while (p_service) {
+
+		if (rom->sdtCount >= 128)
+			break;
+
+		struct streammodel_sdt_s sdt;
+		memset(&sdt, 0, sizeof(sdt));
+
+		sdt.service_id = p_service->i_service_id;
+
+		/* Process descriptors */
+		dvbpsi_descriptor_t *p_descriptor = p_service->p_first_descriptor;
+		while (p_descriptor) {
+
+			if (p_descriptor->i_tag == 0x48  /* DVB_SERVICE_DESCRIPTOR_TAG */) {
+				rom->sdt[ rom->sdtCount ].service_type = p_descriptor->p_data[0];
+#if 0
+				for (int i = 0; i < 16; i++)
+					printf("%02x ", p_descriptor->p_data[i]);
+				printf("\n");
+#endif
+				int pl = p_descriptor->p_data[1];
+				uint8_t *psrc = NULL;
+				if (pl) {
+					psrc = &p_descriptor->p_data[2];
+				}
+
+				int nl = p_descriptor->p_data[2 + pl];
+				uint8_t *nsrc = NULL;
+				if (nl) {
+					nsrc = &p_descriptor->p_data[2 + pl + 1];
+				}
+
+				strncpy(&sdt.service_provider[0], (char *)psrc, pl);
+				strncpy(&sdt.service_name[0],     (char *)nsrc, nl);
+#if 0
+				printf("pl %d nl %d, service id 0x%04x type 0x%02x name= '%s' provider = '%s'\n", pl, nl,
+					sdt.service_id,
+					sdt.service_type,
+					sdt.service_name,
+					sdt.service_provider);
+#endif
+				sdt_add(rom, &sdt);
+			}
+
+			p_descriptor = p_descriptor->p_next;
+		}
+		p_service = p_service->p_next;
+	}
+
+	dvbpsi_sdt_delete(p_sdt);
+}
 
 static void cb_pmt(void *p_zero, dvbpsi_pmt_t *p_pmt)
 {
@@ -405,6 +492,14 @@ void ltntstools_streammodel_free(void *hdl)
 	free(ctx);
 }
 
+static void NewSubtable(dvbpsi_t *p_dvbpsi, uint8_t i_table_id, uint16_t i_extension, void * p_zero)
+{
+	if (i_table_id == 0x42 /* SDT Actual */) {
+		if (!dvbpsi_sdt_attach(p_dvbpsi, i_table_id, i_extension, cb_sdt, p_zero))
+			fprintf(stderr, "Failed to attach SDT subdecoder\n");
+	}
+}
+
 /* pkt lists must be aligned. list may contant one or more packets. */
 size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int packetCount, int *complete)
 {
@@ -446,12 +541,46 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 		extractors_write(ctx, pkt, packetCount);
 	}
 
-	for (int i = 0; ctx->writePackets && i < packetCount; i++) {
-
+	/* SDT tables come in very slowly, comapred to PAT/PMT tables.
+	 * We need to be parsing for these constantly, unlike how we
+	 * parse PAT/PMTs with are timer and infrequent.
+	 * If we DON'T process the SDT constantly, more often than
+	 * not we miss the SDT packets during the PAT/PMT narrow window
+	 * for parsing.
+	 */
+	for (int i = 0; i < packetCount; i++) {
 		uint16_t pid = ltntstools_pid(&pkt[i * 188]);
 		if (pid > 0x1fff) {
 			/* Assume junk */
-				continue;
+			continue;
+		}
+
+		/* Find the next pid struct for this pid */
+		struct streammodel_pid_s *ps = _rom_next_find_pid(ctx, pid);
+
+		if (pid == 0x11 /* SDT PID */ && ps->packetCount == 0) {
+			ps->present = 1;
+			ps->pidType = PT_SDT;
+
+			ps->parser[0].p_dvbpsi = dvbpsi_new(&message, DVBPSI_REPORTING);
+
+			if (!dvbpsi_AttachDemux(ps->parser[0].p_dvbpsi, NewSubtable, ps)) {
+				printf("Failed, Attaching a SDT - failed atatched demux\n");
+			}
+			ps->packetCount++;
+		}
+
+		if (pid == 0x11) {
+			dvbpsi_packet_push(ps->parser[0].p_dvbpsi, (unsigned char *)&pkt[i * 188]);
+		}
+	}
+
+	for (int i = 0; ctx->writePackets && i < packetCount; i++) {
+
+		uint16_t pid = ltntstools_pid(&pkt[i * 188]);
+		if (pid > 0x1fff || pid == 0x011 /* SDT - handled above */) {
+			/* Assume junk */
+			continue;
 		}
 
 		/* Find the next pid struct for this pid */
@@ -569,6 +698,18 @@ static int _streammodel_query_model(struct streammodel_ctx_s *ctx, struct stream
 			for (int i = 0; i < newpat->program_count; i++) {
 				if (newpat->programs[i].program_number == 0)
 					continue; /* Network PID */
+
+				/* Fill out the SDT details into a new pat object, for easy accesss by the client. */
+				for (int j = 0; j < rom->sdtCount; j++) {
+					if (rom->sdt[j].service_id == newpat->programs[i].program_number) {
+						newpat->programs[i].service_id = rom->sdt[j].service_id;
+						newpat->programs[i].service_type = rom->sdt[j].service_type;
+						strncpy((char *)&newpat->programs[i].service_name[0], &rom->sdt[j].service_name[0], sizeof(newpat->programs[i].service_name));
+						strncpy((char *)&newpat->programs[i].service_provider[0], &rom->sdt[j].service_provider[0], sizeof(newpat->programs[i].service_provider));
+						break;
+					}
+				}
+
 
 				struct streammodel_pid_s *c = _rom_find_pid(rom, newpat->programs[i].program_map_PID);
 				if (c->present == 0)
