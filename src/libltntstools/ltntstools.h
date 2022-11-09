@@ -53,3 +53,4 @@
 #include <libltntstools/source-pcap.h>
 #include <libltntstools/source-rcts.h>
 #include <libltntstools/reframer.h>
+#include <libltntstools/igmp.h>
