@@ -102,7 +102,7 @@ struct streammodel_rom_s
 	struct streammodel_pid_s pids[MAX_ROM_PIDS];
 
 	int sdtCount;
-	struct streammodel_sdt_s sdt[MAX_SDT_ENTRIES];
+	struct streammodel_sdt_s sdt[MAX_SDT_ENTRIES]; /* TODO: We need to age these out, else they're stale in in complex aging mux configations */
 
 	/* Housekeeping */
 	struct streammodel_ctx_s *ctx;
