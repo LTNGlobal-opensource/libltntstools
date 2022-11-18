@@ -54,3 +54,4 @@
 #include <libltntstools/source-rcts.h>
 #include <libltntstools/reframer.h>
 #include <libltntstools/igmp.h>
+#include <libltntstools/rtp-analyzer.h>
