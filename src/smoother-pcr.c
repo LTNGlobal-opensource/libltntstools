@@ -231,8 +231,7 @@ void smoother_pcr_free(void *hdl)
  */
 static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 {
-	/* Take anything on the Busy up to and including items
-	 * with a timestamp of uS
+	/* Take any node on the Busy list up to and including items with a timestamp of uS.
 	 * Put them on a local list so we can free the holding mutex as fast as possible
 	 */
 	struct xorg_list loclist;
@@ -256,7 +255,9 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	if (count <= 0)
 		return -1; /* Nothing scheduled, bail out early. */
 
-	/* Call the callback with any scheduled packets */
+	/* Process the local list.
+	 * Call the callback with any scheduled packets
+	 */
 	e = NULL, next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &loclist, list) {
 		if (ctx->outputCb) {
