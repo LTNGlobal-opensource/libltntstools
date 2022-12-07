@@ -8,18 +8,18 @@
 struct smoother_pcr_item_s
 {
 	struct xorg_list list;
-	uint64_t seqno; /* Unique number per item, so we can check for loss/corruption in the lists. */
+	uint64_t       seqno; /* Unique number per item, so we can check for loss/corruption in the lists. */
 
 	unsigned char *buf;
-	int lengthBytes;
-	int maxLengthBytes;
+	int            lengthBytes;
+	int            maxLengthBytes;
 
-	int pcrComputed; /* Boolean. Was the PCR in this item computed from a base offset, or read from stream? */
-	int64_t pcrIntervalPerPacketTicks;
+	int            pcrComputed; /* Boolean. Was the PCR in this item computed from a base offset, or read from stream? */
+	int64_t        pcrIntervalPerPacketTicks;
 
 	struct ltntstools_pcr_position_s pcrdata; /* PCR value from pid N in the buffer, first PCR only. */
-	uint64_t received_TSuS;  /* Item received timestamp Via makeTimestampFromNow */
-	uint64_t scheduled_TSuS; /* Time this item is schedule for push via thread for smoothing output. */
+	uint64_t       received_TSuS;  /* Item received timestamp Via makeTimestampFromNow */
+	uint64_t       scheduled_TSuS; /* Time this item is schedule for push via thread for smoothing output. */
 };
 
 void itemPrint(struct smoother_pcr_item_s *item)
