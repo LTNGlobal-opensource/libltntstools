@@ -122,6 +122,27 @@ void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream,
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream);
 
 /**
+ * @brief       Allocate a new stats object instance.
+ * @param[out]  struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      0 - Success, else < 0 on error.
+ */
+int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **stream);
+
+/**
+ * @brief       Free a previously allocated stats object.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ */
+void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Allocate a new stats object instance, duplicate the contents of src into it.
+ *              Caller responsible for freeing the previous dst object, if it was used;
+ * @param[in]   struct ltntstools_stream_statistics_s *src - Handle / context.
+ * @return      full deep object copy, or NULL
+ */
+struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntstools_stream_statistics_s *src);
+
+/**
  * @brief       Query CTP stream bitrate in Mb/ps
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @return      double - bitrate

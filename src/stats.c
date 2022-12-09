@@ -198,6 +198,38 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	}
 }
 
+int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
+{
+	*ctx = NULL;
+
+	struct ltntstools_stream_statistics_s *stream = calloc(1, sizeof(*stream));
+	if (!stream)
+		return -1;
+
+	ltntstools_pid_stats_reset(stream);
+
+	*ctx = stream;
+	return 0;
+}
+
+void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
+{
+	if (stream) {
+		free(stream);
+	}
+}
+
+struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntstools_stream_statistics_s *src)
+{
+	struct ltntstools_stream_statistics_s *dst = malloc(sizeof(*src));
+	if (!dst)
+		return NULL;
+
+	memcpy(dst, src, sizeof(*dst));
+
+	return dst;
+}
+
 static void _expire_per_second_stream_stats(struct ltntstools_stream_statistics_s *stream)
 {
 	time_t now;
