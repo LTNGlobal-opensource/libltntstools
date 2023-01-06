@@ -148,6 +148,6 @@ void rtp_analyzer_report_dprintf(struct rtp_hdr_analyzer_s *ctx, int fd)
 
 void rtp_analyzer_hdr_dprintf(const struct rtp_hdr *h, int fd)
 {
-	dprintf(fd, "seq:%05d ts:%010d version:%d p:%d x:%d cc:%02d m:%d pt:%02d ssrc:0x%08x\n",
+	dprintf(fd, "seq:%05d ts:%010u version:%d p:%d x:%d cc:%02d m:%d pt:%02d ssrc:0x%08x\n",
 		ntohs(h->seq), ntohl(h->ts), h->version, h->p, h->x, h->cc, h->m, h->pt, ntohl(h->ssrc));
 }
