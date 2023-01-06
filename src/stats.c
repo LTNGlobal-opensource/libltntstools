@@ -149,6 +149,14 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 				if (ltntstools_clock_is_established_timebase(pcrclk) == 0) {
 					ltntstools_clock_initialize(pcrclk);
 					ltntstools_clock_establish_timebase(pcrclk, 27 * 1e6);
+
+					/* One time initialzation of our histograms. */
+					char title[64];
+					sprintf(title, "PCR Tick Intervals PID 0x%04x", pidnr);
+					ltn_histogram_alloc_video_defaults(&pid->pcrTickIntervals, title);
+
+					sprintf(title, "PCR Jitter PID 0x%04x", pidnr);
+					ltn_histogram_alloc_video_defaults(&pid->pcrWallDrift, title);
 				}
 
 				if (ltntstools_clock_is_established_wallclock(pcrclk) == 0) {
@@ -167,9 +175,18 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 					stream->pcrExceeds40ms++;
 				}
 
+				ltn_histogram_interval_update_with_value(pid->pcrTickIntervals, delta / 27000);
+
 				/* Update current value and re-compute drifts. */
 				ltntstools_clock_set_ticks(pcrclk, pcr);
 				ltntstools_clock_get_drift_us(pcrclk);
+
+				int64_t v = ltntstools_clock_get_drift_us(pcrclk) / 1000;
+				if (v < 0)
+					v = 0;
+				//printf("us %" PRIi64 "\n", v);
+				ltn_histogram_interval_update_with_value(pid->pcrWallDrift, v);
+
 			}
 		}
 
@@ -195,6 +212,13 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 		stream->pids[i].clocks[ltntstools_CLOCK_PCR].drift_us_lwm = 0;
 		stream->pids[i].clocks[ltntstools_CLOCK_PCR].establishedWT = 0;
 		stream->pids[i].seenPCR = 0;
+
+		if (stream->pids[i].pcrTickIntervals) {
+			ltn_histogram_reset(stream->pids[i].pcrTickIntervals);
+		}
+		if (stream->pids[i].pcrWallDrift) {
+			ltn_histogram_reset(stream->pids[i].pcrWallDrift);
+		}
 	}
 }
 
@@ -214,9 +238,23 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 
 void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 {
-	if (stream) {
-		free(stream);
+	if (!stream)
+		return;
+
+	for (int i = 0; i < MAX_PID; i++) {
+		if (!stream->pids[i].enabled)
+			continue;
+		if (stream->pids[i].pcrTickIntervals) {
+			ltn_histogram_free(stream->pids[i].pcrTickIntervals);
+			stream->pids[i].pcrTickIntervals = NULL;
+		}
+		if (stream->pids[i].pcrWallDrift) {
+			ltn_histogram_free(stream->pids[i].pcrWallDrift);
+			stream->pids[i].pcrWallDrift = NULL;
+		}
 	}
+
+	free(stream);
 }
 
 struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntstools_stream_statistics_s *src)

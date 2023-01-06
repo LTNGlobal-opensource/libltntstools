@@ -29,6 +29,7 @@
 #include <time.h>
 #include <inttypes.h>
 #include <libltntstools/clocks.h>
+#include <libltntstools/histogram.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -62,10 +63,15 @@ struct ltntstools_pid_statistics_s
 #define ltntstools_CLOCK_PTS 1
 #define ltntstools_CLOCK_DTS 2
 	struct ltntstools_clock_s clocks[3]; /**< Three clocks potentially per pid. See ltntstools_CLOCK_PCR, ltntstools_CLOCK_PTS and ltntstools_CLOCK_DTS */
+
+	struct ltn_histogram_s *pcrTickIntervals; /** < Measure tick differences between adjacent PCR clocks, track the deltas. */
+	struct ltn_histogram_s *pcrWallDrift; /** < Measure PCR vs Walltime and look for clock drift */
 };
 
 /**
  * @brief A larger statistics container, representing all pids in an entire SPTS/MPTS.
+ * Structure is approximately 3MB, plus an additional 2x256KB for each PCR PID.
+ * So a single SPTS mux needs 3.5MB of RAM. 
  */
 struct ltntstools_stream_statistics_s
 {
