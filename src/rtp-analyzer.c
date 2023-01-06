@@ -12,8 +12,15 @@ void rtp_analyzer_init(struct rtp_hdr_analyzer_s *ctx)
 
 void rtp_analyzer_free(struct rtp_hdr_analyzer_s *ctx)
 {
-	ltn_histogram_free(ctx->tsArrival);
-	ltn_histogram_free(ctx->tsInterval);
+	if (ctx->tsArrival) {
+		ltn_histogram_free(ctx->tsArrival);
+		ctx->tsArrival = NULL;
+	}
+
+	if (ctx->tsInterval) {
+		ltn_histogram_free(ctx->tsInterval);
+		ctx->tsInterval = NULL;
+	}
 }
 
 int rtp_hdr_is_payload_type_valid(const struct rtp_hdr *hdr)
