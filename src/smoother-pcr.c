@@ -474,8 +474,11 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 			break;
 	}
 
-	if (pcrCount < 2)
+	/* We need atleast two PCRs for intervals */
+	if (pcrCount < 2) {
+		free(array);
 		return 0;
+	}
 
 
 	int byteCount = (pcr[1]->offset - pcr[0]->offset);
