@@ -20,6 +20,8 @@ struct smoother_pcr_item_s
 	struct ltntstools_pcr_position_s pcrdata; /* PCR value from pid N in the buffer, first PCR only. */
 	uint64_t       received_TSuS;  /* Item received timestamp Via makeTimestampFromNow */
 	uint64_t       scheduled_TSuS; /* Time this item is schedule for push via thread for smoothing output. */
+
+	int            pcrDidReset; /* Boolean */
 };
 
 void itemPrint(struct smoother_pcr_item_s *item)
@@ -29,7 +31,7 @@ void itemPrint(struct smoother_pcr_item_s *item)
 	printf(" received_TSuS %" PRIu64, item->received_TSuS);
 	printf(" scheduled_TSuS %" PRIu64, item->scheduled_TSuS);
 	printf(" pcrComputed %d", item->pcrComputed);
-	printf(" pcr %" PRIi64 "\n", item->pcrdata.pcr);
+	printf(" pcr %" PRIi64 "  pcrDidReset %d\n", item->pcrdata.pcr, item->pcrDidReset);
 }
 
 /* byte_array.... ---------- */
@@ -95,9 +97,10 @@ struct smoother_pcr_context_s
 	void *userContext;
 	smoother_pcr_output_callback outputCb;
 
-	uint64_t walltimeFirstPCRuS;
-	int64_t pcrFirst;
-	int64_t pcrLast;
+	uint64_t walltimeFirstPCRuS; /* Reset this when the clock significantly leaps backwards */
+	int64_t pcrFirst; /* Reset this when the clock significantly leaps backwards */
+	int64_t pcrTail; /* PCR on the first list item */
+	int64_t pcrHead; /* PCR on the last list item */
 	uint16_t pcrPID;
 
 	int latencyuS;
@@ -116,6 +119,15 @@ struct smoother_pcr_context_s
 	 * starting with a transport packet containing a PCR on pid ctx->pcrPid
 	 */
 	struct byte_array_s ba;
+
+	/* Handle the case where the PCR goes forward or back in time,
+	 * in our case by more than 15 seconds.
+	 * Flag an internal PCR reset and let the implementation recompute its clocks.
+	 */
+	int didPcrReset;
+	int64_t pcrIntervalPerPacketTicksLast;
+
+	int64_t measuredLatencyMs; /* based on first and last PCRs in the list, how much latency do we have? */
 };
 
 /* based on first received pcr, and first received walltime, compute a new walltime
@@ -195,6 +207,19 @@ static struct smoother_pcr_item_s *itemAlloc(int lengthBytes)
 	return item;
 }
 
+static void _queuePrint(struct smoother_pcr_context_s *ctx)
+{
+	int totalItems = 0;
+
+	printf("Queue -->\n");
+	struct smoother_pcr_item_s *e = NULL, *next = NULL;
+	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
+		totalItems++;
+		itemPrint(e);
+	}
+	printf("Queue End --> %d items\n", totalItems);
+}
+
 void smoother_pcr_free(void *hdl)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
@@ -241,6 +266,11 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	struct smoother_pcr_item_s *e = NULL, *next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
 		totalItems++;
+
+		if (totalItems == 1) {
+			ctx->pcrHead = e->pcrdata.pcr;
+		}
+
 		if (e->scheduled_TSuS <= uS) {
 			xorg_list_del(&e->list);
 			xorg_list_append(&e->list, &loclist);
@@ -252,8 +282,9 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
 
-	if (count <= 0)
+	if (count <= 0) {
 		return -1; /* Nothing scheduled, bail out early. */
+	}
 
 	/* Process the local list.
 	 * Call the callback with any scheduled packets
@@ -353,11 +384,11 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	ctx->itemLengthBytes = itemLengthBytes;
 	ctx->walltimeFirstPCRuS = 0;
 	ctx->pcrFirst = -1;
-	ctx->pcrLast = -1;
+	ctx->pcrTail = -1;
+	ctx->pcrHead = -1;
 	ctx->pcrPID = pcrPID;
 	ctx->latencyuS = latencyMS * 1000;
 	byte_array_init(&ctx->ba, 8000 * 188); /* Initial size of 300mbps with 40ms PCR intervals */
-
 
 	/* TODO: We probably don't need an itemspersecond fixed value, probably,
 	 * calculate the number of items based on input bitrate value and
@@ -419,15 +450,21 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 	/* PCR found */
 	item->pcrdata.pcr = pcrValue;
 	if (ctx->pcrFirst == -1) {
+		printf("ctx->pcrFirst    was    %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
+			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
+
 		ctx->pcrFirst = item->pcrdata.pcr;
 		ctx->walltimeFirstPCRuS = item->received_TSuS;
+
+		printf("ctx->pcrFirst reset to %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
+			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
 	}
 
 	/* Reset number of packets received since the last PCR. */
 	/* We use this along with an estimated input bitrate to calculated a sche duled output time. */
 	ctx->bitsReceivedSinceLastPCR = 0;
 
-	ctx->pcrLast = item->pcrdata.pcr; /* Cache the last stream PCR */
+	ctx->pcrTail = item->pcrdata.pcr; /* Cache the last stream PCR */
 
 	/* Figure out when this packet should be scheduled for output */
 	item->scheduled_TSuS = getScheduledOutputuS(ctx, pcrValue);
@@ -450,14 +487,17 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
 
+	/* append all payload into a large buffer */
 	byte_array_append(&ctx->ba, buf, lengthBytes);
 
+	/* Search this buffer for any PCRs */
 	struct ltntstools_pcr_position_s *array = NULL;
 	int arrayLength = 0;
 	int r = ltntstools_queryPCRs(ctx->ba.buf, ctx->ba.lengthBytes, 0, &array, &arrayLength);
 	if (r < 0)
 		return 0;
 
+	/* Find the first two PCRs for the user preferred PID, skip any other pids/pcrs */
 	struct ltntstools_pcr_position_s *pcr[2] = { 0 };
 
 	int pcrCount = 0;
@@ -474,24 +514,56 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 			break;
 	}
 
-	/* We need atleast two PCRs for intervals */
+	/* We need atleast two PCRs for interval and timing calculations */
 	if (pcrCount < 2) {
+		/* Bail out, we'll try again later when more packets are available */
 		free(array);
 		return 0;
 	}
 
-
+	/* Amount of payload between the first two consecutive PCRs */
 	int byteCount = (pcr[1]->offset - pcr[0]->offset);
+
 	int pktCount = byteCount / 188;
 	int64_t pcrIntervalPerPacketTicks = ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) / pktCount;
 
+	if (ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) > (15 * 27000000)) {
+		printf("Detected significant pcr jump:\n");
+		if (pcr[0]->pcr < pcr[1]->pcr) {
+			printf("  - forwards\n");
+			printf("  - b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
+			printf("  - e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
+		}
+		if (pcr[0]->pcr > pcr[1]->pcr) {
+			printf("  - backwards\n");
+			printf("  - b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
+			printf("  - e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
+		}
+
+//		_queuePrint(ctx);
+
+		ctx->didPcrReset = 1;
+
+		/* Fixup the pcrIntervalPerPacketTicks and preset the reset the internal walltime and other pcr clocks */
+		printf("Auto-correcting PCR schedule due to PCR timewrap. ctx->pcrIntervalPerPacketTicks %" PRIi64 " to %" PRIi64 "\n",
+			pcrIntervalPerPacketTicks, ctx->pcrIntervalPerPacketTicksLast);
+		pcrIntervalPerPacketTicks = ctx->pcrIntervalPerPacketTicksLast;
+	}
+
+	ctx->measuredLatencyMs = ltntstools_scr_diff(ctx->pcrHead, ctx->pcrTail) / 27000;
 #if 0
-	/* We have two PCRs for the same PID, let's extract and calculate transport packet times. */
-	printf("b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
-	printf("e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
-	printf("pcrIntervalPerPacketTicks = %" PRIi64 "\n", pcrIntervalPerPacketTicks);
+	{
+		/* Dump the first and second PCR we found. */
+		printf("b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
+		printf("e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
+		//printf("pcrHead %" PRIi64 " pcrTail %" PRIi64 "\n", ctx->pcrHead, ctx->pcrTail);
+		printf("pcrIntervalPerPacketTicks = %" PRIi64 ", pktCount %d byteCount %d pcrDidReset %d totalSizeBytes %" PRIi64 ", latency %" PRIi64 " ms\n",
+			pcrIntervalPerPacketTicks, pktCount, byteCount, ctx->didPcrReset, ctx->totalSizeBytes,
+			ctx->measuredLatencyMs);
+	}
 #endif
 
+	/* maintain a count based on the first PCR */
 	int64_t pcrValue = pcr[0]->pcr;
 
 	int idx = 0;
@@ -503,6 +575,9 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 
 		smoother_pcr_write2(ctx, &ctx->ba.buf[ pcr[0]->offset + idx ], cplen, pcrValue, pcrIntervalPerPacketTicks);
 
+		/* Update the PCR based on the number of packets we're writing into the smoother, adjusting
+		 * PCR by the correct number of ticks per transport packet.
+		 */
 		pcrValue = ltntstools_scr_add(pcrValue, pcrIntervalPerPacketTicks * (cplen / 188));
 
 		rem -= cplen;
@@ -510,9 +585,24 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	}
 
 	byte_array_trim(&ctx->ba, pcr[1]->offset);
-
+	
 	free(array);
 
+	/* If the PCR resets, we need to track some pcr interval state so we can properly
+	 * schedule out the remaining packets from a good PCR, without bursting, prior
+	 * to restabalishing the timebase for the new PCR, we'll need this value
+	 * to schedule, preserve it.
+	 */
+	ctx->pcrIntervalPerPacketTicksLast = pcrIntervalPerPacketTicks;
+
+	/* And finally, if during this pass we detected a PCR reset, ensure the next
+	 * routnd of writes resets its internal clocks and goes through a full PCR reset.
+	 */
+	if (ctx->didPcrReset) {
+		ctx->pcrFirst = -1;
+		ctx->didPcrReset = 0;
+	}
+	
 	return 0;
 }
 
@@ -536,7 +626,8 @@ void smoother_pcr_reset(void *hdl)
 	pthread_mutex_lock(&ctx->listMutex);
 	ctx->walltimeFirstPCRuS = 0;
 	ctx->pcrFirst = -1;
-	ctx->pcrLast = -1;
+	ctx->pcrHead = -1;
+	ctx->pcrTail = -1;
 	ctx->totalSizeBytes = 0;
 
 	while (!xorg_list_is_empty(&ctx->itemsBusy)) {
