@@ -5,6 +5,8 @@
 #include "libltntstools/ltntstools.h"
 #include "xorg-list.h"
 
+#define LOCAL_DEBUG 0
+
 struct smoother_pcr_item_s
 {
 	struct xorg_list list;
@@ -125,9 +127,13 @@ struct smoother_pcr_context_s
 	 * Flag an internal PCR reset and let the implementation recompute its clocks.
 	 */
 	int didPcrReset;
+	time_t lastPcrResetTime;
 	int64_t pcrIntervalPerPacketTicksLast;
 
 	int64_t measuredLatencyMs; /* based on first and last PCRs in the list, how much latency do we have? */
+
+	struct ltn_histogram_s *histReceive;
+	struct ltn_histogram_s *histTransmit;
 };
 
 /* based on first received pcr, and first received walltime, compute a new walltime
@@ -207,18 +213,20 @@ static struct smoother_pcr_item_s *itemAlloc(int lengthBytes)
 	return item;
 }
 
-static void _queuePrint(struct smoother_pcr_context_s *ctx)
+#if LOCAL_DEBUG
+static void _queuePrintList(struct smoother_pcr_context_s *ctx, struct xorg_list *head, const char *name)
 {
 	int totalItems = 0;
 
-	printf("Queue -->\n");
+	printf("Queue %s -->\n", name);
 	struct smoother_pcr_item_s *e = NULL, *next = NULL;
-	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
+	xorg_list_for_each_entry_safe(e, next, head, list) {
 		totalItems++;
 		itemPrint(e);
 	}
 	printf("Queue End --> %d items\n", totalItems);
 }
+#endif
 
 void smoother_pcr_free(void *hdl)
 {
@@ -246,12 +254,16 @@ void smoother_pcr_free(void *hdl)
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	byte_array_free(&ctx->ba);
+
+	ltn_histogram_free(ctx->histReceive);
+	ltn_histogram_free(ctx->histTransmit);
+
 	free(ctx);
 }
 
 /*  Service the busy list. Find any items due for output
  *  and send via the callback.
- *  It's important that we hole the mutex for a short time so we don't block
+ *  It's important that we hold the mutex for a short time so we don't block
  *  the _write() method.
  */
 static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
@@ -262,7 +274,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	struct xorg_list loclist;
 	xorg_list_init(&loclist);
 
-	int count = 0, totalItems = 0;
+	int count = 0, totalItems = 0, redundantItems = 0;
 	struct smoother_pcr_item_s *e = NULL, *next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
 		totalItems++;
@@ -275,11 +287,41 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 			xorg_list_del(&e->list);
 			xorg_list_append(&e->list, &loclist);
 			count++;
+		} else {
+			if (count > 0) {
+				/* Time ordering problem on the list now. Dump both lists and abort, later.*/
+				redundantItems++;
+			}
 		}
 		/* TODO: The list is time ordered so we shoud be able to break
 		 * when we find a time that's beyond out window, and save CPU time.
 		 */
 	}
+
+	/* Make sure the busy list is contigious */
+	e = NULL;
+	next = NULL;
+	int countSeq = 0;
+	uint64_t last_seq = 0;
+	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
+		countSeq++;
+
+		if (countSeq > 1) {
+			if (last_seq + 1 != e->seqno) {
+				/* Almost certainly, the schedule US time is out of order, warn. */
+				printf("List possibly mangled, seqnos might be bad now, %" PRIu64 ", %" PRIu64 "\n", last_seq, e->seqno);
+#if LOCAL_DEBUG
+				_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
+				_queuePrintList(ctx, &loclist, "loclist");
+				fflush(stdout);
+				fflush(stderr);
+				exit(1);
+#endif
+			}
+		}
+		last_seq = e->seqno;
+	}
+
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	if (count <= 0) {
@@ -306,8 +348,22 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 				ltntstools_pcr_position_append(&array, &arrayLength, &p);
 			}
 
+			ltn_histogram_interval_update(ctx->histTransmit);
+
+			int x = e->lengthBytes;
+			uint64_t sn = e->seqno;
+
 			ctx->outputCb(ctx->userContext, e->buf, e->lengthBytes, array, arrayLength);
+			if (x != e->lengthBytes) {
+				printf("%s() ERROR %d != %d, mangled returned object length\n", __func__, x, e->lengthBytes);
+			}
+			if (sn != e->seqno) {
+				printf("%s() ERROR %" PRIu64 " != %" PRIu64 ", mangled returned object seqno\n", __func__, sn, e->seqno);
+			}
+
+			pthread_mutex_lock(&ctx->listMutex);			
 			ctx->totalSizeBytes -= e->lengthBytes;
+			pthread_mutex_unlock(&ctx->listMutex);
 
 			free(array);
 
@@ -388,7 +444,11 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	ctx->pcrHead = -1;
 	ctx->pcrPID = pcrPID;
 	ctx->latencyuS = latencyMS * 1000;
+	ctx->lastPcrResetTime = time(NULL);
 	byte_array_init(&ctx->ba, 8000 * 188); /* Initial size of 300mbps with 40ms PCR intervals */
+
+	ltn_histogram_alloc_video_defaults(&ctx->histReceive, "receive arrival times");
+	ltn_histogram_alloc_video_defaults(&ctx->histTransmit, "transmit arrival times");
 
 	/* TODO: We probably don't need an itemspersecond fixed value, probably,
 	 * calculate the number of items based on input bitrate value and
@@ -450,14 +510,17 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 	/* PCR found */
 	item->pcrdata.pcr = pcrValue;
 	if (ctx->pcrFirst == -1) {
+#if LOCAL_DEBUG
 		printf("ctx->pcrFirst    was    %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
 			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
-
+#endif
 		ctx->pcrFirst = item->pcrdata.pcr;
 		ctx->walltimeFirstPCRuS = item->received_TSuS;
 
+#if LOCAL_DEBUG
 		printf("ctx->pcrFirst reset to %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
 			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
+#endif
 	}
 
 	/* Reset number of packets received since the last PCR. */
@@ -473,9 +536,25 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 	pthread_mutex_lock(&ctx->listMutex);
 	item->seqno = ctx->seqno++;
 	ctx->totalSizeBytes += item->lengthBytes;
+	if (item->lengthBytes <= 0) {
+		fprintf(stderr, "%s() bug, adding item with negative bytes %d\n", __func__, item->lengthBytes);
+	}
 #if 0
 	itemPrint(item);
 #endif
+
+	/* Check the last item on the queue. scheduled time should never go backwards to
+	 * to resampling the PCR timebase. never append an item with the scheduled time that goes
+	 * backwards, eotherwise they're pulled off the queue in the wrong order very occasionally.
+	 */
+	if (!xorg_list_is_empty(&ctx->itemsBusy)) {
+		struct smoother_pcr_item_s *last = xorg_list_last_entry(&ctx->itemsBusy, struct smoother_pcr_item_s, list);
+		//struct smoother_pcr_item_s *last = ctx->itemsBusy.prev;
+		if (last->scheduled_TSuS > item->scheduled_TSuS) {
+			item->scheduled_TSuS = last->scheduled_TSuS + 1;
+		}
+	}
+
 	/* Queue this for scheduled output */
 	xorg_list_append(&item->list, &ctx->itemsBusy);
 	pthread_mutex_unlock(&ctx->listMutex);
@@ -486,6 +565,12 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, struct timeval *ts)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
+
+	ltn_histogram_interval_update(ctx->histReceive);
+#if LOCAL_DEBUG
+	ltn_histogram_interval_print(STDOUT_FILENO, ctx->histReceive, 5);
+	ltn_histogram_interval_print(STDOUT_FILENO, ctx->histTransmit, 5);
+#endif
 
 	/* append all payload into a large buffer */
 	byte_array_append(&ctx->ba, buf, lengthBytes);
@@ -540,7 +625,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 			printf("  - e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
 		}
 
-//		_queuePrint(ctx);
+//		_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
 
 		ctx->didPcrReset = 1;
 
@@ -551,7 +636,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	}
 
 	ctx->measuredLatencyMs = ltntstools_scr_diff(ctx->pcrHead, ctx->pcrTail) / 27000;
-#if 0
+#if LOCAL_DEBUG
 	{
 		/* Dump the first and second PCR we found. */
 		printf("b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
@@ -588,6 +673,19 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	
 	free(array);
 
+	/* If its been more than 60 seconds, reset the PCR to avoid slow drift over time.
+	 * Also, prevents issues where the pcrFirst value wraps and tick calculations that
+	 * drive scheduled packet output time goes back in time.
+	 */
+	time_t now = time(NULL);
+	if (now >= ctx->lastPcrResetTime + 60) {
+		ctx->lastPcrResetTime = now;
+#if LOCAL_DEBUG
+		printf("Triggering PCR timebase recalculation\n");
+#endif
+		ctx->didPcrReset = 1;
+	}
+
 	/* If the PCR resets, we need to track some pcr interval state so we can properly
 	 * schedule out the remaining packets from a good PCR, without bursting, prior
 	 * to restabalishing the timebase for the new PCR, we'll need this value
@@ -596,7 +694,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	ctx->pcrIntervalPerPacketTicksLast = pcrIntervalPerPacketTicks;
 
 	/* And finally, if during this pass we detected a PCR reset, ensure the next
-	 * routnd of writes resets its internal clocks and goes through a full PCR reset.
+	 * round of writes resets its internal clocks and goes through a full PCR reset.
 	 */
 	if (ctx->didPcrReset) {
 		ctx->pcrFirst = -1;
