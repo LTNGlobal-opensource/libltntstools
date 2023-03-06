@@ -112,8 +112,8 @@ int ltntstools_descriptor_list_contains_iso639_audio_descriptor(struct ltntstool
 		/* Find the first iso639_lang_descriptor */
 		if (d->tag == 0x0a && d->len == 0x04) {
 			*(lang + 0) = d->data[0];
-			*(lang + 0) = d->data[1];
-			*(lang + 0) = d->data[2];
+			*(lang + 1) = d->data[1];
+			*(lang + 2) = d->data[2];
 			*type = d->data[3];
 			found = 1;
 			break;
