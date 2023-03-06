@@ -33,6 +33,8 @@ int ltntstools_descriptor_list_contains_scte35_cue_registration(struct ltntstool
 int ltntstools_descriptor_list_contains_smpte2038_registration(struct ltntstools_descriptor_list_s *list);
 int ltntstools_descriptor_list_contains_ltn_encoder_sw_version(struct ltntstools_descriptor_list_s *list,
 	unsigned int *major, unsigned int *minor, unsigned int *patch);
+int ltntstools_descriptor_list_contains_iso639_audio_descriptor(struct ltntstools_descriptor_list_s *list,
+	unsigned char *lang, unsigned int *type);
 
 #ifdef __cplusplus
 };

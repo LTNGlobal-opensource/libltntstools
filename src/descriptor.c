@@ -101,3 +101,24 @@ int ltntstools_descriptor_list_contains_ltn_encoder_sw_version(struct ltntstools
 	return found;
 }
 
+int ltntstools_descriptor_list_contains_iso639_audio_descriptor(struct ltntstools_descriptor_list_s *list,
+	unsigned char *lang, unsigned int *type)
+{
+	int found = 0;
+
+	for (int i = 0; i < list->count; i++) {
+		struct ltntstools_descriptor_entry_s *d = &list->array[i];
+
+		/* Find the first iso639_lang_descriptor */
+		if (d->tag == 0x0a && d->len == 0x04) {
+			*(lang + 0) = d->data[0];
+			*(lang + 0) = d->data[1];
+			*(lang + 0) = d->data[2];
+			*type = d->data[3];
+			found = 1;
+			break;
+		}
+	}
+
+	return found;
+}
