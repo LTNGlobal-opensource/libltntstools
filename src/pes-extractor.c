@@ -88,23 +88,34 @@ static int searchReverse(const unsigned char *buf, int lengthBytes, uint8_t stre
 
 static int _processRing(struct pes_extractor_s *ctx)
 {
-	//printf("%s() ring size %d\n", __func__, rb_used(ctx->rb));
-
 	int rlen = rb_used(ctx->rb);
 	if (rlen < 16)
 		return -1;
+
+#if LOCAL_DEBUG
+	printf("%s() ring size %d\n", __func__, rb_used(ctx->rb));
+#endif
 
 	unsigned char *buf = malloc(rlen);
 	if (buf) {
 		int plen = rb_peek(ctx->rb, (char *)buf, rlen);
 		if (plen == rlen) {
-			/* Search backwards for the start of the next mpeg signature */
+			/* Search backwards for the start of the next mpeg signature.
+			 * result is the position of the signature as an offset from the beginning of the buffer.
+			 */
 			int offset = searchReverse(buf, rlen, ctx->streamId);
-
+#if LOCAL_DEBUG
+			if (offset == 423) {
+				ltntstools_hexdump(buf, rlen, 32);
+			}
+			printf("%s() offset %d, rlen %d\n", __func__, offset, rlen);
+#endif
 			struct klbs_context_s bs;
 			klbs_init(&bs);
 			klbs_read_set_buffer(&bs, buf, rlen - (rlen - offset));
-
+#if LOCAL_DEBUG
+			printf("%s() set bs length to %d bytes\n", __func__, rlen - (rlen - offset));
+#endif
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
 			//ssize_t xlen =
 			ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
