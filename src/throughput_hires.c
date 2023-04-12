@@ -114,7 +114,7 @@ void throughput_hires_write_i64(void *hdl, uint32_t channel, int64_t value, stru
 	item->channel = channel;
 	item->value_i64 = value;
 
-	xorg_list_append(&item->list, &ctx->itemsBusy);
+	xorg_list_add(&item->list, &ctx->itemsBusy);
 }
 
 /* Expire any busy items older than ts, return a count of the number of expired items.
@@ -173,6 +173,8 @@ int64_t throughput_hires_sumtotal_i64(void *hdl, uint32_t channel, struct timeva
 		if (e->channel == channel && e->timestamp >= begin && e->timestamp <= end) {
 			total += e->value_i64;
 		}
+		if (e->timestamp < begin)
+			break;
 	}
 
 	return total;
@@ -210,6 +212,8 @@ int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *
 
 			*vavg += e->value_i64;
 		}
+		if (e->timestamp < end)
+			break;
 	}
 
 	if (items)
