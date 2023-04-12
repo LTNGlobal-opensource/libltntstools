@@ -228,6 +228,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 {
 	ssize_t bits = 0;
 
+	/* Make sure something exists in the buffer */
+	if (klbs_get_byte_count_free(bs) < 8)
+		return bits;
+
 	/* Clone the entire buffer into a raw duplicate. */
 
 	pkt->skipPayloadParsing = skipData;

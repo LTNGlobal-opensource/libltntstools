@@ -6,6 +6,8 @@
 #include "klringbuffer.h"
 #include "klbitstream_readwriter.h"
 
+#define LOCAL_DEBUG 0
+
 struct pes_extractor_s
 {
 	uint16_t pid;
