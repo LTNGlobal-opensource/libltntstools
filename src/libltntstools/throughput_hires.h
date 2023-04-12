@@ -11,7 +11,7 @@
  * 
  *              Use this framework if you want a truly accurate calculation of 'things per second'.
  *
-  * Typical usage for monitoring trabnsport stream bitrates:
+  * Typical usage for monitoring transport stream bitrates:
  * 
  * void *hdl;
  * throughput_hires_alloc(&hdl, 1000);
