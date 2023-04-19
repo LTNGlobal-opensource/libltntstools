@@ -144,6 +144,7 @@ int ltntstools_source_pcap_alloc(void **hdl, void *userContext, struct ltntstool
 		return -1;
 	}
 
+	pcap_set_immediate_mode(ctx->descr, 1); /* Ensure immediate packet callback delivery, later lib versions batch every 200ms */
 	pcap_set_snaplen(ctx->descr, ctx->snaplen);
 	pcap_set_promisc(ctx->descr,
 #ifdef __linux__
