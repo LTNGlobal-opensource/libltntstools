@@ -562,6 +562,10 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 	return 0;
 }
 
+/* Main entry point for packets into the smoother.
+ * We'll call other helper functions eg _write2 to assist with the process and simplify
+ * the readability.
+ */
 int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, struct timeval *ts)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
