@@ -297,6 +297,7 @@ __inline__ void ltntstools_pcr_position_reset(struct ltntstools_pcr_position_s *
  * @brief       For a buffer of data, which don't need to be packet aligned, containing any number of pids,
  *              find all of the available PCRs across all pids, along with index positions.
  *              The caller is responsible for the lifespan of the resulting array.
+ *              If the packets contain RTP headers (12 bytes), they're automatically skipped.
  * @param[in]   const uint8_t *buf - buffer of bytes, possibly transport packets, probably not aligned.
  * @param[in]   int lengthBytes - length of buffer in bytes.
  * @param[in]   uint64_t addr - deprecated, don't use.
@@ -310,6 +311,7 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
  * @brief       For a buffer of data, which don't need to be packet aligned, containing any number of pids,
  *              find the next available PCRs for a single pid, along with index positions.
  *              It's more efficient if you pass pktALigned if you know this in advance.
+ *              If the packets contain RTP headers (12 bytes), they're automatically skipped.
  * @param[in]   const uint8_t *buf - buffer of bytes, possibly transport packets, probably not aligned.
  * @param[in]   int lengthBytes - length of buffer in bytes.
  * @param[in]   struct ltntstools_pcr_position_s *pos - enumerator
