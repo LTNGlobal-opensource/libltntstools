@@ -325,6 +325,12 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
 	for (uint64_t i = offset; i < lengthBytes - offset; i += 188) {
 		const uint8_t *pkt = buf + i;
 
+		if (pkt[0] == 0x80 && pkt[12] == 0x47) {
+			/* Found a RTP header, skip it */
+			i += 12;
+			continue;
+		}
+
 		if (ltntstools_scr((uint8_t *)pkt, &scr) < 0)
 			continue;
 
@@ -369,6 +375,12 @@ int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstoo
 	int ret = -1;
 	for (uint64_t i = offset; i < lengthBytes - offset; i += 188) {
 		const uint8_t *pkt = buf + i;
+
+		if (pkt[0] == 0x80 && pkt[12] == 0x47) {
+			/* Found a RTP header, skip it */
+			i += 12;
+			continue;
+		}
 
 		if (ltntstools_pid(pkt) != pcrPID)
 			continue;
