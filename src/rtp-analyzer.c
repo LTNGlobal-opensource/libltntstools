@@ -151,3 +151,83 @@ void rtp_analyzer_hdr_dprintf(const struct rtp_hdr *h, int fd)
 	dprintf(fd, "seq:%05d ts:%010u version:%d p:%d x:%d cc:%02d m:%d pt:%02d ssrc:0x%08x\n",
 		ntohs(h->seq), ntohl(h->ts), h->version, h->p, h->x, h->cc, h->m, h->pt, ntohl(h->ssrc));
 }
+
+/* Find all of the rtp headers in a buffer
+ * assertain all of the frame length by measuring the byte space between headers.
+ * for the last RTP header, becasue we can't asertain it's length, leave that as a zero value.
+*/
+int rtp_frame_queryPositions(const unsigned char *buf, int lengthBytes, uint64_t addr,  uint32_t ssrc, struct rtp_frame_position_s **array, int *arrayLength)
+{
+	struct rtp_frame_position_s *arr = NULL;
+	int arrLength = 0;
+
+	/* The detector requires a minimum of two TS packets per RTP frame.
+	 * This is an attempt to discard false positive finds
+	 */
+	for (int i = 0; i < lengthBytes - (2 * 188); i++) {
+
+		const unsigned char *p = &buf[i];
+
+		struct rtp_hdr *hdr = (struct rtp_hdr *)&buf[i];
+
+		if (hdr->version != 2)
+			continue; /* Not the correct RTP version, we need to start with a rtp header */
+
+		if (hdr->pt != 33) { /* Discard anything not MPEGTS */
+			continue;
+		}
+
+		if (hdr->x == 1) { /* Discard anything with extension bits */
+			continue;
+		}
+
+		if (hdr->cc != 0) { /* Discard anything with Multiple CSRC identifiers */
+			continue;
+		}
+
+		if (hdr->ssrc != ssrc) { /* Discard anything with Synchronization source identifier uniquely identifies the source of a stream, !+ 0 */
+			continue;
+		}
+
+		if (*(p + 12) != 0x47)
+			continue; /* And we didn't find a MPEG-TS sync byte, probably mis-detected the RTP header */
+
+		if (*(p + 12 + 188) != 0x47) {
+			/* Missing a second sync byte.
+			* Try to find a second RTP header in its place (IE, we have a one ts packet RTP header in our buffer) */
+			if ((*(p + 12 + 188) >> 6) != 2) {
+				continue; /* And we didn't find a second MPEG-TS sync byte, probably mis-detected the RTP header */
+			}
+			/* Got another RPT header we think, final check, that this second header contains a SYNC */
+			if (*(p + 12 + 188 + 12) != 0x47) {
+				continue; /* We thought it was a second RTP header but it didn't contain a packet. Be safe, skip it*/
+			}
+		}
+#if 0
+		printf("Found frame at offset %6d pt %d: ", i, hdr->pt);
+		for (int j = 0; j < 32; j++) {
+			printf("%02x ", buf[i + j]);
+		}
+		printf("\n");
+#endif
+		arr = realloc(arr, ++arrLength * sizeof(struct rtp_frame_position_s));
+		if (!arr)
+			return -1;
+
+		(arr + (arrLength - 1))->offset = addr + i;
+		(arr + (arrLength - 1))->frame = *hdr; /* Copy the entire struct */
+		(arr + (arrLength - 1))->lengthBytes = 0;
+
+		/* Update the prior length, based on our current offset minus the prior offset */
+		if (arrLength >= 2) {
+			(arr + (arrLength - 2))->lengthBytes = (addr + i) - (arr + (arrLength - 2))->offset;
+		}
+
+		i += ((12 + 188) - 1); /* Optimize the next search */
+	}
+
+	*array = arr;
+	*arrayLength = arrLength;
+
+	return 0; /* Success */
+}

@@ -72,7 +72,6 @@ void rtp_analyzer_free(struct rtp_hdr_analyzer_s *ctx);
 /* Wide / zero the stats */
 void rtp_analyzer_reset(struct rtp_hdr_analyzer_s *ctx);
 
-
 /**
  * @brief       Push a RTP header into the framework, have it analyze various metrics.
  * @param[in]   struct rtp_hdr_analyzer_s *ctx - A previously allocated context, see rtp_analyzer_init().
@@ -85,5 +84,26 @@ int rtp_hdr_is_payload_type_valid(const struct rtp_hdr *hdr);
 int rtp_hdr_is_continious(struct rtp_hdr_analyzer_s *ctx, const struct rtp_hdr *hdr);
 void rtp_analyzer_report_dprintf(struct rtp_hdr_analyzer_s *ctx, int fd);
 void rtp_analyzer_hdr_dprintf(const struct rtp_hdr *h, int fd);
+
+/**
+ * @brief       Enumerator struct used with rtp_analyzer_queryFrames()
+ */
+struct rtp_frame_position_s
+{
+	uint64_t offset;
+    uint32_t lengthBytes;
+    struct rtp_hdr frame;
+};
+/**
+ * @brief       Push a buffer of rtp data into the frameowkr, containing any number of bytes, frame aligned or not.
+ * @param[in]   const unsigned char *buf - Array of bytes
+ * @param[in]   int lengthBytes - buffer length
+ * @param[in]   uint64_t addr - Address or offset of buf[0], which is then counted and returned in the 'offset' array as addr + offset.
+ * @param[in]   uint32_t ssrc - RTP stream srource ID we expect to find in the stream.
+ * @param[out]  struct rtp_frame_position_s **array - output array of every RTP frame found.
+ * @param[out]  int *arrayLength - number of items in output array.
+ * @return      0 on success else < 0 if error
+ */
+int rtp_frame_queryPositions(const unsigned char *buf, int lengthBytes, uint64_t addr,  uint32_t ssrc, struct rtp_frame_position_s **array, int *arrayLength);
 
 #endif /* KL_RTP_ANALYZER_H */
