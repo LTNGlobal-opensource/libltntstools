@@ -102,8 +102,16 @@ static int _processRing(struct pes_extractor_s *ctx)
 		if (plen == rlen) {
 			/* Search backwards for the start of the next mpeg signature.
 			 * result is the position of the signature as an offset from the beginning of the buffer.
+			 * If the value is zero, we only havea  single porbably incomplete PES in the buffer, which is
+			 * meaningless, becasue the buffer is expected to contain and ENTIRE PES followed by the header from
+			 * a subsequence PES.
 			 */
 			int offset = searchReverse(buf, rlen, ctx->streamId);
+			if (offset < 16) {
+				/* We'll come back again in the future */
+				free(buf);
+				return -1;
+			}
 #if LOCAL_DEBUG
 			if (offset == 423) {
 				ltntstools_hexdump(buf, rlen, 32);
@@ -112,15 +120,14 @@ static int _processRing(struct pes_extractor_s *ctx)
 #endif
 			struct klbs_context_s bs;
 			klbs_init(&bs);
-			klbs_read_set_buffer(&bs, buf, rlen - (rlen - offset));
+			klbs_read_set_buffer(&bs, buf, rlen - (rlen - offset)); /* This ensures the entire PES payload is collected */
 #if LOCAL_DEBUG
 			printf("%s() set bs length to %d bytes\n", __func__, rlen - (rlen - offset));
 #endif
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
 			//ssize_t xlen =
-			ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
-
-			if (ctx->cb) {
+			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
+			if (bitsProcessed && ctx->cb) {
 				
 				pes->rawBufferLengthBytes = rlen - (rlen - offset);
 				pes->rawBuffer = malloc(pes->rawBufferLengthBytes);
@@ -128,9 +135,14 @@ static int _processRing(struct pes_extractor_s *ctx)
 
 				ctx->cb(ctx->userContext, pes);
 				/* User owns the lifetime of the object */
-			} else {
+			} else
+			if (bitsProcessed) {
 				ltn_pes_packet_dump(pes, "\t");
 				ltn_pes_packet_free(pes);
+			} else {
+#if LOCAL_DEBUG
+				printf("skipping, processedbits = %d\n", bitsProcessed);
+#endif
 			}
 		}
 		free(buf);
@@ -141,6 +153,10 @@ static int _processRing(struct pes_extractor_s *ctx)
 	if (l == 16) {
 		//ltntstools_hexdump(buf, sizeof(tbuf), 16);
 	}
+
+#if LOCAL_DEBUG
+	printf("%s() ring processing complete, size now %d\n", __func__, rb_used(ctx->rb));
+#endif
 
 	return 0; /* Success */
 }
