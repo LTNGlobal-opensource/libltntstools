@@ -205,6 +205,50 @@ void h264_slice_counter_dprintf(void *ctx, int fd, int printZeroCounts)
 	}
 }
 
+int h264_nal_get_slice_type(const struct ltn_nal_headers_s *hdr, char *sliceType)
+{
+	GetBitContext gb;
+	int offset = -1;
+
+	if (ltn_nal_h264_findHeader(hdr->ptr, hdr->lengthBytes, &offset) == 0) {
+	
+		unsigned int nalType = *(hdr->ptr + offset + 3) & 0x1f;
+
+		switch (nalType) {
+		case 1: /* slice_layer_without_partitioning_rbsp */
+		case 2: /* slice_data_partition_a_layer_rbsp */
+		case 5: /* slice_layer_without_partitioning_rbsp */
+		case 19: /* slice_layer_without_partitioning_rbsp */
+			init_get_bits8(&gb, hdr->ptr + 4, 4);
+			get_ue_golomb(&gb); /* first_mb_in_slice */
+			int slice_type = get_ue_golomb(&gb);
+			if (slice_type < MAX_H264_SLICE_TYPES) {
+				sprintf(sliceType, h264_slice_name_ascii(slice_type));
+			} else {
+				/* Malformed stream, not a video stream probably.
+					* in 0x2000 mode we catch audio using this filter
+					* and we need to ignore it.
+					*/
+#if 0
+				printf("PKT : ");
+				for (int i = 0; i < 8; i++)
+					printf("%02x ", *(pkt + i));
+				printf("\n  -> offset %3d, nal? %2d slice %2d: ", offset, nalType, slice_type);
+				for (int i = 0; i < 12; i++)
+					printf("%02x ", *(pkt + offset + i));
+				printf("\n");
+#endif
+			}
+			return 0; /* Success */
+		}
+	}
+#if 0
+		printf("\n");
+#endif
+
+	return -1; /* error */
+}
+
 static void h264_slice_counter_write_packet(void *ctx, const unsigned char *pkt)
 {
 
