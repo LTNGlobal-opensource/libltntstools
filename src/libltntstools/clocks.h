@@ -75,7 +75,7 @@ int  ltntstools_clock_is_established_timebase(struct ltntstools_clock_s *clk);
 
 /**
  * @brief       Once the timebase bas been established (ltntstools_clock_reset()),
- *              syncronize 'ticks' (and absolute measurement of time int he establish timebase,
+ *              syncronize 'ticks' (and absolute measurement of time in the establish timebase,
  *              to walltime (measured in us).
  *              This measns we'll be able to measure drift, in the future.
  * @param[in]   struct ltntstools_clock_s *clk - context
