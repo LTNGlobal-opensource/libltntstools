@@ -176,6 +176,7 @@ __inline__ void ltn_histogram_reset(struct ltn_histogram_s *ctx)
 	gettimeofday(&ctx->intervalLast, NULL);
 	ctx->bucketMissCount = 0;
 	ctx->cumulativeMs = 0;
+	ctx->totalCount = 0;
 }
 
 static __inline__ void ltn_histogram_free(struct ltn_histogram_s *ctx)
