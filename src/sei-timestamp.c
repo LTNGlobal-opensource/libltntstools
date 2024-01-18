@@ -6,6 +6,7 @@
 #include <sys/time.h>
 
 #include "sei-timestamp.h"
+#include "memmem.h"
 
 int g_sei_timestamping = 0;
 
@@ -60,16 +61,16 @@ int sei_timestamp_field_set(unsigned char *buffer, int lengthBytes, uint32_t nr,
 
 int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes)
 {
+	void *result;
+
 	if (lengthBytes < SEI_TIMESTAMP_PAYLOAD_LENGTH)
 		return -1;
 
-	for (int i = 0; i <= (lengthBytes - (int)SEI_TIMESTAMP_PAYLOAD_LENGTH); i++) {
-		if (memcmp(buf + i, &ltn_uuid_sei_timestamp[0], sizeof(ltn_uuid_sei_timestamp)) == 0) {
-			return i;
-		}
-	}
-
-	return -1;
+	result = memmem(buf, lengthBytes, ltn_uuid_sei_timestamp, sizeof(ltn_uuid_sei_timestamp));
+	if (result)
+		return (result - (void *)(buf));
+	else
+		return -1;
 }
 
 int sei_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32_t nr, uint32_t *value)
