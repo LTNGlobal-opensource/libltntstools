@@ -66,6 +66,7 @@ struct ltntstools_pid_statistics_s
 
 	struct ltn_histogram_s *pcrTickIntervals; /** < Measure tick differences between adjacent PCR clocks, track the deltas. */
 	struct ltn_histogram_s *pcrWallDrift; /** < Measure PCR vs Walltime and look for clock drift */
+	int64_t lastPCRWalltimeDriftMs;       /** amount of drift in ms, positive or minus, from walltime. */
 };
 
 /**
@@ -302,6 +303,15 @@ int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistic
  * @return      PCR tick value in a 27MHz clock.
  */
 int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query the current pid PCR vs walltime drift, assuming this PID contains a PCR. Else, return -1.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @param[out]  int64_t driftMs - Amount of drift ahead of walltime, or behind walltime, the PCR is
+ * @return      0 - Success, else < 0 on error.
+ */
+int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr, int64_t *driftMs);
 
 /**
  * @brief       Write a CTP buffer into the stats layer.

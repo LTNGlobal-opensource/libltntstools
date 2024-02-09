@@ -181,9 +181,11 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 				ltntstools_clock_set_ticks(pcrclk, pcr);
 				ltntstools_clock_get_drift_us(pcrclk);
 
-				int64_t v = ltntstools_clock_get_drift_us(pcrclk) / 1000;
-				if (v < 0)
-					v = 0;
+				int64_t v = ltntstools_clock_get_drift_us(pcrclk) / 1000; /* In ms */
+				pid->lastPCRWalltimeDriftMs = v;
+
+				/* Normalize to remove drift direction - needed for histogram */
+				v = abs(v);
 				//printf("us %" PRIi64 "\n", v);
 				ltn_histogram_interval_update_with_value(pid->pcrWallDrift, v);
 
@@ -434,6 +436,18 @@ int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_sta
 
 	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
 	return pid->prev_pcrExceeds40ms != pid->pcrExceeds40ms;
+}
+
+int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr, int64_t *driftMs)
+{
+	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!pid->hasPCR) {
+		return -1; /* Failed, not a PCR pid */
+	}
+
+	*driftMs = pid->lastPCRWalltimeDriftMs;
+
+	return 0; /* Success */
 }
 
 void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream, int fd)
