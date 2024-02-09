@@ -155,7 +155,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 					sprintf(title, "PCR Tick Intervals PID 0x%04x", pidnr);
 					ltn_histogram_alloc_video_defaults(&pid->pcrTickIntervals, title);
 
-					sprintf(title, "PCR Jitter PID 0x%04x", pidnr);
+					sprintf(title, "PCR Jitter PID 0x%04x (abs value)", pidnr);
 					ltn_histogram_alloc_video_defaults(&pid->pcrWallDrift, title);
 				}
 
