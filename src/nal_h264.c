@@ -158,7 +158,7 @@ struct h264_slice_counter_s
 	struct h264_slice_data_s slice[MAX_H264_SLICE_TYPES];
 
 	int nextHistoryPos;
-    char sliceHistory[H264_SLICE_COUNTER_HISTORY_LENGTH];
+	char sliceHistory[H264_SLICE_COUNTER_HISTORY_LENGTH + 1];
 };
 
 void h264_slice_counter_reset(void *ctx)
