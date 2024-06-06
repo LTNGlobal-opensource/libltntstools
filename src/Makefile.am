@@ -76,7 +76,7 @@ libltntstools_la_SOURCES += rtp-analyzer.c
 libltntstools_la_SOURCES += libltntstools/rtp-analyzer.h
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
-	-D_FILE_OFFSET_BITS=64 -O3 -D_BSD_SOURCE -I$(top_srcdir)/include
+	-D_FILE_OFFSET_BITS=64 -O3 -D_DEFAULT_SOURCE -I$(top_srcdir)/include
 
 if DEBUG
   libltntstools_la_CFLAGS += -g
