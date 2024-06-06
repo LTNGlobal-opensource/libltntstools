@@ -247,16 +247,9 @@ void *ltntstools_segmentwriter_threadFunc(void *p)
 		}
 	}
 
-	if (s->fh) {
-		fclose(s->fh);
-		s->fh = NULL;
-	}
-
-	free(s->filenamePrefix);
-	free(s);
-
 	s->threadRunning = 0;
 	s->threadTerminated = 1;
+
 	return NULL;
 }
 
@@ -291,6 +284,12 @@ void ltntstools_segmentwriter_free(void *hdl)
 			usleep(10 * 1000);
 		}
 	}
+
+	if (s->fh) {
+		fclose(s->fh);
+		s->fh = NULL;
+	}
+
 	if (s->fileHeader) {
 		free(s->fileHeader);
 		s->fileHeader = NULL;
@@ -311,6 +310,9 @@ void ltntstools_segmentwriter_free(void *hdl)
 		s->rb = NULL;
 	}
 #endif
+
+	free(s->filenamePrefix);
+	free(s);
 }
 
 /* alloc a buffer of length bytes, caller will fill dst and return it to us later via
