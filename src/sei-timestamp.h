@@ -58,10 +58,6 @@ int sei_timestamp_value_timeval_query(const unsigned char *buffer, int lengthByt
  */
 int sei_timestamp_value_timeval_set(const unsigned char *buffer, int lengthBytes, int nr, struct timeval *t);
 
-int sei_timeval_subtract(struct timeval *result, struct timeval *x, struct timeval *y);
-int64_t sei_timediff_to_msecs(struct timeval *tv);
-int64_t sei_timediff_to_usecs(struct timeval *tv);
-
 #if defined(__cplusplus)
 };
 #endif

@@ -91,6 +91,7 @@ libltntstools_includedir = $(includedir)/libltntstools
 
 libltntstools_include_HEADERS  = libltntstools/ltntstools.h
 libltntstools_include_HEADERS += libltntstools/ts.h
+libltntstools_include_HEADERS += libltntstools/timeval.h
 libltntstools_include_HEADERS += libltntstools/nal_h264.h
 libltntstools_include_HEADERS += libltntstools/nal_h265.h
 libltntstools_include_HEADERS += libltntstools/ts_packetizer.h

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <libltntstools/ltntstools.h>
 
 #include "sei-timestamp.h"
 
@@ -96,7 +97,6 @@ int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer, int le
 {
 
 	struct timeval begin, end;
-	struct timeval diff;
 	uint32_t v[8];
 	for (int i = 0; i < 8; i++)
 		sei_timestamp_field_get(buffer, lengthBytes, i, &v[i]);
@@ -106,17 +106,7 @@ int64_t sei_timestamp_query_codec_latency_ms(const unsigned char *buffer, int le
 	end.tv_sec = v[6];
 	end.tv_usec = v[7];
 
-	sei_timeval_subtract(&diff, &end, &begin);
-
-#if 0
-	printf("%08d: %d.%d - %d.%d = %d.%d\n",
-		v[1], 
-		begin.tv_sec, begin.tv_usec,
-		end.tv_sec, end.tv_usec,
-		diff.tv_sec, diff.tv_usec);
-#endif
-
-	return sei_timediff_to_msecs(&diff);
+	return ltn_timeval_subtract_ms(&end, &begin);
 }
 
 void sei_timestamp_hexdump(const unsigned char *buffer, int lengthBytes)
@@ -168,38 +158,4 @@ int sei_timestamp_value_timeval_set(const unsigned char *buffer, int lengthBytes
 	sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr, (uint32_t)ts.tv_sec);
 	sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr + 1, (uint32_t)ts.tv_usec);
 	return 0;
-}
-
-int sei_timeval_subtract(struct timeval *result, struct timeval *x /* now */, struct timeval *y /* then */)
-{
-     /* Perform the carry for the later subtraction by updating y. */
-     if (x->tv_usec < y->tv_usec)
-     {
-         int nsec = (y->tv_usec - x->tv_usec) / 1000000 + 1;
-         y->tv_usec -= 1000000 * nsec;
-         y->tv_sec += nsec;
-     }
-     if (x->tv_usec - y->tv_usec > 1000000)
-     {
-         int nsec = (x->tv_usec - y->tv_usec) / 1000000;
-         y->tv_usec += 1000000 * nsec;
-         y->tv_sec -= nsec;
-     }
-
-     /* Compute the time remaining to wait. tv_usec is certainly positive. */
-     result->tv_sec = x->tv_sec - y->tv_sec;
-     result->tv_usec = x->tv_usec - y->tv_usec;
-
-     /* Return 1 if result is negative. */
-     return x->tv_sec < y->tv_sec;
-}
-
-int64_t sei_timediff_to_msecs(struct timeval *tv)
-{
-        return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
-}
-
-int64_t sei_timediff_to_usecs(struct timeval *tv)
-{
-        return (tv->tv_sec * 1000000) + tv->tv_usec;
 }

@@ -23,6 +23,7 @@
 
 #include <libltntstools/ts.h>
 #include <libltntstools/ts_packetizer.h>
+#include <libltntstools/timeval.h>
 #include <libltntstools/udp_receiver.h>
 #include <libltntstools/stats.h>
 #include <libltntstools/pes.h>

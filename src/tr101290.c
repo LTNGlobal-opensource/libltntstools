@@ -9,18 +9,11 @@
 #include <time.h>
 #include <stdarg.h>
 
-#include "libltntstools/tr101290.h"
-#include "libltntstools/time.h"
-#include "libltntstools/streammodel.h"
+#include "libltntstools/ltntstools.h"
 
 #include "tr101290-types.h"
 
 #define LOCAL_DEBUG 0
-
-int64_t _timeval_to_ms(struct timeval *tv)
-{
-	return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
-}
 
 static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 {
@@ -30,10 +23,7 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
 	/* Assume we have transport loss until the stats tell us different. */
 	int lost = 1;
 
-	struct timeval diff;
-	timersub(&now, &s->lastWriteCall, &diff);
-
-	int64_t ms = _timeval_to_ms(&diff);
+	int64_t ms = ltn_timeval_subtract_ms(&now, &s->lastWriteCall);
 	if (ms < 20) {
 		lost = 0;
 	}
