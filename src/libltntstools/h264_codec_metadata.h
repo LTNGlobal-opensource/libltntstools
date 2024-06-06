@@ -42,7 +42,7 @@ struct h264_seq_parameter_set_rbsp_s
     char     level_idc_ascii[16];
     char     chroma_format_idc_ascii[16];
     char     bit_depth_luma_ascii[8];
-    char     timing_info_fps_ascii[16];
+    char     timing_info_fps_ascii[24];
 
     char reserved[256];
 
