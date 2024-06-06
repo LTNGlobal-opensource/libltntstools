@@ -166,42 +166,30 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
     if (!primaryDIR)
         return -1;
 
-    struct dirent de;
-    struct dirent *de_enum;
-    int ret = 0;
-    while (ret == 0) { /* For each item in the /proc dir */
-        ret = readdir_r(primaryDIR, &de, &de_enum);
-        if (!de_enum)
-            break;
-
-        if (!isdigit(de.d_name[0])) {
+    struct dirent *de;
+    while ((de = readdir(primaryDIR)) != NULL) { /* For each item in the /proc dir */
+        if (!isdigit(de->d_name[0])) {
             /* Discard any entries that are not a process id */
             continue; 
         }
 
         /* Find the file descriptors associate with this /proc/<blah>/fd. */
         char fds[256];
-        sprintf(&fds[0], "/proc/%s/fd", de.d_name);
+        sprintf(&fds[0], "/proc/%s/fd", de->d_name);
 
         DIR *fdDIR = opendir(fds);
         if (!fdDIR)
             continue;
 
-        struct dirent fd_de;
-        struct dirent *fd_de_enum = NULL;
-        ret = 0;
-        while (ret == 0) { /* For each item in the /proc/PID/fd dir */
-            ret = readdir_r(fdDIR, &fd_de, &fd_de_enum);
-            if (!fd_de_enum)
-                break;
-
-            if (fd_de.d_type == DT_DIR) {
+        struct dirent *fd_de;
+        while ((fd_de = readdir(fdDIR)) != NULL) { /* For each item in the /proc/PID/fd dir */
+            if (fd_de->d_type == DT_DIR) {
                 continue;
             }
 
             char buf[256];
             char fqfn[64];
-            sprintf(fqfn, "%s/%s", fds, fd_de.d_name);
+            sprintf(fqfn, "%s/%s", fds, fd_de->d_name);
             size_t len = readlink(fqfn, &buf[0], sizeof(buf));
             if (len <= 0) {
                 continue; /* unable to determine (privs?) contents of link */
@@ -219,7 +207,7 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
                 continue;
 
             /* Update the table, add a pid to a specific inode and stream. */
-            _tableHelperItemAddProcess(item, atoi(de.d_name));
+            _tableHelperItemAddProcess(item, atoi(de->d_name));
         }
 
 	    closedir(fdDIR);
