@@ -80,7 +80,7 @@ int ltntstools_tr101290_log_append(struct ltntstools_tr101290_s *s, int addTimes
 			}
 		}
 
-	    fprintf(fh, buf);
+		fputs(buf, fh);
 		fclose(fh);
 	} else {
 		ret = -1;
