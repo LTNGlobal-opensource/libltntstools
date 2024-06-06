@@ -185,7 +185,7 @@ int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *
 	struct throughput_hires_context_s *ctx = (struct throughput_hires_context_s *)hdl;
 
 	uint64_t begin, end;
-	*vmin = 2^62;
+	*vmin = INT64_C(1) << 62;
 	*vmax = -1;
 	*vavg = -1;
 	int64_t items = 0;
