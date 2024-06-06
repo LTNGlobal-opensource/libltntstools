@@ -166,6 +166,9 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
     if (!primaryDIR)
         return -1;
 
+    char *path = malloc(PATH_MAX);
+    char *link_path = malloc(PATH_MAX);
+
     struct dirent *de;
     while ((de = readdir(primaryDIR)) != NULL) { /* For each item in the /proc dir */
         if (!isdigit(de->d_name[0])) {
@@ -174,10 +177,9 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
         }
 
         /* Find the file descriptors associate with this /proc/<blah>/fd. */
-        char fds[256];
-        sprintf(&fds[0], "/proc/%s/fd", de->d_name);
+        sprintf(&path[0], "/proc/%s/fd", de->d_name);
 
-        DIR *fdDIR = opendir(fds);
+        DIR *fdDIR = opendir(path);
         if (!fdDIR)
             continue;
 
@@ -187,21 +189,21 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
                 continue;
             }
 
-            char buf[256];
-            char fqfn[64];
-            sprintf(fqfn, "%s/%s", fds, fd_de->d_name);
-            size_t len = readlink(fqfn, &buf[0], sizeof(buf));
+            sprintf(&path[0], "/proc/%s/fd/%s", de->d_name, fd_de->d_name);
+
+            ssize_t len = readlink(path, &link_path[0], PATH_MAX - 1);
+
             if (len <= 0) {
                 continue; /* unable to determine (privs?) contents of link */
             }
-            buf[len] = 0;
+            link_path[len] = 0;
 
-            if (strncmp("socket", &buf[0], 6) != 0)
+            if (strncmp("socket", link_path, 6) != 0)
                 continue;
 
             /* convert symlink string 'socket:[4065562]' into the inode 4065562 */
-            buf[len - 1] = 0; /* strip trailing ] */
-            uint64_t inode = atoi(&buf[8]);
+            link_path[len - 1] = 0; /* strip trailing ] */
+            uint64_t inode = atoi(link_path);
             struct ltntstools_proc_net_udp_item_s *item = _tableHelperItemFindiNode(inode, items, itemCount);
             if (!item)
                 continue;
@@ -210,10 +212,13 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
             _tableHelperItemAddProcess(item, atoi(de->d_name));
         }
 
-	    closedir(fdDIR);
+        closedir(fdDIR);
     }
-    
+
     closedir(primaryDIR);
+
+    free(link_path);
+    free(path);
 
     return 0; /* Success */
 }
