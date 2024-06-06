@@ -61,6 +61,10 @@ void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 
 int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk)
 {
+	/* Can't calculate drift when walltime has not been established yet */
+	if (!clk->establishedWT)
+		return 0;
+
 	struct timeval now;
 	gettimeofday(&now, NULL);
 
