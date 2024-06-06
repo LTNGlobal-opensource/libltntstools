@@ -66,7 +66,10 @@ void ltntstools_clock_establish_timebase(struct ltntstools_clock_s *clk, int64_t
 	if (clk->ticks_per_second == 27000000)
 		clk->clockWrapValue = MAX_SCR_VALUE;
 	else
-		clk->clockWrapValue = (2^32); /* Todo, is this reasonable? */
+		/* RTMP specifies that two timestamps with a uint32 delta of more than 2^31-1 ms
+		 * are regressing, not wrapping, so this (with the check in _compute_delta) is
+		 * only correct when timestamps are monotonic (which they usually are) */
+		clk->clockWrapValue = (INT64_C(1) << 32);
 }
 
 int ltntstools_clock_is_established_wallclock(struct ltntstools_clock_s *clk)
