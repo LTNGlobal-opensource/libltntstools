@@ -148,8 +148,9 @@ static void _tableHelperItemAddProcess(struct ltntstools_proc_net_udp_item_s *it
         sprintf(fn, "/proc/%" PRIu64 "/comm", pid);
         FILE *fh = fopen(fn, "r");
         if (fh) {
-            fgets((char *)&item->pidList[item->pidListCount].comm[0], sizeof(item->pidList[item->pidListCount].comm), fh);
-            item->pidList[item->pidListCount].comm[ strlen((char *)item->pidList[item->pidListCount].comm) - 1] = 0;
+            if (fgets((char *)&item->pidList[item->pidListCount].comm[0],
+                    sizeof item->pidList[item->pidListCount].comm, fh) == NULL)
+                item->pidList[item->pidListCount].comm[0] = 0;
             fclose(fh);
         }
 
