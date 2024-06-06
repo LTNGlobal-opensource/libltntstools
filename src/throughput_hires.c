@@ -21,20 +21,20 @@ struct throughput_hires_context_s
 	struct xorg_list itemsBusy;
 };
 
-__inline__ uint64_t makeTimestampFromTimeval(struct timeval *ts)
+static inline uint64_t makeTimestampFromTimeval(struct timeval *ts)
 {
 	uint64_t t = ((int64_t)ts->tv_sec * 1000000LL) + ts->tv_usec;
 	return t;
 }
 
-__inline__ uint64_t makeTimestampFromNow()
+static inline uint64_t makeTimestampFromNow()
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);
 	return makeTimestampFromTimeval(&now);
 }
 
-__inline__ uint64_t makeTimestampFrom1SecondAgo()
+static inline uint64_t makeTimestampFrom1SecondAgo()
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);
@@ -42,7 +42,7 @@ __inline__ uint64_t makeTimestampFrom1SecondAgo()
 	return makeTimestampFromTimeval(&now);
 }
 
-__inline__ uint64_t makeTimestampFrom2SecondAgo()
+static inline uint64_t makeTimestampFrom2SecondAgo()
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);

@@ -74,7 +74,7 @@ struct klbs_context_s
  * @brief       Allocate a new bitstream context, for read or write use.
  * @return      struct klbs_context_s *  The context itself, or NULL on error.
  */
-static __inline__ struct klbs_context_s * klbs_alloc()
+static inline struct klbs_context_s * klbs_alloc()
 {
 	return (struct klbs_context_s *)calloc(1, sizeof(struct klbs_context_s));
 }
@@ -87,7 +87,7 @@ static __inline__ struct klbs_context_s * klbs_alloc()
  * @return      0 - Success
  * @return      < 0 - Error
  */
-static __inline__ int klbs_save(struct klbs_context_s *ctx, const char *fn)
+static inline int klbs_save(struct klbs_context_s *ctx, const char *fn)
 {
 	FILE *fh = fopen(fn, "wb");
 	if (!fh)
@@ -104,7 +104,7 @@ static __inline__ int klbs_save(struct klbs_context_s *ctx, const char *fn)
  *              The users read/write buffer is left in tact, and not freed.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  */
-static __inline__ void klbs_free(struct klbs_context_s *ctx)
+static inline void klbs_free(struct klbs_context_s *ctx)
 {
 	free(ctx);
 }
@@ -113,7 +113,7 @@ static __inline__ void klbs_free(struct klbs_context_s *ctx)
  * @brief       Initialize / reset a previously allocated context.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  */
-static __inline__ void klbs_init(struct klbs_context_s *ctx)
+static inline void klbs_init(struct klbs_context_s *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 }
@@ -125,7 +125,7 @@ static __inline__ void klbs_init(struct klbs_context_s *ctx)
  * @param[in]   uint8_t *buf  Buffer the bistream write calls will modify
  * @param[in]   uint32_t *buf  Buffer size in bytes.
  */
-static __inline__ void klbs_write_set_buffer(struct klbs_context_s *ctx, uint8_t *buf, uint32_t lengthBytes)
+static inline void klbs_write_set_buffer(struct klbs_context_s *ctx, uint8_t *buf, uint32_t lengthBytes)
 {
 	klbs_init(ctx);
 	ctx->buf = buf;
@@ -139,7 +139,7 @@ static __inline__ void klbs_write_set_buffer(struct klbs_context_s *ctx, uint8_t
  * @param[in]   uint8_t *buf  Buffer the bistream will read from.
  * @param[in]   uint32_t *buf  Buffer size in bytes.
  */
-static __inline__ void klbs_read_set_buffer(struct klbs_context_s *ctx, uint8_t *buf, uint32_t lengthBytes)
+static inline void klbs_read_set_buffer(struct klbs_context_s *ctx, uint8_t *buf, uint32_t lengthBytes)
 {
 	klbs_write_set_buffer(ctx, buf, lengthBytes);
 }
@@ -149,7 +149,7 @@ static __inline__ void klbs_read_set_buffer(struct klbs_context_s *ctx, uint8_t 
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  * @param[in]   uint32_t bit  A single bit.
  */
-static __inline__ void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
+static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 {
 	assert(ctx->buflen_used <= ctx->buflen);
 
@@ -171,7 +171,7 @@ static __inline__ void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  * @param[in]   uint32_t bit  A single bit.
  */
-static __inline__ void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bit)
+static inline void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bit)
 {
 	while (ctx->reg_used > 0)
 		klbs_write_bit(ctx, bit);
@@ -185,7 +185,7 @@ static __inline__ void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_
  * @param[in]   uint32_t bits  data pattern.
  * @param[in]   uint32_t bitcount  number of bits to write
  */
-static __inline__ void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, uint32_t bitcount)
+static inline void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, uint32_t bitcount)
 {
 	for (int i = (bitcount - 1); i >= 0; i--)
 		klbs_write_bit(ctx, bits >> i);
@@ -198,7 +198,7 @@ static __inline__ void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits
  *              stuffer and written to the buffer.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  */
-static __inline__ void klbs_write_buffer_complete(struct klbs_context_s *ctx)
+static inline void klbs_write_buffer_complete(struct klbs_context_s *ctx)
 {
 	if (ctx->reg_used > 0) {
 		for (int i = ctx->reg_used; i <= 8; i++)
@@ -211,7 +211,7 @@ static __inline__ void klbs_write_buffer_complete(struct klbs_context_s *ctx)
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  * @return      uint32_t  a bit
  */
-static __inline__ uint32_t klbs_read_bit(struct klbs_context_s *ctx)
+static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 {
 	uint32_t bit = 0;
 #if KLBITSTREAM_DEBUG
@@ -244,7 +244,7 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  * @return      uint64_t  bits
  */
-static __inline__ uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitcount)
+static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitcount)
 {
 	uint64_t bits = 0;
 
@@ -266,7 +266,7 @@ static __inline__ uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t b
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  * @return      uint64_t  bits
  */
-static __inline__ uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitcount)
+static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitcount)
 {
 	struct klbs_context_s copy = *ctx; /* Implicit struct copy */
 	return klbs_read_bits(&copy, bitcount);
@@ -277,7 +277,7 @@ static __inline__ uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t b
  *              The sister function to klbs_write_byte_stuff();
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  */
-static __inline__ void klbs_read_byte_stuff(struct klbs_context_s *ctx)
+static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
 {
 	while (ctx->reg_used > 0)
 		klbs_read_bit(ctx);
@@ -290,7 +290,7 @@ static __inline__ void klbs_read_byte_stuff(struct klbs_context_s *ctx)
  *              the same content.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  */
-static __inline__ void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32_t bitcount)
+static inline void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32_t bitcount)
 {
 	const char *space = " ";
 	const char *nospace = "";
@@ -307,7 +307,7 @@ static __inline__ void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32
  * @param[in]   int writeMode - indicate 1 for write mode buffer, or 0 for read mode.
  * @return      struct klbs_context_s *  The context itself, or NULL on error.
  */
-static __inline__ struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t storageSizeBytes, int writeMode)
+static inline struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t storageSizeBytes, int writeMode)
 {
 	struct klbs_context_s *ctx = calloc(1, sizeof(struct klbs_context_s));
 	if (!ctx)
@@ -337,7 +337,7 @@ static __inline__ struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t 
 * @param[in]   size_t bits - number of bits to copy
 * @return      struct klbs_context_s *  The context itself, or NULL on error.
 */
-static __inline__ void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
+static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
 {
 	for(int i = 0; i < bits; i++) {
 		klbs_write_bit(dst, klbs_read_bit(src));
@@ -351,7 +351,7 @@ static __inline__ void klbs_bitmove(struct klbs_context_s *dst, struct klbs_cont
 * @param[in]   size_t bits - number of bits to copy
 * @return      struct klbs_context_s *  The context itself, or NULL on error.
 */
-static __inline__ void klbs_bitcopy(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
+static inline void klbs_bitcopy(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
 {
 	struct klbs_context_s copy = *src; /* Implicit struct copy */
 	return klbs_bitmove(dst, &copy, bits);

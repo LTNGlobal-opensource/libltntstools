@@ -48,7 +48,7 @@ KLRingBuffer *rb_new_threadsafe(size_t size, size_t size_max)
 	return rb;
 }
 
-inline bool rb_is_empty(KLRingBuffer *rb)
+bool rb_is_empty(KLRingBuffer *rb)
 {
 	bool result = false;
 

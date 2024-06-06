@@ -44,7 +44,7 @@
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      Boolean. 1 on success else 0.
  */
-__inline__ int ltntstools_sync_present(const uint8_t *pkt)
+static inline int ltntstools_sync_present(const uint8_t *pkt)
 {
 	return *pkt == 0x47;
 }
@@ -54,7 +54,7 @@ __inline__ int ltntstools_sync_present(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      Boolean. 1 on success else 0.
  */
-__inline__ int ltntstools_tei_set(const uint8_t *pkt)
+static inline int ltntstools_tei_set(const uint8_t *pkt)
 {
 	return *(pkt + 1) & 0x80 ? 1 : 0;
 }
@@ -64,7 +64,7 @@ __inline__ int ltntstools_tei_set(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      Boolean. 1 on success else 0.
  */
-__inline__ int ltntstools_payload_unit_start_indicator(const uint8_t *pkt)
+static inline int ltntstools_payload_unit_start_indicator(const uint8_t *pkt)
 {
 	return *(pkt + 1) & 0x40 ? 1 : 0;
 }
@@ -74,7 +74,7 @@ __inline__ int ltntstools_payload_unit_start_indicator(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      Boolean. 1 on success else 0.
  */
-__inline__ int ltntstools_transport_priority(const uint8_t *pkt)
+static inline int ltntstools_transport_priority(const uint8_t *pkt)
 {
 	return *(pkt + 1) & 0x20 ? 1 : 0;
 }
@@ -84,7 +84,7 @@ __inline__ int ltntstools_transport_priority(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      PID
  */
-__inline__ uint16_t ltntstools_pid(const uint8_t *pkt)
+static inline uint16_t ltntstools_pid(const uint8_t *pkt)
 {
 	uint16_t pid = (*(pkt + 1) << 8 ) | *(pkt + 2);
 	return pid & 0x1fff;
@@ -95,7 +95,7 @@ __inline__ uint16_t ltntstools_pid(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      value
  */
-__inline__ uint8_t ltntstools_transport_scrambling_control(const uint8_t *pkt)
+static inline uint8_t ltntstools_transport_scrambling_control(const uint8_t *pkt)
 {
 	return *(pkt + 3) >> 6;
 }
@@ -105,7 +105,7 @@ __inline__ uint8_t ltntstools_transport_scrambling_control(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      two bit field.
  */
-__inline__ uint8_t ltntstools_adaption_field_control(const uint8_t *pkt)
+static inline uint8_t ltntstools_adaption_field_control(const uint8_t *pkt)
 {
 	return (*(pkt + 3) >> 4) & 0x03;
 }
@@ -115,7 +115,7 @@ __inline__ uint8_t ltntstools_adaption_field_control(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      Boolean. 1 on success else 0.
  */
-__inline__ unsigned int ltntstools_has_adaption(const uint8_t *pkt)
+static inline unsigned int ltntstools_has_adaption(const uint8_t *pkt)
 {
         unsigned char v = (*(pkt + 3) >> 4) & 0x03;
         if ((v == 2) || (v == 3))
@@ -131,7 +131,7 @@ __inline__ unsigned int ltntstools_has_adaption(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      eight bit field.
  */
-__inline__ uint8_t ltntstools_adaption_field_length(const uint8_t *pkt)
+static inline uint8_t ltntstools_adaption_field_length(const uint8_t *pkt)
 {
 	return *(pkt + 4);
 }
@@ -141,7 +141,7 @@ __inline__ uint8_t ltntstools_adaption_field_length(const uint8_t *pkt)
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      four bit field.
  */
-__inline__ uint8_t ltntstools_continuity_counter(const uint8_t *pkt)
+static inline uint8_t ltntstools_continuity_counter(const uint8_t *pkt)
 {
 	return *(pkt + 3) & 0x0f;
 }
@@ -153,7 +153,7 @@ __inline__ uint8_t ltntstools_continuity_counter(const uint8_t *pkt)
  * @param[in]   int64_t to - tick value
  * @return      int64_t - Always returns a positive number of ticks in the 27MHz clock
  */
-__inline__ int64_t ltntstools_scr_diff(int64_t from, int64_t to)
+static inline int64_t ltntstools_scr_diff(int64_t from, int64_t to)
 {
 	int64_t diffTicks;
 
@@ -174,7 +174,7 @@ __inline__ int64_t ltntstools_scr_diff(int64_t from, int64_t to)
  * @param[in]   int64_t ticks - tick value
  * @return      int64_t - Always returns a positive number of ticks in the 27MHz clock
  */
-__inline__ int64_t ltntstools_scr_add(int64_t scr, int64_t ticks)
+static inline int64_t ltntstools_scr_add(int64_t scr, int64_t ticks)
 {
 	int64_t clock = scr + ticks;
 
@@ -188,7 +188,7 @@ __inline__ int64_t ltntstools_scr_add(int64_t scr, int64_t ticks)
 }
 
 /* Always returns a positive number of ticks in the 90MHz clock */
-__inline__ int64_t ltntstools_pts_diff(int64_t from, int64_t to)
+static inline int64_t ltntstools_pts_diff(int64_t from, int64_t to)
 {
 	int64_t diffTicks;
 
@@ -286,7 +286,7 @@ int ltntstools_pcr_position_append(struct ltntstools_pcr_position_s **array, int
 /**
  * @brief       Enumerator function to assist with using ltntstools_queryPCR_pid()
  */
-__inline__ void ltntstools_pcr_position_reset(struct ltntstools_pcr_position_s *p)
+static inline void ltntstools_pcr_position_reset(struct ltntstools_pcr_position_s *p)
 {
 	p->pcr = -1;
 	p->offset = 0;

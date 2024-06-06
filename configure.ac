@@ -18,6 +18,8 @@ AC_PROG_CXX
 #LDFLAGS+=" -L/usr/local/lib "
 #fi
 
+AC_C_INLINE
+
 # We always build with -fPIC in case our static libraries end up
 # being linked into a consumer's shared library
 AC_MSG_CHECKING(whether fPIC compiler option is accepted)
