@@ -80,11 +80,7 @@ static void _ltnencoder_sei_timestamp_query(struct ltnencoder_sei_ctx_s *ctx, co
 	gettimeofday(&walltimeLocal, NULL);
 
 	/* Calculate total latency in ms from encoder frame input to this probe. */
-	struct timeval diff;
-	sei_timeval_subtract(&diff, &walltimeLocal, &walltimeEncoderFrameEntry);
-
-	/* Calculate total latency in ms from encoder frame exit to this probe. */
-	ctx->latencyMs = sei_timediff_to_msecs(&diff);
+	ctx->latencyMs = ltn_timeval_subtract_ms(&walltimeLocal, &walltimeEncoderFrameEntry);
 }
 
 int ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned char *buf, int lengthBytes)

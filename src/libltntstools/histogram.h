@@ -79,6 +79,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
+#include <libltntstools/timeval.h>
 
 struct ltn_histogram_bucket_s
 {
@@ -116,7 +117,7 @@ struct ltn_histogram_s
 };
 
 /* Compare time T1 to T2. */
-static __inline__ int _compareTime(struct timeval *t1, struct timeval *t2)
+static inline int _compareTime(struct timeval *t1, struct timeval *t2)
 {
 	if (t1->tv_sec > t2->tv_sec)
 		return 1;
@@ -133,44 +134,12 @@ static __inline__ int _compareTime(struct timeval *t1, struct timeval *t2)
 	return 0;
 }
 
-static __inline__ struct ltn_histogram_bucket_s *ltn_histogram_bucket(struct ltn_histogram_s *ctx, uint32_t ms)
+static inline struct ltn_histogram_bucket_s *ltn_histogram_bucket(struct ltn_histogram_s *ctx, uint32_t ms)
 {
 	return ctx->buckets + (ms - ctx->minValMs);
 }
 
-__inline__ static int ltn_histogram_timeval_to_ms(struct timeval *tv)
-{
-        return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
-}
-
-__inline__ static int ltn_histogram_timeval_to_us(struct timeval *tv)
-{
-        return (tv->tv_sec * 1000000) + tv->tv_usec;
-}
-
-__inline__ static int ltn_histogram_timeval_subtract(struct timeval *result, struct timeval *x, struct timeval *y)
-{
-	/* Perform the carry for the later subtraction by updating y. */
-	if (x->tv_usec < y->tv_usec) {
-		int nsec = (y->tv_usec - x->tv_usec) / 1000000 + 1;
-		y->tv_usec -= 1000000 * nsec;
-		y->tv_sec += nsec;
-	}
-	if (x->tv_usec - y->tv_usec > 1000000) {
-		int nsec = (x->tv_usec - y->tv_usec) / 1000000;
-		y->tv_usec += 1000000 * nsec;
-		y->tv_sec -= nsec;
-	}
-
-	/* Compute the time remaining to wait. tv_usec is certainly positive. */
-	result->tv_sec = x->tv_sec - y->tv_sec;
-	result->tv_usec = x->tv_usec - y->tv_usec;
-
-	/* Return 1 if result is negative. */
-	return x->tv_sec < y->tv_sec;
-}
-
-__inline__ void ltn_histogram_reset(struct ltn_histogram_s *ctx)
+static inline void ltn_histogram_reset(struct ltn_histogram_s *ctx)
 {
 	memset(ctx->buckets, 0, sizeof(struct ltn_histogram_bucket_s) * ctx->bucketCount);
 	gettimeofday(&ctx->intervalLast, NULL);
@@ -179,14 +148,14 @@ __inline__ void ltn_histogram_reset(struct ltn_histogram_s *ctx)
 	ctx->totalCount = 0;
 }
 
-static __inline__ void ltn_histogram_free(struct ltn_histogram_s *ctx)
+static inline void ltn_histogram_free(struct ltn_histogram_s *ctx)
 {
 	if (ctx->buckets)
 		free(ctx->buckets);
 	free(ctx);
 }
 
-static __inline__ int ltn_histogram_alloc(struct ltn_histogram_s **handle, const char *name, uint64_t minValMs, uint64_t maxValMs)
+static inline int ltn_histogram_alloc(struct ltn_histogram_s **handle, const char *name, uint64_t minValMs, uint64_t maxValMs)
 {
 	*handle = NULL;
 
@@ -219,12 +188,12 @@ static __inline__ int ltn_histogram_alloc(struct ltn_histogram_s **handle, const
 	return 0;
 }
 
-static __inline__ int ltn_histogram_alloc_video_defaults(struct ltn_histogram_s **handle, const char *name)
+static inline int ltn_histogram_alloc_video_defaults(struct ltn_histogram_s **handle, const char *name)
 {
 	return ltn_histogram_alloc(handle, name, 0, 16 * 1000);
 }
 
-static __inline__ int ltn_histogram_interval_update_with_value(struct ltn_histogram_s *ctx, uint32_t diffMs)
+static inline int ltn_histogram_interval_update_with_value(struct ltn_histogram_s *ctx, uint32_t diffMs)
 {
 	if ((diffMs < ctx->minValMs) || (diffMs > ctx->maxValMs)) {
 		ctx->bucketMissCount++;
@@ -242,14 +211,12 @@ static __inline__ int ltn_histogram_interval_update_with_value(struct ltn_histog
 	return diffMs;
 }
 
-static __inline__ int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
+static inline int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);
 
-	struct timeval r;
-	ltn_histogram_timeval_subtract(&r, &now, &ctx->intervalLast);
-	uint32_t diffMs = ltn_histogram_timeval_to_ms(&r);
+	uint32_t diffMs = ltn_timeval_subtract_ms(&now, &ctx->intervalLast);
 
 	ctx->intervalLast = now; /* Implicit struct copy. */
 
@@ -266,7 +233,7 @@ static __inline__ int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
 	return diffMs;
 }
 
-static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_histogram_s *ctx, unsigned int seconds)
+static inline void ltn_histogram_interval_print_buf(char **buf, struct ltn_histogram_s *ctx, unsigned int seconds)
 {
 	unsigned int blen = 4096;
 
@@ -281,9 +248,7 @@ static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_h
 		struct timeval now;
 		gettimeofday(&now, NULL);
 
-		struct timeval r;
-		ltn_histogram_timeval_subtract(&r, &now, &ctx->printLast);
-		uint32_t diffMs = ltn_histogram_timeval_to_ms(&r);
+		uint32_t diffMs = ltn_timeval_subtract_ms(&now, &ctx->printLast);
 
 		if (diffMs < (seconds * 1000))
 			return;
@@ -338,15 +303,13 @@ static __inline__ void ltn_histogram_interval_print_buf(char **buf, struct ltn_h
 	*buf = p;
 }
 
-static __inline__ void ltn_histogram_interval_print(int fd, struct ltn_histogram_s *ctx, unsigned int seconds)
+static inline void ltn_histogram_interval_print(int fd, struct ltn_histogram_s *ctx, unsigned int seconds)
 {
 	if (seconds) {
 		struct timeval now;
 		gettimeofday(&now, NULL);
 
-		struct timeval r;
-		ltn_histogram_timeval_subtract(&r, &now, &ctx->printLast);
-		uint32_t diffMs = ltn_histogram_timeval_to_ms(&r);
+		uint32_t diffMs = ltn_timeval_subtract_ms(&now, &ctx->printLast);
 
 		if (diffMs < (seconds * 1000))
 			return;
@@ -394,15 +357,13 @@ static __inline__ void ltn_histogram_interval_print(int fd, struct ltn_histogram
 		ctx->minValMs, ctx->maxValMs);
 }
 
-static __inline__ void ltn_histogram_summary_print(int fd, struct ltn_histogram_s *ctx, unsigned int seconds, unsigned int bucketSizeMs)
+static inline void ltn_histogram_summary_print(int fd, struct ltn_histogram_s *ctx, unsigned int seconds, unsigned int bucketSizeMs)
 {
 	if (seconds) {
 		struct timeval now;
 		gettimeofday(&now, NULL);
 
-		struct timeval r;
-		ltn_histogram_timeval_subtract(&r, &now, &ctx->printSummaryLast);
-		uint32_t diffMs = ltn_histogram_timeval_to_ms(&r);
+		uint32_t diffMs = ltn_timeval_subtract_ms(&now, &ctx->printSummaryLast);
 
 		if (diffMs < (seconds * 1000))
 			return;
@@ -436,31 +397,28 @@ static __inline__ void ltn_histogram_summary_print(int fd, struct ltn_histogram_
 }
 
 
-__inline__ static void ltn_histogram_cumulative_initialize(struct ltn_histogram_s *ctx)
+static inline void ltn_histogram_cumulative_initialize(struct ltn_histogram_s *ctx)
 {
 	ctx->cumulativeMs = 0;
 }
 
-__inline__ static void ltn_histogram_cumulative_begin(struct ltn_histogram_s *ctx)
+static inline void ltn_histogram_cumulative_begin(struct ltn_histogram_s *ctx)
 {
 	gettimeofday(&ctx->cumulativeLast, 0);
 }
 
-__inline__ static uint64_t ltn_histogram_cumulative_end(struct ltn_histogram_s *ctx)
+static inline uint64_t ltn_histogram_cumulative_end(struct ltn_histogram_s *ctx)
 {
 	struct timeval now;
 	gettimeofday(&now, 0);
 
-	struct timeval r;
-	ltn_histogram_timeval_subtract(&r, &now, &ctx->cumulativeLast);
-
-	uint64_t val = ltn_histogram_timeval_to_ms(&r);
+	uint64_t val = ltn_timeval_subtract_ms(&now, &ctx->cumulativeLast);
 	ctx->cumulativeMs += val;
 
 	return val;
 }
 
-__inline__ static uint64_t ltn_histogram_cumulative_finalize(struct ltn_histogram_s *ctx)
+static inline uint64_t ltn_histogram_cumulative_finalize(struct ltn_histogram_s *ctx)
 {
 	/* Write ctx->cumulativeMs into the buckets. */
 	if ((ctx->cumulativeMs < ctx->minValMs) || (ctx->cumulativeMs > ctx->maxValMs)) {
@@ -475,20 +433,17 @@ __inline__ static uint64_t ltn_histogram_cumulative_finalize(struct ltn_histogra
 	return ctx->cumulativeMs;
 }
 
-__inline__ static void ltn_histogram_sample_begin(struct ltn_histogram_s *ctx)
+static inline void ltn_histogram_sample_begin(struct ltn_histogram_s *ctx)
 {
 	gettimeofday(&ctx->sampleLast, 0);
 }
 
-__inline__ static uint64_t ltn_histogram_sample_end(struct ltn_histogram_s *ctx)
+static inline uint64_t ltn_histogram_sample_end(struct ltn_histogram_s *ctx)
 {
 	struct timeval now;
 	gettimeofday(&now, 0);
 
-	struct timeval r;
-	ltn_histogram_timeval_subtract(&r, &now, &ctx->sampleLast);
-
-	ctx->sampleMs = ltn_histogram_timeval_to_ms(&r);
+	ctx->sampleMs = ltn_timeval_subtract_ms(&now, &ctx->sampleLast);
 
 	/* Write ctx->sampleMs into the buckets. */
 	if ((ctx->sampleMs < ctx->minValMs) || (ctx->sampleMs > ctx->maxValMs)) {

@@ -139,7 +139,7 @@ static int _item_publish(struct kplatform_ctx_s *ctx, struct kafka_item_s *item)
 {
 	if (rd_kafka_produce(ctx->rkt, RD_KAFKA_PARTITION_UA, RD_KAFKA_MSG_F_COPY, item->buf, item->lengthBytes, NULL, 0, item) == -1) {
 		printf("BAD!\n");
-		fprintf(stderr, "Failed to produce to topic %s: %s\n", ctx->topicName, rd_kafka_err2str(rd_kafka_errno2err(errno)));
+		fprintf(stderr, "Failed to produce to topic %s: %s\n", ctx->topicName, rd_kafka_err2str(rd_kafka_last_error()));
 		return -1;
 	}
 	

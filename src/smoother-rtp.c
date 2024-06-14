@@ -25,6 +25,7 @@ struct smoother_rtp_item_s
 	int            pcrDidReset; /* Boolean */
 };
 
+#if LOCAL_DEBUG
 static void itemPrint(struct smoother_rtp_item_s *item)
 {
 	printf("seqno %" PRIu64, item->seqno);
@@ -34,6 +35,7 @@ static void itemPrint(struct smoother_rtp_item_s *item)
 	printf(" tsComputed %d", item->tsComputed);
 	printf(" pcr %" PRIi64 "  pcrDidReset %d\n", item->pcrdata.pcr, item->pcrDidReset);
 }
+#endif
 
 /* TODO: Share this with the PCR smoother */
 /* byte_array.... ---------- */
@@ -84,10 +86,12 @@ static void byte_array_trim(struct byte_array_s *ba, int lengthBytes)
 	ba->lengthBytes -= lengthBytes;
 }
 
+#if 0
 static const uint8_t *byte_array_addr(struct byte_array_s *ba)
 {
 	return ba->buf;
 }
+#endif
 /* byte_array.... ---------- */
 
 struct smoother_rtp_context_s
@@ -154,20 +158,20 @@ static uint64_t getScheduledOutputuS(struct smoother_rtp_context_s *ctx, int64_t
 	return scheduledTimeuS;
 }
 
-__inline__ uint64_t makeTimestampFromTimeval(struct timeval *ts)
+static inline uint64_t makeTimestampFromTimeval(struct timeval *ts)
 {
 	uint64_t t = ((int64_t)ts->tv_sec * 1000000LL) + ts->tv_usec;
 	return t;
 }
 
-__inline__ uint64_t makeTimestampFromNow()
+static inline uint64_t makeTimestampFromNow()
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);
 	return makeTimestampFromTimeval(&now);
 }
 
-__inline__ uint64_t makeTimestampFrom1SecondAgo()
+static inline uint64_t makeTimestampFrom1SecondAgo()
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);
@@ -175,7 +179,7 @@ __inline__ uint64_t makeTimestampFrom1SecondAgo()
 	return makeTimestampFromTimeval(&now);
 }
 
-__inline__ uint64_t makeTimestampFrom2SecondAgo()
+static inline uint64_t makeTimestampFrom2SecondAgo()
 {
 	struct timeval now;
 	gettimeofday(&now, NULL);

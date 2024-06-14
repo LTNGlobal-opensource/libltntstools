@@ -158,7 +158,7 @@ struct h264_slice_counter_s
 	struct h264_slice_data_s slice[MAX_H264_SLICE_TYPES];
 
 	int nextHistoryPos;
-    char sliceHistory[H264_SLICE_COUNTER_HISTORY_LENGTH];
+	char sliceHistory[H264_SLICE_COUNTER_HISTORY_LENGTH + 1];
 };
 
 void h264_slice_counter_reset(void *ctx)
@@ -223,7 +223,7 @@ int h264_nal_get_slice_type(const struct ltn_nal_headers_s *hdr, char *sliceType
 			get_ue_golomb(&gb); /* first_mb_in_slice */
 			int slice_type = get_ue_golomb(&gb);
 			if (slice_type < MAX_H264_SLICE_TYPES) {
-				sprintf(sliceType, h264_slice_name_ascii(slice_type));
+				strcpy(sliceType, h264_slice_name_ascii(slice_type));
 			} else {
 				/* Malformed stream, not a video stream probably.
 					* in 0x2000 mode we catch audio using this filter
