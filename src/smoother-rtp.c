@@ -67,14 +67,17 @@ static void byte_array_free(struct byte_array_s *ba)
 
 static int byte_array_append(struct byte_array_s *ba, const uint8_t *buf, int lengthBytes)
 {
-	if (ba->lengthBytes + lengthBytes > ba->maxLengthBytes) {
-		ba->buf = realloc(ba->buf, ba->lengthBytes + lengthBytes);
-		ba->maxLengthBytes += lengthBytes;
+	int newLengthBytes = ba->lengthBytes + lengthBytes;
+
+	if (newLengthBytes > ba->maxLengthBytes) {
+		/* XXX: consider exponential reallocation */
+		ba->buf = realloc(ba->buf, newLengthBytes);
+		ba->maxLengthBytes = newLengthBytes;
 	}
 	memcpy(ba->buf + ba->lengthBytes, buf, lengthBytes);
-	ba->lengthBytes += lengthBytes;
+	ba->lengthBytes = newLengthBytes;
 
-	return lengthBytes;
+	return newLengthBytes;
 }
 
 static void byte_array_trim(struct byte_array_s *ba, int lengthBytes)
