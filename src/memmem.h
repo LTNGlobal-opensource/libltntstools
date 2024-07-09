@@ -32,7 +32,7 @@
  */
 #include <string.h>
 
-static void *memmem(const void *haystack, size_t n, const void *needle, size_t m)
+static void *ltn_memmem(const void *haystack, size_t n, const void *needle, size_t m)
 {
     if (m > n || !m || !n)
         return NULL;
