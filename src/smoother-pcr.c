@@ -570,152 +570,154 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	/* append all payload into a large buffer */
 	byte_array_append(&ctx->ba, buf, lengthBytes);
 
-next_interval:
-	/* Search this buffer for any PCRs */
-	struct ltntstools_pcr_position_s *array = NULL;
-	int arrayLength = 0;
-	int r = ltntstools_queryPCRs(ctx->ba.buf, ctx->ba.lengthBytes, 0, &array, &arrayLength);
-	if (r < 0)
-		return 0;
+	int pcrCount;
 
-	/* Find the first two PCRs for the user preferred PID, skip any other pids/pcrs */
-	struct ltntstools_pcr_position_s *pcr[2] = { 0 };
+	do {
+		/* Search this buffer for any PCRs */
+		struct ltntstools_pcr_position_s *array = NULL;
+		int arrayLength = 0;
+		int r = ltntstools_queryPCRs(ctx->ba.buf, ctx->ba.lengthBytes, 0, &array, &arrayLength);
+		if (r < 0)
+			return 0;
 
-	int pcrCount = 0;
-	for (int i = 0; i < arrayLength; i++) {
-		struct ltntstools_pcr_position_s *e = &array[i];
-		if (e->pid == ctx->pcrPID) {
-			pcrCount++;
-			if (pcrCount == 1 && pcr[0] == NULL)
-				pcr[0] = e;
-			if (pcrCount == 2 && pcr[1] == NULL)
-				pcr[1] = e;
+		/* Find the first two PCRs for the user preferred PID, skip any other pids/pcrs */
+		struct ltntstools_pcr_position_s *pcr[2] = { 0 };
+		pcrCount = 0;
+
+		for (int i = 0; i < arrayLength; i++) {
+			struct ltntstools_pcr_position_s *e = &array[i];
+			if (e->pid == ctx->pcrPID) {
+				pcrCount++;
+				if (pcrCount == 1 && pcr[0] == NULL)
+					pcr[0] = e;
+				if (pcrCount == 2 && pcr[1] == NULL)
+					pcr[1] = e;
+			}
+			/* Count up to a third PCR, in case we need to handle multiple intervals */
+			if (pcrCount == 3)
+				break;
 		}
-		/* Count up to a third PCR, in case we need to handle multiple intervals */
-		if (pcrCount == 3)
-			break;
-	}
 
-	if (pcrCount > 0 && ctx->pcrFirst == -1) {
+		if (pcrCount > 0 && ctx->pcrFirst == -1) {
 #if LOCAL_DEBUG
-		printf("ctx->pcrFirst    was    %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
-			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
+			printf("ctx->pcrFirst    was    %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
+				ctx->pcrFirst, ctx->walltimeFirstPCRuS);
 #endif
-		ctx->pcrFirst = pcr[0]->pcr;
-		ctx->walltimeFirstPCRuS = makeTimestampFromNow();
+			ctx->pcrFirst = pcr[0]->pcr;
+			ctx->walltimeFirstPCRuS = makeTimestampFromNow();
 #if LOCAL_DEBUG
-		printf("ctx->pcrFirst reset to %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
-			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
+			printf("ctx->pcrFirst reset to %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
+				ctx->pcrFirst, ctx->walltimeFirstPCRuS);
 #endif
-	}
+		}
 
-	/* We need atleast two PCRs for interval and timing calculations */
-	if (pcrCount < 2) {
-		/* Bail out, we'll try again later when more packets are available */
+		/* We need atleast two PCRs for interval and timing calculations */
+		if (pcrCount < 2) {
+			/* Bail out, we'll try again later when more packets are available */
+			free(array);
+			return 0;
+		}
+
+		/* Amount of payload between the first two consecutive PCRs */
+		int byteCount = (pcr[1]->offset - pcr[0]->offset);
+
+		int pktCount = byteCount / 188;
+		int64_t pcrIntervalPerPacketTicks = ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) / pktCount;
+
+		if (ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) > (15 * 27000000)) {
+			printf("Detected significant pcr jump:\n");
+			if (pcr[0]->pcr < pcr[1]->pcr) {
+				printf("  - forwards\n");
+				printf("  - b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
+				printf("  - e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
+			}
+			if (pcr[0]->pcr > pcr[1]->pcr) {
+				printf("  - backwards\n");
+				printf("  - b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
+				printf("  - e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
+			}
+
+	//		_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
+
+			ctx->didPcrReset = 1;
+
+			/* Fixup the pcrIntervalPerPacketTicks and preset the reset the internal walltime and other pcr clocks */
+			printf("Auto-correcting PCR schedule due to PCR timewrap. ctx->pcrIntervalPerPacketTicks %" PRIi64 " to %" PRIi64 "\n",
+				pcrIntervalPerPacketTicks, ctx->pcrIntervalPerPacketTicksLast);
+			pcrIntervalPerPacketTicks = ctx->pcrIntervalPerPacketTicksLast;
+		}
+
+		ctx->measuredLatencyMs = ltntstools_scr_diff(ctx->pcrHead, ctx->pcrTail) / 27000;
+#if LOCAL_DEBUG
+		{
+			/* Dump the first and second PCR we found. */
+			printf("b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
+			printf("e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
+			//printf("pcrHead %" PRIi64 " pcrTail %" PRIi64 "\n", ctx->pcrHead, ctx->pcrTail);
+			printf("pcrIntervalPerPacketTicks = %" PRIi64 ", pktCount %d byteCount %d pcrDidReset %d totalSizeBytes %" PRIi64 ", latency %" PRIi64 " ms\n",
+				pcrIntervalPerPacketTicks, pktCount, byteCount, ctx->didPcrReset, ctx->totalSizeBytes,
+				ctx->measuredLatencyMs);
+		}
+#endif
+
+		/* maintain a count based on the first PCR */
+		int64_t pcrValue = pcr[0]->pcr;
+
+		int idx = 0;
+		int rem = byteCount;
+		while (rem > 0) {
+			int cplen = 7 * 188;
+			if (cplen > rem)
+				cplen = rem;
+
+			smoother_pcr_write2(ctx, &ctx->ba.buf[ pcr[0]->offset + idx ], cplen, pcrValue, pcrIntervalPerPacketTicks);
+
+			/* Update the PCR based on the number of packets we're writing into the smoother, adjusting
+			 * PCR by the correct number of ticks per transport packet.
+			 */
+			pcrValue = ltntstools_scr_add(pcrValue, pcrIntervalPerPacketTicks * (cplen / 188));
+
+			rem -= cplen;
+			idx += cplen;
+		}
+
+		byte_array_trim(&ctx->ba, pcr[1]->offset);
+
 		free(array);
-		return 0;
-	}
+		array = NULL;
 
-	/* Amount of payload between the first two consecutive PCRs */
-	int byteCount = (pcr[1]->offset - pcr[0]->offset);
-
-	int pktCount = byteCount / 188;
-	int64_t pcrIntervalPerPacketTicks = ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) / pktCount;
-
-	if (ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) > (15 * 27000000)) {
-		printf("Detected significant pcr jump:\n");
-		if (pcr[0]->pcr < pcr[1]->pcr) {
-			printf("  - forwards\n");
-			printf("  - b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
-			printf("  - e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
-		}
-		if (pcr[0]->pcr > pcr[1]->pcr) {
-			printf("  - backwards\n");
-			printf("  - b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
-			printf("  - e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
-		}
-
-//		_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
-
-		ctx->didPcrReset = 1;
-
-		/* Fixup the pcrIntervalPerPacketTicks and preset the reset the internal walltime and other pcr clocks */
-		printf("Auto-correcting PCR schedule due to PCR timewrap. ctx->pcrIntervalPerPacketTicks %" PRIi64 " to %" PRIi64 "\n",
-			pcrIntervalPerPacketTicks, ctx->pcrIntervalPerPacketTicksLast);
-		pcrIntervalPerPacketTicks = ctx->pcrIntervalPerPacketTicksLast;
-	}
-
-	ctx->measuredLatencyMs = ltntstools_scr_diff(ctx->pcrHead, ctx->pcrTail) / 27000;
-#if LOCAL_DEBUG
-	{
-		/* Dump the first and second PCR we found. */
-		printf("b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
-		printf("e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
-		//printf("pcrHead %" PRIi64 " pcrTail %" PRIi64 "\n", ctx->pcrHead, ctx->pcrTail);
-		printf("pcrIntervalPerPacketTicks = %" PRIi64 ", pktCount %d byteCount %d pcrDidReset %d totalSizeBytes %" PRIi64 ", latency %" PRIi64 " ms\n",
-			pcrIntervalPerPacketTicks, pktCount, byteCount, ctx->didPcrReset, ctx->totalSizeBytes,
-			ctx->measuredLatencyMs);
-	}
-#endif
-
-	/* maintain a count based on the first PCR */
-	int64_t pcrValue = pcr[0]->pcr;
-
-	int idx = 0;
-	int rem = byteCount;
-	while (rem > 0) {
-		int cplen = 7 * 188;
-		if (cplen > rem)
-			cplen = rem;
-
-		smoother_pcr_write2(ctx, &ctx->ba.buf[ pcr[0]->offset + idx ], cplen, pcrValue, pcrIntervalPerPacketTicks);
-
-		/* Update the PCR based on the number of packets we're writing into the smoother, adjusting
-		 * PCR by the correct number of ticks per transport packet.
+		/* If its been more than 60 seconds, reset the PCR to avoid slow drift over time.
+		 * Also, prevents issues where the pcrFirst value wraps and tick calculations that
+		 * drive scheduled packet output time goes back in time.
 		 */
-		pcrValue = ltntstools_scr_add(pcrValue, pcrIntervalPerPacketTicks * (cplen / 188));
-
-		rem -= cplen;
-		idx += cplen;
-	}
-
-	byte_array_trim(&ctx->ba, pcr[1]->offset);
-
-	free(array);
-	array = NULL;
-
-	/* If its been more than 60 seconds, reset the PCR to avoid slow drift over time.
-	 * Also, prevents issues where the pcrFirst value wraps and tick calculations that
-	 * drive scheduled packet output time goes back in time.
-	 */
-	time_t now = time(NULL);
-	if (now >= ctx->lastPcrResetTime + 60) {
-		ctx->lastPcrResetTime = now;
+		time_t now = time(NULL);
+		if (now >= ctx->lastPcrResetTime + 60) {
+			ctx->lastPcrResetTime = now;
 #if LOCAL_DEBUG
-		printf("Triggering PCR timebase recalculation\n");
+			printf("Triggering PCR timebase recalculation\n");
 #endif
-		ctx->didPcrReset = 1;
-	}
+			ctx->didPcrReset = 1;
+		}
 
-	/* If the PCR resets, we need to track some pcr interval state so we can properly
-	 * schedule out the remaining packets from a good PCR, without bursting, prior
-	 * to restabalishing the timebase for the new PCR, we'll need this value
-	 * to schedule, preserve it.
+		/* If the PCR resets, we need to track some pcr interval state so we can properly
+		 * schedule out the remaining packets from a good PCR, without bursting, prior
+		 * to restabalishing the timebase for the new PCR, we'll need this value
+		 * to schedule, preserve it.
+		 */
+		ctx->pcrIntervalPerPacketTicksLast = pcrIntervalPerPacketTicks;
+
+		/* And finally, if during this pass we detected a PCR reset, ensure the next
+		 * round of writes resets its internal clocks and goes through a full PCR reset.
+		 */
+		if (ctx->didPcrReset) {
+			ctx->pcrFirst = -1;
+			ctx->didPcrReset = 0;
+		}
+
+	/* We only wrote out until just before the second PCR, so loop if we found more than
+	 * two PCRs in our buffer to handle the next PCR->PCR interval as well.
 	 */
-	ctx->pcrIntervalPerPacketTicksLast = pcrIntervalPerPacketTicks;
-
-	/* And finally, if during this pass we detected a PCR reset, ensure the next
-	 * round of writes resets its internal clocks and goes through a full PCR reset.
-	 */
-	if (ctx->didPcrReset) {
-		ctx->pcrFirst = -1;
-		ctx->didPcrReset = 0;
-	}
-
-	if (pcrCount > 2)
-	    /* We found more than two PCRs in our buffer but only wrote out until just
-	     * before the second PCR. Handle the next PCR->PCR interval as well. */
-	    goto next_interval;
+	} while (pcrCount > 2);
 
 	return 0;
 }
