@@ -132,6 +132,7 @@ struct smoother_pcr_context_s
 	int didPcrReset;
 	time_t lastPcrResetTime;
 	int64_t pcrIntervalPerPacketTicksLast;
+	int64_t pcrIntervalTicksLast;
 
 	int64_t measuredLatencyMs; /* based on first and last PCRs in the list, how much latency do we have? */
 
@@ -142,9 +143,13 @@ struct smoother_pcr_context_s
 /* based on first received pcr, and first received walltime, compute a new walltime
  * for this new input pcr.
  */
-static uint64_t getScheduledOutputuS(struct smoother_pcr_context_s *ctx, int64_t pcr)
+static uint64_t getScheduledOutputuS(struct smoother_pcr_context_s *ctx, int64_t pcr, int64_t pcrIntervalTicks)
 {
 	int64_t ticks = ltntstools_scr_diff(ctx->pcrFirst, pcr);
+
+	/* Reduce by one PCR interval due to the buffering in pcr_smoother_write */
+	ticks -= pcrIntervalTicks;
+
 	uint64_t scheduledTimeuS = ctx->walltimeFirstPCRuS + (ticks / 27);
 
 	/* Add user defined latency */
@@ -474,7 +479,8 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	return 0;
 }
 
-int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, int64_t pcrValue, int64_t pcrIntervalPerPacketTicks)
+int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, int64_t pcrValue,
+	int64_t pcrIntervalPerPacketTicks, int64_t pcrIntervalTicks)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
 
@@ -533,7 +539,7 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 	ctx->pcrTail = item->pcrdata.pcr; /* Cache the last stream PCR */
 
 	/* Figure out when this packet should be scheduled for output */
-	item->scheduled_TSuS = getScheduledOutputuS(ctx, pcrValue);
+	item->scheduled_TSuS = getScheduledOutputuS(ctx, pcrValue, pcrIntervalTicks);
 	item->pcrComputed = 0;
 
 	pthread_mutex_lock(&ctx->listMutex);
@@ -621,9 +627,10 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		int byteCount = (pcr[1]->offset - pcr[0]->offset);
 
 		int pktCount = byteCount / 188;
-		int64_t pcrIntervalPerPacketTicks = ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) / pktCount;
+		int64_t pcrIntervalTicks = ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr);
+		int64_t pcrIntervalPerPacketTicks = pcrIntervalTicks / pktCount;
 
-		if (ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr) > (15 * 27000000)) {
+		if (pcrIntervalTicks > (15 * 27000000)) {
 			printf("Detected significant pcr jump:\n");
 			if (pcr[0]->pcr < pcr[1]->pcr) {
 				printf("  - forwards\n");
@@ -641,9 +648,13 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 			ctx->didPcrReset = 1;
 
 			/* Fixup the pcrIntervalPerPacketTicks and preset the reset the internal walltime and other pcr clocks */
-			printf("Auto-correcting PCR schedule due to PCR timewrap. ctx->pcrIntervalPerPacketTicks %" PRIi64 " to %" PRIi64 "\n",
-				pcrIntervalPerPacketTicks, ctx->pcrIntervalPerPacketTicksLast);
+			printf("Auto-correcting PCR schedule due to PCR timewrap. "
+				"pcrIntervalPerPacketTicks %" PRIi64 " to %" PRIi64 ", "
+				"pcrIntervalTicks %" PRIi64 " to %" PRIi64 "\n",
+				pcrIntervalPerPacketTicks, ctx->pcrIntervalPerPacketTicksLast,
+				pcrIntervalTicks, ctx->pcrIntervalTicksLast);
 			pcrIntervalPerPacketTicks = ctx->pcrIntervalPerPacketTicksLast;
+			pcrIntervalTicks = ctx->pcrIntervalTicksLast;
 		}
 
 		ctx->measuredLatencyMs = ltntstools_scr_diff(ctx->pcrHead, ctx->pcrTail) / 27000;
@@ -669,7 +680,8 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 			if (cplen > rem)
 				cplen = rem;
 
-			smoother_pcr_write2(ctx, &ctx->ba.buf[ pcr[0]->offset + idx ], cplen, pcrValue, pcrIntervalPerPacketTicks);
+			smoother_pcr_write2(ctx, &ctx->ba.buf[ pcr[0]->offset + idx ], cplen, pcrValue,
+				pcrIntervalPerPacketTicks, pcrIntervalTicks);
 
 			/* Update the PCR based on the number of packets we're writing into the smoother, adjusting
 			 * PCR by the correct number of ticks per transport packet.
@@ -704,6 +716,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		 * to schedule, preserve it.
 		 */
 		ctx->pcrIntervalPerPacketTicksLast = pcrIntervalPerPacketTicks;
+		ctx->pcrIntervalTicksLast = pcrIntervalTicks;
 
 		/* And finally, if during this pass we detected a PCR reset, ensure the next
 		 * round of writes resets its internal clocks and goes through a full PCR reset.
