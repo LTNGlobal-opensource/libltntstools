@@ -67,7 +67,7 @@ int ltn_uuid_find(const unsigned char *buf, unsigned int lengthBytes)
 	if (lengthBytes < SEI_TIMESTAMP_PAYLOAD_LENGTH)
 		return -1;
 
-	result = memmem(buf, lengthBytes, ltn_uuid_sei_timestamp, sizeof(ltn_uuid_sei_timestamp));
+	result = ltn_memmem(buf, lengthBytes, ltn_uuid_sei_timestamp, sizeof(ltn_uuid_sei_timestamp));
 	if (result)
 		return (result - (void *)(buf));
 	else
