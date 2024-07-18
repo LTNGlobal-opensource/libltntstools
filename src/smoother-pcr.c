@@ -582,6 +582,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	/* append all payload into a large buffer */
 	byte_array_append(&ctx->ba, buf, lengthBytes);
 
+next_interval:
 	/* Search this buffer for any PCRs */
 	struct ltntstools_pcr_position_s *array = NULL;
 	int arrayLength = 0;
@@ -602,7 +603,8 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 			if (pcrCount == 2 && pcr[1] == NULL)
 				pcr[1] = e;
 		}
-		if (pcrCount == 2)
+		/* Count up to a third PCR, in case we need to handle multiple intervals */
+		if (pcrCount == 3)
 			break;
 	}
 
@@ -677,8 +679,9 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 	}
 
 	byte_array_trim(&ctx->ba, pcr[1]->offset);
-	
+
 	free(array);
+	array = NULL;
 
 	/* If its been more than 60 seconds, reset the PCR to avoid slow drift over time.
 	 * Also, prevents issues where the pcrFirst value wraps and tick calculations that
@@ -707,7 +710,12 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		ctx->pcrFirst = -1;
 		ctx->didPcrReset = 0;
 	}
-	
+
+	if (pcrCount > 2)
+	    /* We found more than two PCRs in our buffer but only wrote out until just
+	     * before the second PCR. Handle the next PCR->PCR interval as well. */
+	    goto next_interval;
+
 	return 0;
 }
 
