@@ -498,8 +498,12 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 	xorg_list_del(&item->list);
 	pthread_mutex_unlock(&ctx->listMutex);
 
+	/* FIXME: Because of the buffering happening in smoother_pcr_write, this
+	 * time is actually off from the real receive time by one PCR interval. */
 	item->received_TSuS = makeTimestampFromNow();
+
 	item->pcrIntervalPerPacketTicks = pcrIntervalPerPacketTicks;
+	item->pcrdata.pcr = pcrValue;
 
 	/* Grow the packet buffer if we really have to */
 	if (item->maxLengthBytes < lengthBytes) {
@@ -509,22 +513,6 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 
 	memcpy(item->buf, buf, lengthBytes);
 	item->lengthBytes = lengthBytes;
-
-	/* PCR found */
-	item->pcrdata.pcr = pcrValue;
-	if (ctx->pcrFirst == -1) {
-#if LOCAL_DEBUG
-		printf("ctx->pcrFirst    was    %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
-			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
-#endif
-		ctx->pcrFirst = item->pcrdata.pcr;
-		ctx->walltimeFirstPCRuS = item->received_TSuS;
-
-#if LOCAL_DEBUG
-		printf("ctx->pcrFirst reset to %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
-			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
-#endif
-	}
 
 	/* Reset number of packets received since the last PCR. */
 	/* We use this along with an estimated input bitrate to calculated a sche duled output time. */
@@ -606,6 +594,19 @@ next_interval:
 		/* Count up to a third PCR, in case we need to handle multiple intervals */
 		if (pcrCount == 3)
 			break;
+	}
+
+	if (pcrCount > 0 && ctx->pcrFirst == -1) {
+#if LOCAL_DEBUG
+		printf("ctx->pcrFirst    was    %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
+			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
+#endif
+		ctx->pcrFirst = pcr[0]->pcr;
+		ctx->walltimeFirstPCRuS = makeTimestampFromNow();
+#if LOCAL_DEBUG
+		printf("ctx->pcrFirst reset to %" PRIi64 ", ctx->walltimeFirstPCRuS %" PRIi64 "\n",
+			ctx->pcrFirst, ctx->walltimeFirstPCRuS);
+#endif
 	}
 
 	/* We need atleast two PCRs for interval and timing calculations */
