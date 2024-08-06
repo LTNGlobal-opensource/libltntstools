@@ -49,6 +49,7 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
 	return 0; /* Success */
 }
 
+/* Remove any bytes leading up to a 00 00 01 pattern, align the ring.  */
 static void _trimRing(struct pes_extractor_s *ctx)
 {
     unsigned char pattern[4] = { 0x00, 0x00, 0x01, ctx->streamId };
