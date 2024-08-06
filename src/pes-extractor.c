@@ -49,29 +49,44 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
 	return 0; /* Success */
 }
 
-/* Remove any bytes leading up to a 00 00 01 pattern, align the ring.  */
 static void _trimRing(struct pes_extractor_s *ctx)
 {
-	unsigned char pattern[4] = { 0x00, 0x00, 0x01, ctx->streamId };
+    unsigned char pattern[4] = { 0x00, 0x00, 0x01, ctx->streamId };
+    int rlen = rb_used(ctx->rb);
+    if (rlen < 4)
+        return;
 
-	int rlen = rb_used(ctx->rb);
-	if (rlen <= 0)
-		return;
+    uint8_t buf[1024]; // Buffer to hold data for pattern search
+    size_t trimmed = 0;
+    size_t chunkSize = sizeof(buf); // Define a chunk size to process
 
-	int count = 0;
-	uint8_t buf[8];
+    while (rlen >= 4) {
+        // Read data in chunks to find the pattern
+        size_t toRead = rlen > chunkSize ? chunkSize : rlen;
+        size_t len = rb_peek(ctx->rb, (char *)buf, toRead);
+        if (len < 4)
+            break;
 
-	while (1) {
-		size_t l = rb_peek(ctx->rb, (char *)&buf[0], 4);
-		if (l != 4)
-			break;
+        int found = 0;
+        for (size_t i = 0; i <= len - 4; i++) {
+            if (memcmp(buf + i, pattern, 4) == 0) {
+                // Found the pattern, discard up to the start of the pattern
+                rb_discard(ctx->rb, i);
+                trimmed += i;
+                found = 1;
+                break;
+            }
+        }
 
-		if (memcmp(pattern, buf, 4) != 0) {
-			rb_discard(ctx->rb, 1);
-			count++;
-		} else
-			break;
-	}
+        if (found)
+            break;
+
+        // Discard all but the last 3 bytes of the chunk to avoid splitting the pattern
+        size_t toDiscard = len > 3 ? len - 3 : len;
+        rb_discard(ctx->rb, toDiscard);
+        trimmed += toDiscard;
+        rlen = rb_used(ctx->rb); // Update rlen with the new ring buffer size
+    }
 }
 
 static int searchReverse(const unsigned char *buf, int lengthBytes, uint8_t streamId)
