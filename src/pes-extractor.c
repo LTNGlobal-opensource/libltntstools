@@ -5,7 +5,6 @@
 #include <libltntstools/ltntstools.h>
 #include "klringbuffer.h"
 #include "klbitstream_readwriter.h"
-#include "memmem.h"
 
 #define LOCAL_DEBUG 0
 
@@ -58,53 +57,36 @@ static void _trimRing(struct pes_extractor_s *ctx)
     if (rlen < 4)
         return;
 
+    uint8_t buf[1024]; // Buffer to hold data for pattern search
     size_t trimmed = 0;
-    uint8_t buf[1024]; // Buffer for peeking data
-    size_t overlap = 3; // Overlap to handle pattern spanning chunks
-    int found = 0;
+    size_t chunkSize = sizeof(buf); // Define a chunk size to process
 
     while (rlen >= 4) {
-        // Determine how much to read in this iteration
-        size_t toRead = (rlen > sizeof(buf)) ? sizeof(buf) : rlen;
+        // Read data in chunks to find the pattern
+        size_t toRead = rlen > chunkSize ? chunkSize : rlen;
         size_t len = rb_peek(ctx->rb, (char *)buf, toRead);
         if (len < 4)
             break;
 
-        // Search for the pattern in the current buffer using memmem
-        const void *pos = ltn_memmem(buf, len, pattern, sizeof(pattern));
-        if (pos) {
-            // Pattern found, calculate offset and discard up to pattern
-            size_t index = (const uint8_t *)pos - buf;
-            rb_discard(ctx->rb, index);
-            trimmed += index;
-            found = 1;
-            break;
-        }
-
-        // If pattern not found, discard up to overlap size to preserve possible pattern start
-        size_t toDiscard = (len > overlap) ? (len - overlap) : len;
-        rb_discard(ctx->rb, toDiscard);
-        trimmed += toDiscard;
-        rlen = rb_used(ctx->rb); // Update remaining data size
-    }
-
-    // Handle remaining unprocessed data (if any)
-    if (!found) {
-        size_t len = rb_used(ctx->rb);
-        if (len >= 4) {
-            // Final check with the last available data
-            rb_peek(ctx->rb, (char *)buf, len);
-            const void *pos = ltn_memmem(buf, len, pattern, sizeof(pattern));
-            if (pos) {
-                size_t index = (const uint8_t *)pos - buf;
-                rb_discard(ctx->rb, index);
-                trimmed += index;
-            } else {
-                // Discard all remaining data if the pattern is not found
-                rb_discard(ctx->rb, len);
-                trimmed += len;
+        int found = 0;
+        for (size_t i = 0; i <= len - 4; i++) {
+            if (memcmp(buf + i, pattern, 4) == 0) {
+                // Found the pattern, discard up to the start of the pattern
+                rb_discard(ctx->rb, i);
+                trimmed += i;
+                found = 1;
+                break;
             }
         }
+
+        if (found)
+            break;
+
+        // Discard all but the last 3 bytes of the chunk to avoid splitting the pattern
+        size_t toDiscard = len > 3 ? len - 3 : len;
+        rb_discard(ctx->rb, toDiscard);
+        trimmed += toDiscard;
+        rlen = rb_used(ctx->rb); // Update rlen with the new ring buffer size
     }
 }
 
