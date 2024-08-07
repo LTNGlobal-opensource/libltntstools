@@ -50,38 +50,38 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
 	return 0; /* Success */
 }
 
-#define TS_PACKET_SIZE 188
-
 /* Remove any bytes leading up to a 00 00 01 pattern, align the ring.  */
 static void _trimRing(struct pes_extractor_s *ctx)
 {
 	unsigned char pattern[4] = {0x00, 0x00, 0x01, ctx->streamId};
-	uint8_t buf[TS_PACKET_SIZE];
-	size_t total_discarded = 0;
-
-	while (rb_used(ctx->rb) >= TS_PACKET_SIZE)
+	int rlen = rb_used(ctx->rb);
+	if (rlen < 4)
+		return;
+	size_t trimmed = 0;
+	uint8_t buf[1024];	// Buffer for peeking data
+	size_t overlap = 3; // Overlap to handle pattern spanning chunks
+	while (rlen >= 4)
 	{
-		size_t len = rb_peek(ctx->rb, (char *)buf, TS_PACKET_SIZE);
-		if (len < TS_PACKET_SIZE)
+		// Determine how much to read in this iteration
+		size_t toRead = (rlen > sizeof(buf)) ? sizeof(buf) : rlen;
+		size_t len = rb_peek(ctx->rb, (char *)buf, toRead);
+		if (len < 4)
 			break;
-
-		const void *match = ltn_memmem(buf, TS_PACKET_SIZE, pattern, sizeof(pattern));
-
-		if (match)
+		// Search for the pattern in the current buffer using memmem
+		const void *pos = ltn_memmem(buf, len, pattern, sizeof(pattern));
+		if (pos)
 		{
-			size_t offset = (const uint8_t *)match - buf;
-			total_discarded += offset;
-			rb_discard(ctx->rb, offset);
+			// Pattern found, calculate offset and discard up to pattern
+			size_t index = (const uint8_t *)pos - buf;
+			rb_discard(ctx->rb, index);
+			trimmed += index;
 			break;
 		}
-
-		rb_discard(ctx->rb, TS_PACKET_SIZE);
-		total_discarded += TS_PACKET_SIZE;
-	}
-
-	if (total_discarded == 0 && rb_used(ctx->rb) > 0)
-	{
-		rb_discard(ctx->rb, rb_used(ctx->rb));
+		// If pattern not found, discard up to overlap size to preserve possible pattern start
+		size_t toDiscard = (len > overlap) ? (len - overlap) : len;
+		rb_discard(ctx->rb, toDiscard);
+		trimmed += toDiscard;
+		rlen = rb_used(ctx->rb); // Update remaining data size
 	}
 }
 
