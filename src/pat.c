@@ -22,7 +22,7 @@
 
 struct ltntstools_pat_s *ltntstools_pat_alloc()
 {
-	struct ltntstools_pat_s *pat = calloc(1, sizeof(*pat));
+	struct ltntstools_pat_s *pat = malloc(sizeof(*pat));
 
 	return pat;
 }
