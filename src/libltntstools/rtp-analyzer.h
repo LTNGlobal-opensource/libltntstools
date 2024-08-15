@@ -98,7 +98,7 @@ struct rtp_frame_position_s
  * @brief       Push a buffer of rtp data into the frameowkr, containing any number of bytes, frame aligned or not.
  * @param[in]   const unsigned char *buf - Array of bytes
  * @param[in]   int lengthBytes - buffer length
- * @param[in]   uint64_t addr - Address or offset of buf[0], which is then counted and returned in the 'offset' array as addr + offset.
+ * @param[in]   uint64_t addr - Address or offset of `buf[0]`, which is then counted and returned in the 'offset' array as addr + offset.
  * @param[in]   uint32_t ssrc - RTP stream srource ID we expect to find in the stream.
  * @param[out]  struct rtp_frame_position_s **array - output array of every RTP frame found.
  * @param[out]  int *arrayLength - number of items in output array.

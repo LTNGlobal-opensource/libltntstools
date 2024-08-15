@@ -42,42 +42,42 @@ struct klqueue_s
 
 /**
  * @brief	    Initialize an existing allocation.
- * @param[in]	struct klqueue_s *q) - Brief description goes here.
+ * @param[in]   struct klqueue_s *q) - Brief description goes here.
  */
 void klqueue_initialize(struct klqueue_s *q);
 
 /**
  * @brief	    Count the number of items on the queue.
- * @param[in]	struct klqueue_s *q - Brief description goes here.
+ * @param[in]   struct klqueue_s *q - Brief description goes here.
  * @return	    number of items on the queue.
  */
 uint64_t klqueue_count(struct klqueue_s *q);
 
 /**
  * @brief	    Check if the queue is empty.
- * @param[in]	struct klqueue_s *q - Brief description goes here.
+ * @param[in]   struct klqueue_s *q - Brief description goes here.
  * @return      Boolean. (empty) True or False.
  */
 int  klqueue_empty(struct klqueue_s *q);
 
 /**
  * @brief	    Delete any items in the queue, prepare to abandon the queue.
- * @param[in]	struct klqueue_s *q - Brief description goes here.
+ * @param[in]   struct klqueue_s *q - Brief description goes here.
  */
 void klqueue_destroy(struct klqueue_s *q);
 
 /**
  * @brief	    Push the ptr 'item' on to the queue.
- * @param[in]	struct klqueue_s *q - Brief description goes here.
- * @param[in]	void *item - Brief description goes here.
+ * @param[in]   struct klqueue_s *q - Brief description goes here.
+ * @param[in]   void *item - Brief description goes here.
  */
 void klqueue_push(struct klqueue_s *q, void *item);
 
 /**
  * @brief	    Blocking call that times out after n period, dequeue an item.
- * @param[in]	struct klqueue_s *q - Brief description goes here.
- * @param[in]	int usec - Brief description goes here.
- * @param[in]	void **item - Brief description goes here.
+ * @param[in]   struct klqueue_s *q - Brief description goes here.
+ * @param[in]   int usec - Brief description goes here.
+ * @param[in]   void **item - Brief description goes here.
  * @return      0 - Success, else < 0 on error.
  */
 int  klqueue_pop_non_blocking(struct klqueue_s *q, int usec, void **item);
