@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = [
+    "libltntstools-sys",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = [
+    "Jan Alexander Steffens (heftig) <jan.steffens@ltnglobal.com>",
+]
+
+[workspace.dependencies]
+anyhow = "1.0.86"
