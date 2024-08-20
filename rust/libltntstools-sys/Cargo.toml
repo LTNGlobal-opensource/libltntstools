@@ -1,0 +1,20 @@
+[package]
+name = "libltntstools-sys"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+links = "ltntstools"
+build = "build.rs"
+
+[dependencies]
+libc = "0.2.155"
+pcap = "2.0.0"
+
+[build-dependencies]
+anyhow.workspace = true
+bindgen = { version = "0.69.4", default-features = false, features = ["runtime"] }
+doxygen-rs = "0.4.2"
+pkg-config = "0.3.30"
+
+[dev-dependencies]
+base64 = "0.22.1"

@@ -57,7 +57,7 @@ void ltntstools_streammodel_free(void *hdl);
  * @param[in]     void *hdl - Previously allocate context handle.
  * @param[in]     const unsigned char *pkt - Buffer of transport packets, 1 or more.
  * @param[in]     int packetCount - Number of packets in the buffer.
- * @param[out     int *complete - Result will contain 0 or 1. When 1, you are entitled to call _query_model()
+ * @param[out]    int *complete - Result will contain 0 or 1. When 1, you are entitled to call _query_model()
  *                                to collect a fully formed PAT object, containing the entire PAT/PMT tree.
  * @return        Number of transport packets processed.
  */

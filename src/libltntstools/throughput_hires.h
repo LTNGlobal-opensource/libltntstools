@@ -33,7 +33,7 @@ extern "C" {
 
 /**
  * @brief       Allocate a framework context capable of accurate measurements over time.
- * @param[out   void **hdl - Handle / context for further use.
+ * @param[out]  void **hdl - Handle / context for further use.
  * @param[in]   int itemsPerSecond - estimated number of items per second you want to measyre. For 
  *                                   example 13,000 UDP frames per second, or 30,000 transport packets
  *                                   per second. This is really a measure of how many times per second you
