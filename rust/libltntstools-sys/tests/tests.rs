@@ -1,6 +1,8 @@
 use libltntstools_sys::*;
 use std::{time};
 use core::ffi::c_int;
+use core::ffi::c_void;
+use std::io::Read;
 
 const UNALIGNED_TS: &[u8] = include_bytes!("unaligned.ts");
 
@@ -71,7 +73,6 @@ fn test_basic_clocks()
 fn test_basic_pid_stats() {
     /* This is a 3.5MB struct, too big for the stack, allocate from the heap */
     use std::alloc::{alloc, dealloc, Layout};
-    use std::io::Read;
 
     unsafe {
         let stats = Layout::new::<stream_statistics_s>();
@@ -86,14 +87,14 @@ fn test_basic_pid_stats() {
         // TODO: absolute path needs fixed.
         let mut file_in = std::fs::File::open("/tmp/demo.ts").unwrap();
         let mut buffer = [0u8; 128 * 188]; /* Stack */
-        let mut processed = 0;
+        //let mut processed = 0;
 
         loop {
             let nbytes = file_in.read(&mut buffer).unwrap();
             if nbytes < buffer.len() {
                 break;
             }
-            processed += nbytes;
+            //processed += nbytes;
             //println!("pid stats: Read {} / {} bytes", nbytes, processed);
 
             let b: u32 = nbytes.try_into().unwrap();
@@ -121,7 +122,6 @@ fn test_basic_pid_stats() {
 fn test_basic_stream_model()
 {
     let mut handle = std::ptr::null_mut();
-    use std::io::Read;
 
     let _result = unsafe {
         streammodel_alloc(&mut handle as _, std::ptr::null_mut());
@@ -130,7 +130,7 @@ fn test_basic_stream_model()
     // TODO: absolute path needs fixed.
     let mut file_in = std::fs::File::open("/tmp/demo.ts").unwrap();
     let mut buffer = [0u8; 128 * 188];
-    let mut processed = 0;
+    //let mut processed = 0;
 
     let mut val: i32 = 0;
     let val_ptr = &mut val as *mut c_int;
@@ -139,8 +139,8 @@ fn test_basic_stream_model()
         if nbytes < buffer.len() {
             break;
         }
-        processed += nbytes;
-        println!("StreamModel - Read {} / {} bytes", nbytes, processed);
+        //processed += nbytes;
+        //println!("StreamModel - Read {} / {} bytes", nbytes, processed);
 
         let b: i32 = nbytes.try_into().unwrap();
 
@@ -163,4 +163,60 @@ fn test_basic_stream_model()
 
     assert!(val == 1);
 
+}
+
+pub extern "C" fn basic_pe_callback(_user_context: *mut c_void, pes: *mut ltn_pes_packet_s)
+{
+    unsafe {
+        
+        //println!("PTS = {}", (*pes).PTS);
+        //let s: i8 = 0;
+        //ltn_pes_packet_dump(pes, &s);
+
+        match (*pes).PTS {
+        3591437680 => (),
+        3591441280 => (),
+        3591444880 => (),
+        3591448480 => (),
+        3591452080 => (),
+        _ => assert!(false),
+        };
+        
+        ltn_pes_packet_free(pes);
+    };
+}
+
+#[test]
+fn test_basic_pes_extractor()
+{
+    let mut handle = std::ptr::null_mut();
+
+    let _result = unsafe {
+        pes_extractor_alloc(&mut handle as _, 0x31, 0xe0, Some(basic_pe_callback), std::ptr::null_mut());
+    };
+
+    // TODO: absolute path needs fixed.
+    let mut file_in = std::fs::File::open("/tmp/demo.ts").unwrap();
+    let mut buffer = [0u8; 128 * 188];
+    //let mut processed = 0;
+
+    loop {
+        let nbytes = file_in.read(&mut buffer).unwrap();
+        if nbytes < buffer.len() {
+            break;
+        }
+        //processed += nbytes;
+        //println!("pes_extractor - Read {} / {} bytes", nbytes, processed);
+
+        let b: i32 = nbytes.try_into().unwrap();
+
+        unsafe {
+            pes_extractor_write(handle, &buffer[0], b / 188);
+        }
+
+    };
+
+    unsafe {
+        pes_extractor_free(handle);
+    };
 }
