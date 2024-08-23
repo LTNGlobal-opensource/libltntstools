@@ -72,11 +72,16 @@ fn test_basic_clocks()
 #[test]
 fn test_basic_pid_stats() {
     /* This is a 3.5MB struct, too big for the stack, allocate from the heap */
-    use std::alloc::{alloc, dealloc, Layout};
+    //use std::alloc::{alloc, dealloc, Layout};
 
     unsafe {
-        let stats = Layout::new::<stream_statistics_s>();
-        let stats_ptr = alloc(stats) as *mut stream_statistics_s;
+        let mut stats = {
+            let stats_layout = std::alloc::Layout::new::<stream_statistics_s>();
+            let stats_ptr = std::alloc::alloc(stats_layout);
+            std::ptr::write_bytes(stats_ptr, 0, stats_layout.size());
+            Box::from_raw(stats_ptr as *mut stream_statistics_s)
+        };
+        let stats_ptr = stats.as_mut();
 
         (*stats_ptr).packetCount = 5;
         println!("A. stats.packetCount = {}", (*stats_ptr).packetCount);
@@ -133,7 +138,6 @@ fn test_basic_stream_model()
     //let mut processed = 0;
 
     let mut val: i32 = 0;
-    let val_ptr = &mut val as *mut c_int;
     loop {
         let nbytes = file_in.read(&mut buffer).unwrap();
         if nbytes < buffer.len() {
@@ -145,6 +149,7 @@ fn test_basic_stream_model()
         let b: i32 = nbytes.try_into().unwrap();
 
         unsafe {
+            let val_ptr = &mut val as *mut c_int;
             streammodel_write(handle, &buffer[0], b / 188, val_ptr);
             if val == 1 {
                 let mut pat = std::ptr::null_mut();
