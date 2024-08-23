@@ -1,6 +1,12 @@
 use anyhow::{ensure, Context, Result as Fallible};
 use bindgen::callbacks::ParseCallbacks;
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    ffi::{OsStr, OsString},
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Debug)]
 struct Callbacks;
@@ -27,30 +33,181 @@ impl ParseCallbacks for Callbacks {
     }
 }
 
+fn prepend_pkg_config_path(path: &Path) -> Fallible<()> {
+    let pc_path = env::var_os("PKG_CONFIG_PATH")
+        .map(|s| env::join_paths(Some(path.into()).into_iter().chain(env::split_paths(&s))))
+        .transpose()
+        .context("Bad PKG_CONFIG_PATH")?
+        .unwrap_or_else(|| path.into());
+
+    // SAFETY: This is only safe in a single-threaded program.
+    unsafe { env::set_var("PKG_CONFIG_PATH", pc_path) };
+    Ok(())
+}
+
+fn run_autoreconf(dir: &Path) -> Fallible<()> {
+    if dir.join("configure").exists() {
+        println!(
+            "{} is already bootstrapped, skipping autoreconf",
+            dir.display(),
+        );
+        return Ok(());
+    }
+
+    let status = Command::new("autoreconf")
+        .arg("-fvi")
+        .current_dir(dir)
+        .status()
+        .with_context(|| format!("Failed to autoreconf {}", dir.display()))?;
+
+    ensure!(
+        status.success(),
+        "Failed to autoreconf in {}; exit status {}",
+        dir.display(),
+        status,
+    );
+    Ok(())
+}
+
+fn run_configure<F>(srcdir: &Path, builddir: &Path, f: F) -> Fallible<()>
+where
+    F: FnOnce(&mut Command) -> Fallible<()>,
+{
+    if builddir.join("Makefile").exists() {
+        println!(
+            "{} is already configured, skipping configure",
+            builddir.display(),
+        );
+        return Ok(());
+    }
+
+    fs::create_dir_all(builddir)
+        .with_context(|| format!("Failed to create {}", builddir.display()))?;
+
+    let mut configure = Command::new(srcdir.join("configure"));
+    configure.current_dir(builddir);
+
+    f(&mut configure)?;
+
+    let status = configure.status().with_context(|| {
+        format!(
+            "Failed to configure {} in {}",
+            srcdir.display(),
+            builddir.display()
+        )
+    })?;
+
+    ensure!(
+        status.success(),
+        "Failed to configure {} in {}; exit status {}",
+        srcdir.display(),
+        builddir.display(),
+        status,
+    );
+    Ok(())
+}
+
+fn run_make(dir: &Path, target: &str) -> Fallible<()> {
+    let mut make = Command::new("make");
+
+    if let Ok(jobs) = env::var("NUM_JOBS") {
+        make.env("MAKEFLAGS", &format!("-j{jobs}"));
+    }
+
+    let status = make
+        .arg(target)
+        .current_dir(dir)
+        .status()
+        .with_context(|| format!("Failed to make {} in {}", target, dir.display()))?;
+
+    ensure!(
+        status.success(),
+        "Failed to make {} in {}; exit status {}",
+        target,
+        dir.display(),
+        status,
+    );
+    Ok(())
+}
+
+fn create_canonical_dir(path: &Path) -> Fallible<PathBuf> {
+    fs::create_dir_all(path)?;
+    Ok(path.canonicalize()?)
+}
+
 fn main() -> Fallible<()> {
     let out_dir: PathBuf = env::var_os("OUT_DIR").context("OUT_DIR is missing")?.into();
+    let include_dir = create_canonical_dir(&out_dir.join("include"))?;
+    let lib_dir = create_canonical_dir(&out_dir.join("lib"))?;
 
-    let target_root = env::current_dir()
-        .context("Failed to get current directory")?
-        .join("../../../target-root")
-        .canonicalize()
-        .context("Failed to find target root")?;
-    ensure!(target_root.is_dir(), "{target_root:?} is not a directory");
+    let srcdir = env::current_dir()?.canonicalize()?;
+    let builddir = create_canonical_dir(&out_dir.join("build"))?;
 
-    let include_dir = target_root
-        .join("usr/include")
-        .canonicalize()
-        .context("Target root has no include dir")?;
+    let libdvbpsi_srcdir = srcdir.join("libdvbpsi");
+    run_autoreconf(&libdvbpsi_srcdir)?;
 
-    let lib_dir = target_root
-        .join("usr/lib")
-        .canonicalize()
-        .context("Target root has no lib dir")?;
+    let libdvbpsi_builddir = builddir.join("libdvbpsi");
+    run_configure(&libdvbpsi_srcdir, &libdvbpsi_builddir, |configure| {
+        configure
+            .arg("--prefix")
+            .arg(&out_dir)
+            .args(["--enable-static", "--disable-shared"]);
+        Ok(())
+    })?;
+    run_make(&libdvbpsi_builddir, "install")?;
 
-    let pc_dir = lib_dir
-        .join("pkgconfig")
-        .canonicalize()
-        .context("Target root has no pkgconfig dir")?;
+    let ffmpeg_srcdir = srcdir.join("ffmpeg");
+    let ffmpeg_builddir = builddir.join("ffmpeg");
+    run_configure(&ffmpeg_srcdir, &ffmpeg_builddir, |configure| {
+        configure
+            .arg(
+                [OsStr::new("--prefix="), out_dir.as_os_str()]
+                    .into_iter()
+                    .collect::<OsString>(),
+            )
+            .args(["--enable-static", "--disable-shared"])
+            .arg("--disable-programs")
+            .arg("--disable-iconv")
+            .args([
+                "--disable-audiotoolbox",
+                "--disable-videotoolbox",
+                "--disable-avfoundation",
+            ])
+            .args(["--disable-vaapi", "--disable-vdpau"])
+            .arg("--pkg-config-flags=--static");
+        Ok(())
+    })?;
+    run_make(&ffmpeg_builddir, "install")?;
+
+    let libltntstools_srcdir = srcdir.join("../..");
+    let libltntstools_builddir = builddir.join("libltntstools");
+    run_autoreconf(&libltntstools_srcdir)?;
+    run_configure(
+        &libltntstools_srcdir,
+        &libltntstools_builddir,
+        |configure| {
+            configure
+                .arg("--prefix")
+                .arg(&out_dir)
+                .args(["--enable-static", "--disable-shared"])
+                .env("CFLAGS", {
+                    let mut cflags = env::var_os("CFLAGS").unwrap_or_default();
+                    cflags.push(" -I");
+                    cflags.push(&include_dir);
+                    cflags.push(" -I");
+                    cflags.push(&ffmpeg_srcdir);
+                    cflags
+                })
+                .env("LDFLAGS", {
+                    let mut ldflags = env::var_os("LDFLAGS").unwrap_or_default();
+                    ldflags.push(" -L");
+                    ldflags.push(&lib_dir);
+                    ldflags
+                });
+            Ok(())
+        },
+    )?;
+    run_make(&libltntstools_builddir, "install")?;
 
     let bindings = bindgen::Builder::default()
         .header("wrapper.h")
@@ -93,14 +250,9 @@ fn main() -> Fallible<()> {
     );
     println!("cargo:rustc-link-lib=ltntstools");
 
-    let pc_path = env::var_os("PKG_CONFIG_PATH")
-        .map(|s| env::join_paths(Some(pc_dir.clone()).into_iter().chain(env::split_paths(&s))))
-        .transpose()?
-        .unwrap_or_else(|| pc_dir.into());
-    unsafe { env::set_var("PKG_CONFIG_PATH", pc_path) };
-
-    pkg_config::probe_library("libdvbpsi")?;
+    prepend_pkg_config_path(&lib_dir.join("pkgconfig"))?;
     pkg_config::probe_library("libavformat")?;
+    pkg_config::probe_library("libdvbpsi")?;
 
     Ok(())
 }
