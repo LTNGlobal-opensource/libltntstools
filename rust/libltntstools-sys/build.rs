@@ -45,6 +45,28 @@ fn prepend_pkg_config_path(path: &Path) -> Fallible<()> {
     Ok(())
 }
 
+fn set_default_cflags(include_dir: &Path) {
+    // cc's compiler arguments already include CFLAGS from the environment
+    let compiler = cc::Build::new().warnings(false).get_compiler();
+    let mut cflags = compiler.args().to_vec().join(OsStr::new(" "));
+
+    cflags.push(" -I");
+    cflags.push(include_dir);
+
+    // SAFETY: This is only safe in a single-threaded program.
+    unsafe { env::set_var("CFLAGS", cflags) };
+}
+
+fn set_default_ldflags(lib_dir: &Path) {
+    let mut ldflags = env::var_os("LDFLAGS").unwrap_or_default();
+
+    ldflags.push(" -L");
+    ldflags.push(lib_dir);
+
+    // SAFETY: This is only safe in a single-threaded program.
+    unsafe { env::set_var("LDFLAGS", ldflags) };
+}
+
 fn run_autoreconf(dir: &Path) -> Fallible<()> {
     if dir.join("configure").exists() {
         println!(
@@ -140,6 +162,9 @@ fn main() -> Fallible<()> {
     let include_dir = create_canonical_dir(&out_dir.join("include"))?;
     let lib_dir = create_canonical_dir(&out_dir.join("lib"))?;
 
+    set_default_cflags(&include_dir);
+    set_default_ldflags(&lib_dir);
+
     let srcdir = env::current_dir()?.canonicalize()?;
     let builddir = create_canonical_dir(&out_dir.join("build"))?;
 
@@ -159,12 +184,12 @@ fn main() -> Fallible<()> {
     let ffmpeg_srcdir = srcdir.join("ffmpeg");
     let ffmpeg_builddir = builddir.join("ffmpeg");
     run_configure(&ffmpeg_srcdir, &ffmpeg_builddir, |configure| {
+        let mut prefix_arg = OsString::new();
+        prefix_arg.push("--prefix=");
+        prefix_arg.push(&out_dir);
+
         configure
-            .arg(
-                [OsStr::new("--prefix="), out_dir.as_os_str()]
-                    .into_iter()
-                    .collect::<OsString>(),
-            )
+            .arg(prefix_arg)
             .args(["--enable-static", "--disable-shared"])
             .arg("--disable-programs")
             .arg("--disable-iconv")
@@ -193,16 +218,8 @@ fn main() -> Fallible<()> {
                 .env("CFLAGS", {
                     let mut cflags = env::var_os("CFLAGS").unwrap_or_default();
                     cflags.push(" -I");
-                    cflags.push(&include_dir);
-                    cflags.push(" -I");
                     cflags.push(&ffmpeg_srcdir);
                     cflags
-                })
-                .env("LDFLAGS", {
-                    let mut ldflags = env::var_os("LDFLAGS").unwrap_or_default();
-                    ldflags.push(" -L");
-                    ldflags.push(&lib_dir);
-                    ldflags
                 });
             Ok(())
         },
