@@ -277,6 +277,7 @@ fn main() -> Fallible<()> {
             is_global: false,
         })
         .derive_default(true)
+        .impl_debug(true)
         .parse_callbacks(Box::new(Callbacks::new(&out_dir)))
         .generate()
         .context("Error generating bindings")?;
