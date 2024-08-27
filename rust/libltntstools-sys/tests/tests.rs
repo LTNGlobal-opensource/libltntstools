@@ -7,7 +7,7 @@ use std::{
     ptr, thread, time,
 };
 
-const UNALIGNED_TS: &[u8] = include_bytes!("unaligned.ts");
+const UNALIGNED_TS: &[u8] = include_bytes!("../../test-data/unaligned.ts");
 
 #[test]
 fn test_find_sync_position() {
@@ -77,7 +77,7 @@ fn test_basic_pid_stats() {
         /* This will reset the packetCount and all other struct vars. */
         pid_stats_reset(stats_ptr);
 
-        let mut file_in = File::open("tests/demo.ts").unwrap();
+        let mut file_in = File::open("../test-data/demo.ts").unwrap();
         let mut buffer = [0u8; 128 * 188]; /* Stack */
         //let mut processed = 0;
 
@@ -115,7 +115,7 @@ fn test_basic_stream_model() {
         streammodel_alloc(&mut handle as _, ptr::null_mut());
     }
 
-    let mut file_in = File::open("tests/demo.ts").unwrap();
+    let mut file_in = File::open("../test-data/demo.ts").unwrap();
     let mut buffer = [0u8; 128 * 188];
     //let mut processed = 0;
 
@@ -190,7 +190,7 @@ fn test_basic_pes_extractor() {
         );
     }
 
-    let mut file_in = File::open("tests/demo.ts").unwrap();
+    let mut file_in = File::open("../test-data/demo.ts").unwrap();
     let mut buffer = [0u8; 128 * 188];
     //let mut processed = 0;
 

@@ -7,7 +7,7 @@ links = "ltntstools"
 build = "build.rs"
 
 [dependencies]
-libc = "0.2.155"
+libc.workspace = true
 pcap = "2.0.0"
 
 [build-dependencies]

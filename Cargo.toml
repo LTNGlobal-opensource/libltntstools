@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "rust/libltntstools",
     "rust/libltntstools-sys",
 ]
 
@@ -13,3 +14,4 @@ authors = [
 
 [workspace.dependencies]
 anyhow = "1.0.86"
+libc = "0.2.155"
