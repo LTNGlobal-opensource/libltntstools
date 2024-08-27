@@ -6,3 +6,4 @@
 	path = rust/libltntstools-sys/libdvbpsi
 	url = https://github.com/heftig/libdvbpsi
 	branch = libltntstools
+	ignore = untracked

@@ -9,7 +9,17 @@ use std::{
 };
 
 #[derive(Debug)]
-struct Callbacks;
+struct Callbacks {
+    out_dir: PathBuf,
+}
+
+impl Callbacks {
+    fn new(out_dir: &Path) -> Self {
+        Self {
+            out_dir: out_dir.into(),
+        }
+    }
+}
 
 impl ParseCallbacks for Callbacks {
     fn item_name(&self, original_item_name: &str) -> Option<String> {
@@ -30,6 +40,17 @@ impl ParseCallbacks for Callbacks {
             format!("(doxygen parsing failed)\n\n```doxygen\n{comment}\n```")
         });
         Some(comment)
+    }
+
+    fn include_file(&self, filename: &str) {
+        let filename = Path::new(filename).canonicalize().unwrap();
+        if !filename.starts_with(&self.out_dir) {
+            println!("cargo:rerun-if-changed={}", filename.display());
+        }
+    }
+
+    fn read_env_var(&self, key: &str) {
+        println!("cargo:rerun-if-env-changed={}", key);
     }
 }
 
@@ -256,8 +277,7 @@ fn main() -> Fallible<()> {
             is_global: false,
         })
         .derive_default(true)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .parse_callbacks(Box::new(Callbacks))
+        .parse_callbacks(Box::new(Callbacks::new(&out_dir)))
         .generate()
         .context("Error generating bindings")?;
 
@@ -265,10 +285,7 @@ fn main() -> Fallible<()> {
         .write_to_file(out_dir.join("bindings.rs"))
         .context("Error writing bindings")?;
 
-    println!(
-        "cargo:rustc-link-search=native={}",
-        lib_dir.to_string_lossy(),
-    );
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=ltntstools");
 
     prepend_pkg_config_path(&lib_dir.join("pkgconfig"))?;
