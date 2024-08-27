@@ -1,8 +1,6 @@
+use core::ffi::{c_int, c_void};
 use libltntstools_sys::*;
-use std::{time};
-use core::ffi::c_int;
-use core::ffi::c_void;
-use std::io::Read;
+use std::{io::Read, time};
 
 const UNALIGNED_TS: &[u8] = include_bytes!("unaligned.ts");
 
@@ -12,17 +10,14 @@ fn test_find_sync_position() {
     assert_eq!(position, 155);
 }
 
-pub fn basic_stream_stats_do_something(s: *mut stream_statistics_s)
-{
+pub fn basic_stream_stats_do_something(s: *mut stream_statistics_s) {
     unsafe {
         (*s).packetCount += 1;
     };
 }
 
-fn basic_clocks_init(clk: *mut clock_s)
-{
-    unsafe
-    {
+fn basic_clocks_init(clk: *mut clock_s) {
+    unsafe {
         clock_initialize(clk);
         clock_establish_timebase(clk, 90000);
         clock_establish_wallclock(clk, 1500);
@@ -44,8 +39,7 @@ fn basic_clocks_init(clk: *mut clock_s)
 }
 
 #[test]
-fn test_basic_clocks()
-{
+fn test_basic_clocks() {
     /* Put the clock struct on the stack */
     let mut clk = clock_s::default();
 
@@ -56,7 +50,7 @@ fn test_basic_clocks()
     basic_clocks_init(&mut clk);
 
     /* Yeah, sleep */
-    std::thread::sleep( time::Duration::from_millis(32) );
+    std::thread::sleep(time::Duration::from_millis(32));
 
     /* Update the ticks and check we drifted -15ms from normality. */
     let ms;
@@ -119,13 +113,12 @@ fn test_basic_pid_stats() {
         assert!(pc == 4206);
 
         // TODO: DO we dealloc here?
-//        dealloc(stats_ptr, stats);
+        //        dealloc(stats_ptr, stats);
     };
 }
 
 #[test]
-fn test_basic_stream_model()
-{
+fn test_basic_stream_model() {
     let mut handle = std::ptr::null_mut();
 
     let _result = unsafe {
@@ -162,42 +155,45 @@ fn test_basic_stream_model()
                 break;
             }
         }
-
+    }
+    unsafe {
+        streammodel_free(handle);
     };
-    unsafe { streammodel_free(handle); };
 
     assert!(val == 1);
-
 }
 
-pub extern "C" fn basic_pe_callback(_user_context: *mut c_void, pes: *mut ltn_pes_packet_s)
-{
+pub extern "C" fn basic_pe_callback(_user_context: *mut c_void, pes: *mut ltn_pes_packet_s) {
     unsafe {
-        
         //println!("PTS = {}", (*pes).PTS);
         //let s: i8 = 0;
         //ltn_pes_packet_dump(pes, &s);
 
         match (*pes).PTS {
-        3591437680 => (),
-        3591441280 => (),
-        3591444880 => (),
-        3591448480 => (),
-        3591452080 => (),
-        _ => assert!(false),
+            3591437680 => (),
+            3591441280 => (),
+            3591444880 => (),
+            3591448480 => (),
+            3591452080 => (),
+            _ => assert!(false),
         };
-        
+
         ltn_pes_packet_free(pes);
     };
 }
 
 #[test]
-fn test_basic_pes_extractor()
-{
+fn test_basic_pes_extractor() {
     let mut handle = std::ptr::null_mut();
 
     let _result = unsafe {
-        pes_extractor_alloc(&mut handle as _, 0x31, 0xe0, Some(basic_pe_callback), std::ptr::null_mut());
+        pes_extractor_alloc(
+            &mut handle as _,
+            0x31,
+            0xe0,
+            Some(basic_pe_callback),
+            std::ptr::null_mut(),
+        );
     };
 
     // TODO: absolute path needs fixed.
@@ -218,8 +214,7 @@ fn test_basic_pes_extractor()
         unsafe {
             pes_extractor_write(handle, &buffer[0], b / 188);
         }
-
-    };
+    }
 
     unsafe {
         pes_extractor_free(handle);
