@@ -46,6 +46,10 @@ void ltntstools_clock_establish_wallclock(struct ltntstools_clock_s *clk, int64_
 
 void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
+	/* If the new tick value jumps the clock backwards by more than 50%, assume it naturally wrapped */
+	if (ticks < (clk->currentTime_ticks / 50)) {
+		clk->clockWrapOccurences++;
+	}
 	clk->currentTime_ticks = ticks;
 }
 
@@ -72,7 +76,7 @@ int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk)
 	int64_t elapsedWT = ltn_timeval_subtract_us(&now, &clk->establishedWalltime);
 
 	/* How many timebase ticks have passed since we established time? */
-	int64_t ticks = clk->currentTime_ticks - clk->establishedTime_ticks;
+	int64_t ticks = (clk->clockWrapOccurences * clk->clockWrapValue) + (clk->currentTime_ticks - clk->establishedTime_ticks);
 #if 0
 printf("clk->currentTime_ticks %" PRIi64 ",	clk->establishedTime_ticks %" PRIi64 "\n",
 	clk->currentTime_ticks,
