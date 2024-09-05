@@ -199,19 +199,18 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				char ts[64];
 				strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
 
-				sprintf(alarm->description, "%-40s -  Alarm %s ",
-					ltntstools_tr101290_event_name_ascii(alarm->id),
-					alarm->raised ? " raised" : "cleared");
+				sprintf(alarm->description, "%s",
+					ltntstools_tr101290_event_name_ascii(alarm->id));
 				strcpy(alarm->arg, ev->arg);
 
 				if (strlen(alarm->arg)) {
 					if (alarm->raised) {
-						ltntstools_tr101290_log_append(s, 0, "%s: %s [ %s ]", ts, alarm->description, alarm->arg);
+						ltntstools_tr101290_log_append(s, 0, "%s: %-40s [ %s ] - Alarm  raised", ts, alarm->description, alarm->arg);
 					} else {
-						ltntstools_tr101290_log_append(s, 0, "%s: %s", ts, alarm->description);
+						ltntstools_tr101290_log_append(s, 0, "%s: %-40s - Alarm cleared", ts, alarm->description);
 					}
 				} else {
-					ltntstools_tr101290_log_append(s, 0, "%s: %s", ts, alarm->description);
+					ltntstools_tr101290_log_append(s, 0, "%s: %-40s - %s", ts, alarm->description, alarm->raised ? " raised" : "cleared");
 				}			
 				s->alarmCount++;
 			}
