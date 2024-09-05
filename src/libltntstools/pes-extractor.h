@@ -80,6 +80,22 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
  */
 int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf);
 
+/**
+ * @brief       Ensure that the PES callbacks are always delivered ascending time order.
+ *              The framework will cache a number of PES frames, then feed the callback the oldest
+ *              frame based on assessing the PTS value from a list of (typically) 10 cached items.
+ *              This obviously creates latency in the framework.
+ *              Call this to enable the feature if needed, BEFORE the first _write call.
+ *              Don't attempt to disable it once it's enabled.
+ *              This feature is NOT enabled by default.
+ *              This is helpful if you want to assess metadata attached to video frames which could
+ *              NOT be in temporal order.
+ * @param[in]   void *hdl - Handle / context.
+ * @param[in]   int tf - Boolean. 1) add data 0) don't add data
+ * @return      0 on success, else < 0.
+ */
+int ltntstools_pes_extractor_set_ordered_output(void *hdl, int tf);
+
 #ifdef __cplusplus
 };
 #endif

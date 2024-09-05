@@ -29,3 +29,11 @@
 	* Proprietary Nielsen SDK for one specific tool (disabled when not found).
 	* libdvbpsi
 
+## Rust Library Bindings
+	$ make && make install
+	$ cd rust
+	$ sudo yum install llvm-toolset-7-clang-devel
+	$ sudo yum update cargo
+	$ export LIBCLANG_PATH=/opt/rh/llvm-toolset-7/root/usr/lib64 RUSTFLAGS="-C relocation-model=dynamic-no-pic"
+	$ cargo build
+	$ cargo test -- --nocapture

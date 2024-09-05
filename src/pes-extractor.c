@@ -8,6 +8,7 @@
 #include "memmem.h"
 
 #define LOCAL_DEBUG 0
+#define ORDERED_LIST_DEPTH 10
 
 struct pes_extractor_s
 {
@@ -19,6 +20,24 @@ struct pes_extractor_s
 
 	pes_extractor_callback cb;
 	void *userContext;
+
+	/* Cache N pes packets and emit them in PTS order,
+	 * where the lowest PTS PES from an array is emitted
+	 * when a new PES is added.
+	 *
+	 */
+	int orderedOutput;
+	struct xorg_list listOrdered;
+	pthread_mutex_t listOrderedMutex;
+	int64_t orderedBaseTime;
+	int64_t lastDeliveredPTS;
+};
+
+struct item_s
+{
+	struct xorg_list list;
+	int64_t correctedPTS; /* true 64bit number where when the PTS wrapper we don't truncate, always increasing value. */
+	struct ltn_pes_packet_s *pes;
 };
 
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext)
@@ -31,16 +50,101 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->cb = cb;
 	ctx->userContext = userContext;
 	ctx->skipDataExtraction = 0;
+	ctx->orderedOutput = 0;
+	ctx->orderedBaseTime = 0;
+	xorg_list_init(&ctx->listOrdered);
+	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
+
+	/* initialize a 10 item deep list */
+	for (int i = 0; i < ORDERED_LIST_DEPTH; i++) {
+		struct item_s *item = malloc(sizeof(*item));
+		if (item) {
+			item->correctedPTS = 0;
+			item->pes = NULL;
+			xorg_list_append(&item->list, &ctx->listOrdered);
+		} 
+	}
 
 	*hdl = ctx;
 	return 0;
+}
+
+#if LOCAL_DEBUG
+static void _list_print(struct pes_extractor_s *ctx)
+{
+	struct item_s *e = NULL;
+
+	int n = 0;
+	xorg_list_for_each_entry(e, &ctx->listOrdered, list) {
+		printf("item[%2d] %p correctedPTS %" PRIi64 "\n", n++, e, e->correctedPTS);
+	}
+}
+#endif
+
+static void _list_insert(struct pes_extractor_s *ctx, struct item_s *newitem)
+{
+	struct item_s *e = NULL;
+
+	int didAdd = 0;
+	xorg_list_for_each_entry(e, &ctx->listOrdered, list) {
+		if (newitem->correctedPTS < e->correctedPTS) {
+			__xorg_list_add(&newitem->list, e->list.prev, &e->list);
+			didAdd++;
+			break;
+		}
+		if (e->pes == NULL) {
+			__xorg_list_add(&newitem->list, e->list.prev, &e->list);
+			didAdd++;
+			break;
+		}
+	}
+	if (didAdd == 0) {
+		xorg_list_append(&newitem->list, &ctx->listOrdered);
+	}
+}
+
+static struct item_s * _list_find_oldest(struct pes_extractor_s *ctx)
+{
+	struct item_s *e = NULL;
+	struct item_s *oldest = NULL;
+
+	int cnt = 0;
+	xorg_list_for_each_entry(e, &ctx->listOrdered, list) {
+		cnt++;
+		if (oldest == NULL) {
+			oldest = e;
+		} else {
+			if (e->correctedPTS < oldest->correctedPTS) {
+				oldest = e;
+			}
+		}
+	}
+	return oldest;
 }
 
 void ltntstools_pes_extractor_free(void *hdl)
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 	rb_free(ctx->rb);
+
+	while (!xorg_list_is_empty(&ctx->listOrdered)) {
+		struct item_s *item = xorg_list_first_entry(&ctx->listOrdered, struct item_s, list);
+		if (item->pes) {
+			ltn_pes_packet_free(item->pes);
+			item->pes = NULL;
+			item->correctedPTS = 0;
+		}
+		xorg_list_del(&item->list);
+	}
+
 	free(ctx);
+}
+
+int ltntstools_pes_extractor_set_ordered_output(void *hdl, int tf)
+{
+	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
+	ctx->orderedOutput = tf;
+	return 0; /* Success */
 }
 
 int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
@@ -144,8 +248,38 @@ static int _processRing(struct pes_extractor_s *ctx)
 				pes->rawBuffer = malloc(pes->rawBufferLengthBytes);
 				memcpy(pes->rawBuffer, buf, pes->rawBufferLengthBytes);
 
-				ctx->cb(ctx->userContext, pes);
-				/* User owns the lifetime of the object */
+				if (ctx->orderedOutput) {
+					/* Send the PES's to the callback in the correct temporal order,
+					 * which compensates for B frames.
+					 */
+					struct item_s *item = _list_find_oldest(ctx);
+					if (item) {
+						if (item->pes) {
+							/* User owns the lifetime of the object */
+							ctx->cb(ctx->userContext, item->pes);
+						}
+						item->pes = pes;
+						if ((pes->PTS + (10 * 90000)) < ctx->lastDeliveredPTS) {
+							/* PTS has wrapped. Increment our base so we continue to order the 
+							 * list correctly, regardless.
+							 */
+							ctx->orderedBaseTime += MAX_PTS_VALUE;
+						}
+						item->correctedPTS = ctx->orderedBaseTime + pes->PTS; /* TODO: handle the wrap */
+
+						/* Now put the current parsed item on the list for future callback */
+						xorg_list_del(&item->list);
+						_list_insert(ctx, item);
+#if LOCAL_DEBUG
+						_list_print(ctx);
+#endif
+						ctx->lastDeliveredPTS = pes->PTS;
+					}
+
+				} else {
+					ctx->cb(ctx->userContext, pes);
+					/* User owns the lifetime of the object */
+				}
 			} else
 			if (bitsProcessed) {
 				ltn_pes_packet_dump(pes, "\t");

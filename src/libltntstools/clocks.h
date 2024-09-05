@@ -39,6 +39,7 @@ struct ltntstools_clock_s
 	int64_t ticks_per_second;
 
 	int64_t currentTime_ticks;
+	int64_t clockWrapOccurences; /* Number of times this clock as past us "clockWrapValue" upper limit */
 	int64_t establishedTime_ticks;
 	struct timeval establishedWalltime; /* Walltime when we establish the 'establishedTime' field value. */
 
@@ -109,6 +110,9 @@ int64_t ltntstools_clock_get_ticks(struct ltntstools_clock_s *clk);
 
 /**
  * @brief       Add N ticks to the existing clock context, positive or negative values are supported.
+ *              Don't use this if you want to be reliably tracka  clock against walltime and use the
+ *              ltntstools_clock_get_drift_us() function, Instead, use _set_ticks() followed by
+ *              any calls to _get_drift().
  * @param[in]   struct ltntstools_clock_s *clk - context
  * @param[in]   int64_t ticks - relative value
  */

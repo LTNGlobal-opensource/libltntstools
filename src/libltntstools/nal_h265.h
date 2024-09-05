@@ -22,7 +22,7 @@ struct ltn_nal_headers_s;
  *                CALLER OWNS the array memory allocation, make sure you free it after use.
  * @param[in]     const uint8_t *buf - Buffer of data, possibly containing none or more NAL packets.
  * @param[in]     int lengthBytes - Buffer length in bytes.
- * @param[in/out] struct ltn_nal_headers_s **array - Destination pointer for new array allocation
+ * @param[in,out] struct ltn_nal_headers_s **array - Destination pointer for new array allocation
  * @param[out]    int *arrayLength - number of entries in the array.
  * @return          0 - Success
  * @return        < 0 - Error
@@ -33,7 +33,7 @@ int ltn_nal_h265_find_headers(const uint8_t *buf, int lengthBytes, struct ltn_na
  * @brief         Search buffer for the byte sequence 000001, a NAL header signature.
  * @param[in]     const uint8_t *buf - Buffer of data, possibly containing none or more NAL packets.
  * @param[in]     int lengthBytes - Buffer length in bytes.
- * @param[in/out] int offset - Enumerator. Caller MUST initalize to -1 before first call.
+ * @param[in,out] int offset - Enumerator. Caller MUST initalize to -1 before first call.
  *                             Function will use the contents off offset to enumerate the
  *                             entire buffer over multiple calls.
  * @return          0 - Success
