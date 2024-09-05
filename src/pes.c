@@ -267,6 +267,11 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		pkt->additional_copy_info_flag = klbs_read_bits(bs, 1);
 		pkt->PES_CRC_flag = klbs_read_bits(bs, 1);
 		pkt->PES_extension_flag = klbs_read_bits(bs, 1);
+
+		/* Make sure something exists in the buffer, else abort early */
+		if (klbs_get_byte_count_free(bs) < 1)
+			return bits;
+
 		pkt->PES_header_data_length = klbs_read_bits(bs, 8);
 
 		bits += 72;
@@ -324,6 +329,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			bits += 8;
 
 			if (pkt->PES_private_data_flag == 1) {
+				/* Make sure something exists in the buffer, else abort early */
+				if (klbs_get_byte_count_free(bs) < 16)
+					return bits;
+
 				klbs_read_bits(bs, 32); /* private data */
 				klbs_read_bits(bs, 32); /* private data */
 				klbs_read_bits(bs, 32); /* private data */
@@ -334,6 +343,11 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			if (pkt->pack_header_field_flag == 1) {
 				int len = klbs_read_bits(bs, 8);
 				bits += 8;
+
+				/* Make sure something exists in the buffer, else abort early */
+				if (klbs_get_byte_count_free(bs) < len)
+					return bits;
+
 				for (int i = 0; i < len; i++) {
 					klbs_read_bits(bs, 8); /* No support */
 					bits += 8;
