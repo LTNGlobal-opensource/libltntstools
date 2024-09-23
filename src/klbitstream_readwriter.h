@@ -223,7 +223,7 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 	if (ctx->reg_used == 0) {
 		if (ctx->buflen_used >= ctx->buflen) {
 			fprintf(stderr, "KLBITSTREAM FATAL: %s ctx->buflen_used %d >= ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
-			return 0;
+			//return 0;
 		}
 		ctx->reg = *(ctx->buf + ctx->buflen_used++);
 		ctx->reg_used = 8;
@@ -241,7 +241,7 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 {
 	if (ctx->buflen_used >= ctx->buflen) {
 		fprintf(stderr, "KLBITSTREAM FATAL: %s ctx->buflen_used %d >= ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
-		return 0;
+		//return 0;
 	}
 	return *(ctx->buf + ctx->buflen_used++);
 }
