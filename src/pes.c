@@ -262,6 +262,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	{
 
 		klbs_read_bits(bs, 2); /* reserved */
+		if (bs->error) return -1;  /* Error occurred */
 
 		pkt->PES_scrambling_control = klbs_read_bits(bs, 2);
 		if (bs->error) return -1;  /* Error occurred */

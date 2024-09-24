@@ -248,6 +248,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 				ltn_pes_packet_free(pes);
 				free(buf);
 				rb_empty(ctx->rb); /* Reset ring buffer */
+				fprintf(stderr, "(%s) Error parsing PES packet, resetting ring buffer\n", __func__);
 				return -1;
 			}
 			if (bitsProcessed && ctx->cb) {
