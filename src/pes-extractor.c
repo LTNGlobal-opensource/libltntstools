@@ -243,12 +243,13 @@ static int _processRing(struct pes_extractor_s *ctx)
 			//ssize_t xlen =
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
 			/* check if we got an bs->error, if so reset the buffer, we are full */
-            if (bitsProcessed < 0 || bs.error) {
-                ltn_pes_packet_free(pes);
-                free(buf);
-                rb_empty(ctx->rb);  /* Reset ring buffer */
-                return -1;
-            }
+			if (bitsProcessed < 0 || bs.error)
+			{
+				ltn_pes_packet_free(pes);
+				free(buf);
+				rb_empty(ctx->rb); /* Reset ring buffer */
+				return -1;
+			}
 			if (bitsProcessed && ctx->cb) {
 				
 				pes->rawBufferLengthBytes = rlen - (rlen - offset);
