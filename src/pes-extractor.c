@@ -317,6 +317,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
+	int error = 0;
 	int didOverflow;
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
@@ -345,12 +346,15 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			/* Process any existing data in the ring. */
 			_trimRing(ctx);
 			int res = _processRing(ctx);
-			if (res < 0) {
-                /* Error occurred, reset appending state and ring buffer */
-                ctx->appending = 0;
-                rb_empty(ctx->rb);
-                continue;
-            }
+			if (res < 0)
+			{
+				/* Error occurred, reset appending state and ring buffer */
+				ctx->appending = 0;
+				_trimRing(ctx);
+				rb_empty(ctx->rb);
+				error = 1;
+				break;
+			}
 			ctx->appending = 1;
 
 			/* Now flush the buffer up to the next pes header marker */
@@ -358,7 +362,10 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		}
 
 	}
-
+	/* indicate there was an error writing, may not want to trust the buffer */
+	if (error) {
+		return -1;
+	}
 
 	return packetCount;
 }
