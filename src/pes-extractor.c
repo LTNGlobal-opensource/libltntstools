@@ -249,7 +249,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 				free(buf);
 				rb_empty(ctx->rb); /* Reset ring buffer */
 				fprintf(stderr, "(%s) Error parsing PES packet, resetting ring buffer\n", __func__);
-				return -1;
+				return -2;
 			}
 			if (bitsProcessed && ctx->cb) {
 				
@@ -348,13 +348,14 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			/* Process any existing data in the ring. */
 			_trimRing(ctx);
 			int res = _processRing(ctx);
-			if (res < 0)
+			if (res < -1)
 			{
 				/* Error occurred, reset appending state and ring buffer */
 				ctx->appending = 0;
 				_trimRing(ctx);
 				rb_empty(ctx->rb);
 				error = 1;
+				fprintf(stderr, "(%s) Error processing ring buffer\n", __func__);
 				break;
 			}
 			ctx->appending = 1;
