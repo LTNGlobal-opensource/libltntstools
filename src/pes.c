@@ -56,15 +56,15 @@ static void write33bit_ts(struct klbs_context_s *bs, int64_t value)
 static int64_t read33bit_ts(struct klbs_context_s *bs)
 {
         int64_t a = (uint64_t)klbs_read_bits(bs, 3) << 30;
-        if (klbs_read_bits(bs, 1) != 1)
+        if (bs->error || klbs_read_bits(bs, 1) != 1 || bs->error)
                 return -1;
 
         int64_t b = (uint64_t)klbs_read_bits(bs, 15) << 15;
-        if (klbs_read_bits(bs, 1) != 1)
+        if (bs->error || klbs_read_bits(bs, 1) != 1 || bs->error)
                 return -1;
 
         int64_t c = (uint64_t)klbs_read_bits(bs, 15);
-        if (klbs_read_bits(bs, 1) != 1)
+        if (bs->error || klbs_read_bits(bs, 1) != 1 || bs->error)
                 return -1;
 
 	int64_t ts = a | b | c;
@@ -245,9 +245,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	 * Read the spec, see what's missing and add it.
 	 */
 	pkt->packet_start_code_prefix = klbs_read_bits(bs, 24);
+	if (bs->error) return -1;  /* Error occurred */
 	pkt->stream_id = klbs_read_bits(bs, 8);
+	if (bs->error) return -1;  /* Error occurred */
 	pkt->PES_packet_length = klbs_read_bits(bs, 16);
-
 	if (bs->error) return -1;  /* Error occurred */
 
 	if ((pkt->stream_id != 0xBC /* program_stream_map */) &&
@@ -263,17 +264,29 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		klbs_read_bits(bs, 2); /* reserved */
 
 		pkt->PES_scrambling_control = klbs_read_bits(bs, 2);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->PES_priority = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->data_alignment_indicator = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->copyright = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->original_or_copy = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->PTS_DTS_flags = klbs_read_bits(bs, 2);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->ESCR_flag = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->ES_rate_flag = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->DSM_trick_mode_flag = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->additional_copy_info_flag = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->PES_CRC_flag = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->PES_extension_flag = klbs_read_bits(bs, 1);
+		if (bs->error) return -1;  /* Error occurred */
 		pkt->PES_header_data_length = klbs_read_bits(bs, 8);
 		if (bs->error) return -1;  /* Error occurred */
 
@@ -281,19 +294,22 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 
 		if (pkt->PTS_DTS_flags == 2) {
 			klbs_read_bits(bs, 4); /* 0010 */
-			pkt->PTS = read33bit_ts(bs);
 			if (bs->error) return -1;  /* Error occurred */
+			pkt->PTS = read33bit_ts(bs);
+			if (bs->error || pkt->PTS == -1) return -1;  /* Error occurred */
 			bits += 40;
 		} else
 		if (pkt->PTS_DTS_flags == 3) {
 			klbs_read_bits(bs, 4); /* 0011 */
-			pkt->PTS = read33bit_ts(bs);
 			if (bs->error) return -1;  /* Error occurred */
+			pkt->PTS = read33bit_ts(bs);
+			if (bs->error || pkt->PTS  == -1) return -1;  /* Error occurred */
 			bits += 40;
 
 			klbs_read_bits(bs, 4); /* 0001 */
-			pkt->DTS = read33bit_ts(bs);
 			if (bs->error) return -1;  /* Error occurred */
+			pkt->DTS = read33bit_ts(bs);
+			if (bs->error || pkt->DTS == -1) return -1;  /* Error occurred */
 			bits += 40;
 		}
 
@@ -305,6 +321,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 
 		if (pkt->ES_rate_flag) {
 			klbs_read_bits(bs, 1); /* marker bit */
+			if (bs->error) return -1;  /* Error occurred */
 			pkt->ES_rate_flag = klbs_read_bits(bs, 22);
 			if (bs->error) return -1;  /* Error occurred */
 			klbs_read_bits(bs, 1); /* marker bit */
@@ -334,18 +351,26 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 
 		if (pkt->PES_extension_flag) {
 			pkt->PES_private_data_flag = klbs_read_bits(bs, 1);
+			if (bs->error) return -1;  /* Error occurred */
 			pkt->pack_header_field_flag = klbs_read_bits(bs, 1);
+			if (bs->error) return -1;  /* Error occurred */
 			pkt->program_packet_sequence_counter_flag = klbs_read_bits(bs, 1);
+			if (bs->error) return -1;  /* Error occurred */
 			pkt->PSTD_buffer_flag = klbs_read_bits(bs, 1);
+			if (bs->error) return -1;  /* Error occurred */
 			klbs_read_bits(bs, 3); /* reserved */
+			if (bs->error) return -1;  /* Error occurred */
 			pkt->PES_extension_flag_2 = klbs_read_bits(bs, 1);
 			if (bs->error) return -1;  /* Error occurred */
 			bits += 8;
 
 			if (pkt->PES_private_data_flag == 1) {
 				klbs_read_bits(bs, 32); /* private data */
+				if (bs->error) return -1;  /* Error occurred */
 				klbs_read_bits(bs, 32); /* private data */
+				if (bs->error) return -1;  /* Error occurred */
 				klbs_read_bits(bs, 32); /* private data */
+				if (bs->error) return -1;  /* Error occurred */
 				klbs_read_bits(bs, 32); /* private data */
 				if (bs->error) return -1;  /* Error occurred */
 				bits += 128;
@@ -370,7 +395,9 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 
 			if (pkt->PSTD_buffer_flag == 1) {
 				klbs_read_bits(bs, 2); /* '01' */
+				if (bs->error) return -1;  /* Error occurred */
 				pkt->PSTD_buffer_scale = klbs_read_bits(bs, 1);
+				if (bs->error) return -1;  /* Error occurred */
 				pkt->PSTD_buffer_size = klbs_read_bits(bs, 13);
 				if (bs->error) return -1;  /* Error occurred */
 				bits += 16;
@@ -406,6 +433,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			if (pkt->data) {
 				for (int i = 0; i < pkt->dataLengthBytes; i++) {
 					*(pkt->data + i) = klbs_read_bits(bs, 8);
+					if (bs->error) return -1;  /* Error occurred */
 					bits += 8;
 				}
 			} else {
@@ -424,6 +452,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		if (pkt->data) {
 			for (int i = 0; i < pkt->PES_packet_length; i++) {
 				*(pkt->data + i) = klbs_read_bits(bs, 8); /* PES_packet_data_byte */
+				if (bs->error) return -1;  /* Error occurred */
 				bits += 8;
 			}
 		} else {
