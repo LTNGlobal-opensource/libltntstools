@@ -257,7 +257,7 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 	if (ctx->buflen_used >= ctx->buflen) {
 		fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d >= ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
 		ctx->error = 1;
-		return 0;
+		//return 0;
 	}
 	return *(ctx->buf + ctx->buflen_used++);
 }
