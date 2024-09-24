@@ -219,6 +219,7 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 		printf("KLBITSTREAM FATAL: ctx->buflen_used %d > ctx->buflen %d\n", ctx->buflen_used, ctx->buflen);
 	}
 #endif
+	assert(ctx->buflen_used <= ctx->buflen);
 
 	if (ctx->reg_used == 0) {
 		if (ctx->buflen_used >= ctx->buflen) {
