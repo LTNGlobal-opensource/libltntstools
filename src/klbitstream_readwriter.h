@@ -32,6 +32,7 @@ struct klbs_context_s
 	uint8_t  reg;
 
 	int      didAllocateStorage;
+	int error; /* Error flag to indicate buffer overrun */
 };
 
 /**
@@ -116,6 +117,7 @@ static inline void klbs_free(struct klbs_context_s *ctx)
 static inline void klbs_init(struct klbs_context_s *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
+	ctx->error = 0;
 }
 
 /**
@@ -151,6 +153,9 @@ static inline void klbs_read_set_buffer(struct klbs_context_s *ctx, uint8_t *buf
  */
 static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 {
+	if (ctx->error) {
+		return;	/* Don't write any more data */
+	}
 	assert(ctx->buflen_used <= ctx->buflen);
 
 	bit &= 1;
@@ -160,7 +165,13 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 		ctx->reg_used++;
 	}
 
-	if (ctx->reg_used == 8) {
+	if (ctx->reg_used == 8)
+	{
+		if (ctx->buflen_used >= ctx->buflen)
+		{
+			ctx->error = 1;
+			return;
+		}
 		*(ctx->buf + ctx->buflen_used++) = ctx->reg;
 		ctx->reg_used = 0;
 	}
@@ -173,7 +184,7 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
  */
 static inline void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bit)
 {
-	while (ctx->reg_used > 0)
+	while (ctx->reg_used > 0 && !ctx->error)
 		klbs_write_bit(ctx, bit);
 }
 
@@ -187,7 +198,7 @@ static inline void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bi
  */
 static inline void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, uint32_t bitcount)
 {
-	for (int i = (bitcount - 1); i >= 0; i--)
+	for (int i = (bitcount - 1); i >= 0 && !ctx->error; i--)
 		klbs_write_bit(ctx, bits >> i);
 }
 
@@ -201,7 +212,7 @@ static inline void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, ui
 static inline void klbs_write_buffer_complete(struct klbs_context_s *ctx)
 {
 	if (ctx->reg_used > 0) {
-		for (int i = ctx->reg_used; i <= 8; i++)
+		for (int i = ctx->reg_used; i <= 8 && !ctx->error; i++)
 			klbs_write_bit(ctx, 0);
 	}
 }
@@ -219,9 +230,16 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 		printf("KLBITSTREAM FATAL: ctx->buflen_used %d > ctx->buflen %d\n", ctx->buflen_used, ctx->buflen);
 	}
 #endif
-	assert(ctx->buflen_used <= ctx->buflen);
+	if (ctx->error) {
+		return 0;	/* Don't read any more data */
+	}
+	/* assert(ctx->buflen_used <= ctx->buflen);*/
 
 	if (ctx->reg_used == 0) {
+		if (ctx->buflen_used >= ctx->buflen) {
+			ctx->error = 1;
+			return 0;
+		}
 		ctx->reg = *(ctx->buf + ctx->buflen_used++);
 		ctx->reg_used = 8;
 	}
@@ -238,7 +256,8 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 {
 	if (ctx->buflen_used >= ctx->buflen) {
 		fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d >= ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
-		//return 0;
+		ctx->error = 1;
+		return 0;
 	}
 	return *(ctx->buf + ctx->buflen_used++);
 }
@@ -258,6 +277,8 @@ static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitco
 	for (uint32_t i = 1; i <= bitcount; i++) {
 		bits <<= 1;
 		bits |= klbs_read_bit(ctx);
+		if (ctx->error)
+			break;
 	}
 	return bits;
 }
@@ -283,7 +304,7 @@ static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitco
  */
 static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
 {
-	while (ctx->reg_used > 0)
+	while (ctx->reg_used > 0 && !ctx->error)
 		klbs_read_bit(ctx);
 }
 
@@ -299,7 +320,7 @@ static inline void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32_t b
 	const char *space = " ";
 	const char *nospace = "";
 	struct klbs_context_s copy = *ctx; /* Implicit struct copy */
-	for (uint32_t i = 1; i <= bitcount && (copy.buflen_used <= copy.buflen); i++) {
+	for (uint32_t i = 1; i <= bitcount && (copy.buflen_used <= copy.buflen) && !copy.error; i++) {
 		printf("%d%s", klbs_read_bit(&copy), (i % 8 == 0) ? space : nospace);
 	}
 	printf("\n");
@@ -343,7 +364,7 @@ static inline struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t stor
 */
 static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
 {
-	for(int i = 0; i < bits; i++) {
+	for(int i = 0; i < bits && !src->error && !dst->error; i++) {
 		klbs_write_bit(dst, klbs_read_bit(src));
 	}
 }

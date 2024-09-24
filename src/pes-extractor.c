@@ -242,6 +242,13 @@ static int _processRing(struct pes_extractor_s *ctx)
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
 			//ssize_t xlen =
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
+			/* check if we got an bs->error, if so reset the buffer, we are full */
+            if (bitsProcessed < 0 || bs.error) {
+                ltn_pes_packet_free(pes);
+                free(buf);
+                rb_empty(ctx->rb);  /* Reset ring buffer */
+                return -1;
+            }
 			if (bitsProcessed && ctx->cb) {
 				
 				pes->rawBufferLengthBytes = rlen - (rlen - offset);
@@ -337,7 +344,13 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 2) {
 			/* Process any existing data in the ring. */
 			_trimRing(ctx);
-			_processRing(ctx);
+			int res = _processRing(ctx);
+			if (res < 0) {
+                /* Error occurred, reset appending state and ring buffer */
+                ctx->appending = 0;
+                rb_empty(ctx->rb);
+                continue;
+            }
 			ctx->appending = 1;
 
 			/* Now flush the buffer up to the next pes header marker */
