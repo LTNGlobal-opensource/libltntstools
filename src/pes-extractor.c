@@ -243,12 +243,13 @@ static int _processRing(struct pes_extractor_s *ctx)
 			//ssize_t xlen =
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
 			/* check if we got an bs->error, if so reset the buffer, we are full */
-			if (bitsProcessed < 0 || bs.error)
+			if (bs.error)
 			{
 				ltn_pes_packet_free(pes);
 				free(buf);
 				rb_empty(ctx->rb); /* Reset ring buffer */
-				fprintf(stderr, "(%s) Error parsing PES packet, resetting ring buffer\n", __func__);
+				fprintf(stderr, "(%s) Error parsing PES packet [%d], resetting ring buffer rlen=%d offset=%d buflen=%d buflen_used=%d\n",
+						__func__, bs.error, rlen, offset, bs.buflen, bs.buflen_used);
 				return -2;
 			}
 			if (bitsProcessed && ctx->cb) {

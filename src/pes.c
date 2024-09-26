@@ -55,17 +55,23 @@ static void write33bit_ts(struct klbs_context_s *bs, int64_t value)
 
 static int64_t read33bit_ts(struct klbs_context_s *bs)
 {
-        int64_t a = (uint64_t)klbs_read_bits(bs, 3) << 30;
-        if (bs->error || klbs_read_bits(bs, 1) != 1 || bs->error)
-                return -1;
+	int64_t a = (uint64_t)klbs_read_bits(bs, 3) << 30;
+	if (bs->error)
+		return -1;
+	if (klbs_read_bits(bs, 1) != 1 || bs->error)
+		return -1;
 
-        int64_t b = (uint64_t)klbs_read_bits(bs, 15) << 15;
-        if (bs->error || klbs_read_bits(bs, 1) != 1 || bs->error)
-                return -1;
+	int64_t b = (uint64_t)klbs_read_bits(bs, 15) << 15;
+	if (bs->error)
+		return -1;
+	if (klbs_read_bits(bs, 1) != 1 || bs->error)
+		return -1;
 
-        int64_t c = (uint64_t)klbs_read_bits(bs, 15);
-        if (bs->error || klbs_read_bits(bs, 1) != 1 || bs->error)
-                return -1;
+	int64_t c = (uint64_t)klbs_read_bits(bs, 15);
+	if (bs->error)
+		return -1;
+	if (bs->error || klbs_read_bits(bs, 1) != 1 || bs->error)
+		return -1;
 
 	int64_t ts = a | b | c;
 
@@ -245,11 +251,14 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	 * Read the spec, see what's missing and add it.
 	 */
 	pkt->packet_start_code_prefix = klbs_read_bits(bs, 24);
-	if (bs->error) return -1;  /* Error occurred */
+	if (bs->error)
+		return -1; /* Error occurred */
 	pkt->stream_id = klbs_read_bits(bs, 8);
-	if (bs->error) return -1;  /* Error occurred */
+	if (bs->error)
+		return -1; /* Error occurred */
 	pkt->PES_packet_length = klbs_read_bits(bs, 16);
-	if (bs->error) return -1;  /* Error occurred */
+	if (bs->error)
+		return -1; /* Error occurred */
 
 	if ((pkt->stream_id != 0xBC /* program_stream_map */) &&
 		(pkt->stream_id != 0xBE /* padding_stream */) &&
@@ -262,157 +271,219 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	{
 
 		klbs_read_bits(bs, 2); /* reserved */
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 
 		pkt->PES_scrambling_control = klbs_read_bits(bs, 2);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->PES_priority = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->data_alignment_indicator = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->copyright = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->original_or_copy = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->PTS_DTS_flags = klbs_read_bits(bs, 2);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->ESCR_flag = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->ES_rate_flag = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->DSM_trick_mode_flag = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->additional_copy_info_flag = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->PES_CRC_flag = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->PES_extension_flag = klbs_read_bits(bs, 1);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 		pkt->PES_header_data_length = klbs_read_bits(bs, 8);
-		if (bs->error) return -1;  /* Error occurred */
+		if (bs->error)
+			return -1; /* Error occurred */
 
 		bits += 72;
 
-		if (pkt->PTS_DTS_flags == 2) {
+		if (pkt->PTS_DTS_flags == 2)
+		{
 			klbs_read_bits(bs, 4); /* 0010 */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->PTS = read33bit_ts(bs);
-			if (bs->error || pkt->PTS == -1) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 40;
-		} else
-		if (pkt->PTS_DTS_flags == 3) {
+		}
+		else if (pkt->PTS_DTS_flags == 3)
+		{
 			klbs_read_bits(bs, 4); /* 0011 */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->PTS = read33bit_ts(bs);
-			if (bs->error || pkt->PTS  == -1) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 40;
 
 			klbs_read_bits(bs, 4); /* 0001 */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->DTS = read33bit_ts(bs);
-			if (bs->error || pkt->DTS == -1) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 40;
 		}
 
-		if (pkt->ESCR_flag) {
+		if (pkt->ESCR_flag)
+		{
 			klbs_read_bits(bs, 48); /* Skip the ESCR base */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 48;
 		}
 
-		if (pkt->ES_rate_flag) {
+		if (pkt->ES_rate_flag)
+		{
 			klbs_read_bits(bs, 1); /* marker bit */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->ES_rate_flag = klbs_read_bits(bs, 22);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1;		   /* Error occurred */
 			klbs_read_bits(bs, 1); /* marker bit */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 24;
 		}
 
-		if (pkt->DSM_trick_mode_flag) {
+		if (pkt->DSM_trick_mode_flag)
+		{
 			klbs_read_bits(bs, 8); /* Skip trick mode bits */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 8;
 		}
 
-		if (pkt->additional_copy_info_flag) {
+		if (pkt->additional_copy_info_flag)
+		{
 			klbs_read_bits(bs, 1); /* marker bit */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->additional_copy_info = klbs_read_bits(bs, 7);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 8;
 		}
 
-		if (pkt->PES_CRC_flag) {
+		if (pkt->PES_CRC_flag)
+		{
 			pkt->previous_PES_packet_CRC = klbs_read_bits(bs, 16);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 16;
 		}
 
-		if (pkt->PES_extension_flag) {
+		if (pkt->PES_extension_flag)
+		{
 			pkt->PES_private_data_flag = klbs_read_bits(bs, 1);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->pack_header_field_flag = klbs_read_bits(bs, 1);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->program_packet_sequence_counter_flag = klbs_read_bits(bs, 1);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->PSTD_buffer_flag = klbs_read_bits(bs, 1);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1;		   /* Error occurred */
 			klbs_read_bits(bs, 3); /* reserved */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			pkt->PES_extension_flag_2 = klbs_read_bits(bs, 1);
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 8;
 
-			if (pkt->PES_private_data_flag == 1) {
+			if (pkt->PES_private_data_flag == 1)
+			{
 				klbs_read_bits(bs, 32); /* private data */
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1;			/* Error occurred */
 				klbs_read_bits(bs, 32); /* private data */
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1;			/* Error occurred */
 				klbs_read_bits(bs, 32); /* private data */
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1;			/* Error occurred */
 				klbs_read_bits(bs, 32); /* private data */
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				bits += 128;
 			}
 
-			if (pkt->pack_header_field_flag == 1) {
+			if (pkt->pack_header_field_flag == 1)
+			{
 				int len = klbs_read_bits(bs, 8);
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				bits += 8;
-				for (int i = 0; i < len; i++) {
+				for (int i = 0; i < len; i++)
+				{
 					klbs_read_bits(bs, 8); /* No support */
-					if (bs->error) return -1;  /* Error occurred */
+					if (bs->error)
+						return -1; /* Error occurred */
 					bits += 8;
 				}
 			}
 
-			if (pkt->program_packet_sequence_counter_flag == 1) {
+			if (pkt->program_packet_sequence_counter_flag == 1)
+			{
 				klbs_read_bits(bs, 16);
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				bits += 16;
 			}
 
-			if (pkt->PSTD_buffer_flag == 1) {
+			if (pkt->PSTD_buffer_flag == 1)
+			{
 				klbs_read_bits(bs, 2); /* '01' */
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				pkt->PSTD_buffer_scale = klbs_read_bits(bs, 1);
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				pkt->PSTD_buffer_size = klbs_read_bits(bs, 13);
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				bits += 16;
 			}
 
-			if (pkt->PES_extension_flag_2 == 1) {
+			if (pkt->PES_extension_flag_2 == 1)
+			{
 				klbs_read_bits(bs, 1); /* market bit */
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				pkt->PES_extension_field_length = klbs_read_bits(bs, 7);
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				bits += 8;
-				for (int i = 0; i < pkt->PES_extension_field_length; i++) {
+				for (int i = 0; i < pkt->PES_extension_field_length; i++)
+				{
 					klbs_read_bits(bs, 8); /* reserved */
-					if (bs->error) return -1;  /* Error occurred */
+					if (bs->error)
+						return -1; /* Error occurred */
 					bits += 8;
 				}
 			}
@@ -421,49 +492,72 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		pkt->dataLengthBytes = 0;
 		pkt->data = NULL;
 
-		if (skipData) {
-		} else {
-			if (pkt->PES_packet_length) {
+		if (skipData)
+		{
+		}
+		else
+		{
+			if (pkt->PES_packet_length)
+			{
 				pkt->dataLengthBytes = pkt->PES_packet_length - ((bits - 48) / 8);
-			} else {
+			}
+			else
+			{
 				pkt->dataLengthBytes = klbs_get_byte_count_free(bs);
+				if (pkt->dataLengthBytes < 0) {
+					fprintf(stderr, "LTNTSTOOLS: (%s) PES packet length is invalid, %d\n", __func__, pkt->dataLengthBytes);
+					return -1;
+				}
 			}
 
 			/* Handle data */
 			pkt->data = malloc(pkt->dataLengthBytes);
-			if (pkt->data) {
-				for (int i = 0; i < pkt->dataLengthBytes; i++) {
+			if (pkt->data)
+			{
+				for (int i = 0; i < pkt->dataLengthBytes; i++)
+				{
 					*(pkt->data + i) = klbs_read_bits(bs, 8);
-					if (bs->error) return -1;  /* Error occurred */
+					if (bs->error)
+						return -1; /* Error occurred */
 					bits += 8;
 				}
-			} else {
+			}
+			else
+			{
 				pkt->dataLengthBytes = 0;
 			}
 		}
 	} /* (pkt->stream_id != 0xBC) && */
 	else if ((pkt->stream_id == 0xBF /* private_stream_2 */) ||
-		(pkt->stream_id == 0xF0 /* ECM */) ||
-		(pkt->stream_id == 0xF1 /* EMM */) ||
-		(pkt->stream_id == 0xFF /* program_stream_directory */) ||
-		(pkt->stream_id == 0xF2 /* DSMCC_stream */) ||
-		(pkt->stream_id == 0xF8 /* H.222.1 type E */))
+			 (pkt->stream_id == 0xF0 /* ECM */) ||
+			 (pkt->stream_id == 0xF1 /* EMM */) ||
+			 (pkt->stream_id == 0xFF /* program_stream_directory */) ||
+			 (pkt->stream_id == 0xF2 /* DSMCC_stream */) ||
+			 (pkt->stream_id == 0xF8 /* H.222.1 type E */))
 	{
 		pkt->data = malloc(pkt->PES_packet_length);
-		if (pkt->data) {
-			for (int i = 0; i < pkt->PES_packet_length; i++) {
+		if (pkt->data)
+		{
+			for (int i = 0; i < pkt->PES_packet_length; i++)
+			{
 				*(pkt->data + i) = klbs_read_bits(bs, 8); /* PES_packet_data_byte */
-				if (bs->error) return -1;  /* Error occurred */
+				if (bs->error)
+					return -1; /* Error occurred */
 				bits += 8;
 			}
-		} else {
+		}
+		else
+		{
 			pkt->dataLengthBytes = 0;
 		}
-	} else
-	if (pkt->stream_id == 0xBE /* padding_stream */) {
-		for (int i = 0; i < pkt->PES_packet_length; i++) {
+	}
+	else if (pkt->stream_id == 0xBE /* padding_stream */)
+	{
+		for (int i = 0; i < pkt->PES_packet_length; i++)
+		{
 			klbs_read_bits(bs, 8); /* padding_byte */
-			if (bs->error) return -1;  /* Error occurred */
+			if (bs->error)
+				return -1; /* Error occurred */
 			bits += 8;
 		}
 	}

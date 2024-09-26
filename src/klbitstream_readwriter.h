@@ -118,6 +118,11 @@ static inline void klbs_init(struct klbs_context_s *ctx)
 {
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->error = 0;
+	ctx->buflen_used = 0;
+	ctx->reg_used = 0;
+	ctx->reg = 0;
+	ctx->buf = NULL;
+	ctx->buflen = 0;
 }
 
 /**
@@ -169,6 +174,7 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 	{
 		if (ctx->buflen_used >= ctx->buflen)
 		{
+			fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
 			ctx->error = 1;
 			return;
 		}
@@ -237,6 +243,7 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 
 	if (ctx->reg_used == 0) {
 		if (ctx->buflen_used >= ctx->buflen) {
+			fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
 			ctx->error = 1;
 			return 0;
 		}
