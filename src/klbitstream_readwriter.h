@@ -174,7 +174,7 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 	{
 		if (ctx->buflen_used >= ctx->buflen)
 		{
-			fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
+			fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used + 1, ctx->buflen);
 			ctx->error = 1;
 			return;
 		}
@@ -243,7 +243,7 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 
 	if (ctx->reg_used == 0) {
 		if (ctx->buflen_used >= ctx->buflen) {
-			fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
+			fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used + 1, ctx->buflen);
 			ctx->error = 1;
 			return 0;
 		}
@@ -262,7 +262,7 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 {
 	if (ctx->buflen_used >= ctx->buflen) {
-		fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used, ctx->buflen);
+		fprintf(stderr, "KLBITSTREAM WARNING: %s ctx->buflen_used %d > ctx->buflen %d\n", __func__, ctx->buflen_used + 1, ctx->buflen);
 		ctx->error = 1;
 		return 0;
 	}
