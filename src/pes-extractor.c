@@ -226,6 +226,11 @@ static int _processRing(struct pes_extractor_s *ctx)
 				/* We'll come back again in the future */
 				free(buf);
 				return -1;
+			} if (offset >= rlen) {
+				/* We have a partial PES packet, we'll come back again in the future */
+				fprintf(stderr, "(%s) Partial PES packet, resetting ring buffer rlen=%d offset=%d\n", __func__, rlen, offset);
+				free(buf);
+				return -1;
 			}
 #if LOCAL_DEBUG
 			if (offset == 423) {
@@ -245,11 +250,15 @@ static int _processRing(struct pes_extractor_s *ctx)
 			/* check if we got an bs->error, if so reset the buffer, we are full */
 			if (bs.error)
 			{
+#if 0
+				ltntstools_hexdump(buf, bs.buflen, 32);
+				ltntstools_hexdump(buf + bs.buflen, rlen - bs.buflen, 32);
+#endif
 				ltn_pes_packet_free(pes);
 				free(buf);
 				rb_empty(ctx->rb); /* Reset ring buffer */
-				fprintf(stderr, "(%s) Error parsing PES packet [%d], resetting ring buffer rlen=%d offset=%d buflen=%d buflen_used=%d\n",
-						__func__, bs.error, rlen, offset, bs.buflen, bs.buflen_used);
+				fprintf(stderr, "(%s) Error parsing PES packet [%d], resetting ring buffer rlen=%d offset=%d setbuf=%d buflen=%d buflen_used=%d\n",
+						__func__, bs.error, rlen, offset, rlen - (rlen - offset), bs.buflen, bs.buflen_used);
 				return -2;
 			}
 			if (bitsProcessed && ctx->cb) {

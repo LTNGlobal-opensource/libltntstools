@@ -240,8 +240,15 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	ssize_t bits = 0;
 
 	/* Make sure something exists in the buffer */
-	if (klbs_get_byte_count_free(bs) < 8)
+	ssize_t free_bits = klbs_get_byte_count_free(bs);
+	if (free_bits < 8) {
+		if (free_bits < 0) {
+			/* Error occurred */
+			fprintf(stderr, "LTNTSTOOLS: %s() Error not enough free bits %d\n", __func__, free_bits);
+			return -1;
+		}
 		return bits;
+	}
 
 	/* Clone the entire buffer into a raw duplicate. */
 
@@ -253,12 +260,15 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	pkt->packet_start_code_prefix = klbs_read_bits(bs, 24);
 	if (bs->error)
 		return -1; /* Error occurred */
+	bits += 24;
 	pkt->stream_id = klbs_read_bits(bs, 8);
 	if (bs->error)
 		return -1; /* Error occurred */
+	bits += 8;
 	pkt->PES_packet_length = klbs_read_bits(bs, 16);
 	if (bs->error)
 		return -1; /* Error occurred */
+	bits += 16;
 
 	if ((pkt->stream_id != 0xBC /* program_stream_map */) &&
 		(pkt->stream_id != 0xBE /* padding_stream */) &&
@@ -273,48 +283,60 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		klbs_read_bits(bs, 2); /* reserved */
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 2;
 
 		pkt->PES_scrambling_control = klbs_read_bits(bs, 2);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 2;
 		pkt->PES_priority = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->data_alignment_indicator = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->copyright = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->original_or_copy = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->PTS_DTS_flags = klbs_read_bits(bs, 2);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 2;
 		pkt->ESCR_flag = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->ES_rate_flag = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->DSM_trick_mode_flag = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->additional_copy_info_flag = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->PES_CRC_flag = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->PES_extension_flag = klbs_read_bits(bs, 1);
 		if (bs->error)
 			return -1; /* Error occurred */
+		bits += 1;
 		pkt->PES_header_data_length = klbs_read_bits(bs, 8);
 		if (bs->error)
 			return -1; /* Error occurred */
-
-		bits += 72;
+		bits += 8;
 
 		if (pkt->PTS_DTS_flags == 2)
 		{
@@ -560,6 +582,11 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				return -1; /* Error occurred */
 			bits += 8;
 		}
+	} else {
+		fprintf(stderr, "LTNTSTOOLS: (%s) Unknown stream_id 0x%x skipping %d bits\n", __func__, pkt->stream_id, pkt->PES_packet_length * 8);
+		/* skip over packet length */
+		klbs_read_bits(bs, pkt->PES_packet_length * 8);
+		bits += pkt->PES_packet_length * 8;
 	}
 
 	return bits;
