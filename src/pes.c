@@ -362,6 +362,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 					printf("KLBITSTREAM FATAL: (%s:%s:%d) PES extension field size %d, but only %d bytes left in buffer\n",
 							__FILE__, __func__, __LINE__, pkt->PES_extension_field_length, klbs_get_byte_count_free(bs));
 #endif
+					bs->overrun = 1;
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 					return -1;
 #endif
@@ -390,6 +391,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				printf("KLBITSTREAM FATAL: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
 						__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
 #endif
+				bs->overrun = 1;
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 				return -1;
 #endif
@@ -420,6 +422,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			printf("KLBITSTREAM FATAL: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
 					__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
 #endif
+			bs->overrun = 1;
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 			return -1;
 #endif
@@ -440,6 +443,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			printf("KLBITSTREAM FATAL: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
 					__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
 #endif
+			bs->overrun = 1;
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 			return -1;
 #endif
