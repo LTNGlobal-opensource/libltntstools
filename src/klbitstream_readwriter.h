@@ -163,7 +163,7 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 
 	if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-		fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+		fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Write Bit ctx->buflen_used %d >= ctx->buflen %d\n",
 				__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 		ctx->overrun = 1;
@@ -183,7 +183,7 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 	if (ctx->reg_used == 8) {
 		if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Write Bit ctx->buflen_used %d >= ctx->buflen %d\n",
 					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 			ctx->overrun = 1;
@@ -215,7 +215,7 @@ static inline void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bi
 		klbs_write_bit(ctx, bit);
 		if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Write Byte Stuff ctx->buflen_used %d >= ctx->buflen %d\n",
 					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 			ctx->overrun = 1;
@@ -248,7 +248,7 @@ static inline void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, ui
 		klbs_write_bit(ctx, bits >> i);
 		if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Write Bits ctx->buflen_used %d >= ctx->buflen %d\n",
 					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 			ctx->overrun = 1;
@@ -281,7 +281,7 @@ static inline void klbs_write_buffer_complete(struct klbs_context_s *ctx)
 			klbs_write_bit(ctx, 0);
 			if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+				fprintf(stderr, "KLBITSTREAM OVERRUN: Write Buffer Complete (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
 						__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 				ctx->overrun = 1;
@@ -312,7 +312,7 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 
 	if (!(ctx->buflen_used <= ctx->buflen)) {
 #if KLBITSTREAM_DEBUG
-		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d > ctx->buflen %d\n",
+		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Bit ctx->buflen_used %d > ctx->buflen %d\n",
 				__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 		ctx->overrun = 1;
@@ -327,7 +327,7 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 	if (ctx->reg_used == 0) {
 		if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Bit ctx->buflen_used %d >= ctx->buflen %d\n",
 					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 			ctx->overrun = 1;
@@ -354,7 +354,7 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 {
 	if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Byte Aligned ctx->buflen_used %d >= ctx->buflen %d\n",
 				__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 		ctx->overrun = 1;
@@ -395,7 +395,7 @@ static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitco
 		}
 		if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Bits ctx->buflen_used %d >= ctx->buflen %d\n",
 					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 			ctx->overrun = 1;
@@ -422,7 +422,7 @@ static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitco
 {
 	if (ctx->buflen_used + bitcount >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d + bitcount %d >= ctx->buflen %d\n",
+		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Peek Bits ctx->buflen_used %d + bitcount %d >= ctx->buflen %d\n",
 				__FILE__, __func__, __LINE__, ctx->buflen_used, bitcount, ctx->buflen);
 #endif
 		ctx->overrun = 1;
@@ -453,7 +453,7 @@ static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
 		klbs_read_bit(ctx);
 		if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
+			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Byte Stuff ctx->buflen_used %d >= ctx->buflen %d\n",
 					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 			ctx->overrun = 1;
@@ -532,7 +532,7 @@ static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_
 		klbs_write_bit(dst, klbs_read_bit(src));
 		if (src->overrun || dst->overrun) {
 #if KLBITSTREAM_DEBUG
-			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) src->overrun %d dst->overrun %d\n", __FILE__, __func__, __LINE__, src->overrun, dst->overrun);
+			fprintf(stderr, "KLBITSTREAM OVERRUN: Bitmove (%s:%s:%d) src->overrun %d dst->overrun %d\n", __FILE__, __func__, __LINE__, src->overrun, dst->overrun);
 #endif
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 			return;
@@ -560,7 +560,7 @@ static inline void klbs_bitcopy(struct klbs_context_s *dst, struct klbs_context_
 #endif
 	if (src->buflen_used + bits >= src->buflen || dst->buflen_used + bits >= dst->buflen) {
 #if KLBITSTREAM_DEBUG
-		fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) src->buflen_used %d + bits %d >= src->buflen %d\n",
+		fprintf(stderr, "KLBITSTREAM OVERRUN: Bitcopy (%s:%s:%d) src->buflen_used %d + bits %d >= src->buflen %d\n",
 				__FILE__, __func__, __LINE__, src->buflen_used, (int)bits, src->buflen);
 #endif
 		src->overrun = 1;

@@ -359,7 +359,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				/* check if we overrun the buffer here */
 				if (klbs_get_byte_count_free(bs) < pkt->PES_extension_field_length) {
 #if KLBITSTREAM_DEBUG
-					printf("KLBITSTREAM OVERRUN: (%s:%s:%d) PES extension field size %d, but only %d bytes left in buffer\n",
+					fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES Packet Parse PES_extension_field_length %d, but only %d bytes left in buffer\n",
 							__FILE__, __func__, __LINE__, pkt->PES_extension_field_length, klbs_get_byte_count_free(bs));
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
@@ -390,7 +390,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			/* check if our buffer is big enough for the rest of the packet */
 			if (klbs_get_byte_count_free(bs) < pkt->dataLengthBytes) {
 #if KLBITSTREAM_DEBUG
-				printf("KLBITSTREAM OVERRUN: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
+				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES Packet Parse PES_packet_length %d, but only %d bytes left in buffer\n",
 						__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
@@ -423,7 +423,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		/* check if our buffer is big enough for the rest of the packet */
 		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length) {
 #if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
+			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES Packet Parse PES_packet_length %d, but only %d bytes left in buffer\n",
 					__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
@@ -446,7 +446,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		/* check if our buffer is big enough for the rest of the packet */
 		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length) {
 #if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
+			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES Packet Parse PES_packet_length %d, but only %d bytes left in buffer\n",
 					__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
