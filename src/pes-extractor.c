@@ -247,7 +247,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 			/* check for buffer overrun */
 			if (bs.overrun) {
 #if KLBITSTREAM_DEBUG
-				fprintf(stderr, "KLBITSTREAM FATAL: (%s:%s:%d) bs.overrun %d bs.buflen %d bs.buflen_used %d rlen %d offset %d\n",
+				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) bs.overrun %d bs.buflen %d bs.buflen_used %d rlen %d offset %d\n",
 						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen, offset);
 #endif
 #if KLBITSTREAM_RETURN_ON_OVERRUN
@@ -361,7 +361,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			int pr_ret = _processRing(ctx);
 			if (pr_ret == -2) { /* buffer overrun */
 #if KLBITSTREAM_DEBUG
-				fprintf(stderr, "KLBITSTREAM FATAL: (%s:%s:%d) buffer overrun in _processRing() for pid 0x%04x pkt size %d offset %d didOverflow %d\n",
+				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) buffer overrun in _processRing() for pid 0x%04x pkt size %d offset %d didOverflow %d\n",
 						__FILE__, __func__, __LINE__, ctx->pid, 188, offset, didOverflow);
 #endif
 				overrun = 1;
