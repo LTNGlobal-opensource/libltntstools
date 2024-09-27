@@ -162,7 +162,7 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 	if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
 		fprintf(stderr, "KLBITSTREAM FATAL: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
-				__FILE__, __LINE__, __func__, ctx->buflen_used, ctx->buflen);
+				__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 		ctx->overrun = 1;
 #if KLBITSTREAM_RETURN_ON_OVERRUN
@@ -451,7 +451,7 @@ static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
 		klbs_read_bit(ctx);
 		if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM FATAL: (%s:%s:%f) ctx->buflen_used %d >= ctx->buflen %d\n",
+			printf("KLBITSTREAM FATAL: (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
 					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
 #endif
 			ctx->overrun = 1;
