@@ -251,7 +251,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen, offset);
 #endif
 #if KLBITSTREAM_RETURN_ON_OVERRUN
-				rb_empty(ctx->rb); /* Reset ring buffer */
+				ltn_pes_packet_free(pes);
 				free(buf);
 				return -2;
 #else
@@ -331,7 +331,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
-	int didOverflow;
+	int didOverflow, overrun = 0;
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
 		if (ltntstools_pid(pkt) != ctx->pid)
@@ -364,6 +364,13 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 				fprintf(stderr, "KLBITSTREAM FATAL: (%s:%s:%d) buffer overrun in _processRing() for pid 0x%04x pkt size %d offset %d didOverflow %d\n",
 						__FILE__, __func__, __LINE__, ctx->pid, 188, offset, didOverflow);
 #endif
+				overrun = 1;
+#if KLBITSTREAM_RESET_ON_OVERRUN
+				ctx->appending = 0;
+				_trimRing(ctx);
+				rb_empty(ctx->rb);
+				break;
+#endif
 			}
 			ctx->appending = 1;
 
@@ -373,6 +380,11 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 
 	}
 
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+	if (overrun) {
+		return -1;
+	}
+#endif
 
 	return packetCount;
 }
