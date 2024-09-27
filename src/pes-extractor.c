@@ -251,10 +251,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen, offset);
 #endif
 #if KLBITSTREAM_RETURN_ON_OVERRUN
-				if (bitsProcessed) {
-					ltn_pes_packet_dump(pes, "\t");
-					ltn_pes_packet_free(pes);
-				}
+				rb_empty(ctx->rb); /* Reset ring buffer */
 				free(buf);
 				return -2;
 #else
