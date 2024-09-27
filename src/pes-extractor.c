@@ -195,6 +195,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 	int rlen = rb_used(ctx->rb);
 	if (rlen < 16)
 		return -1;
+	int overrun = 0;
 
 #if LOCAL_DEBUG
 	printf("%s() ring size %d\n", __func__, rb_used(ctx->rb));
@@ -231,6 +232,25 @@ static int _processRing(struct pes_extractor_s *ctx)
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
 			//ssize_t xlen =
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
+
+			/* check for buffer overrun */
+			if (bs.overrun) {
+#if KLBITSTREAM_DEBUG
+				fprintf(stderr, "KLBITSTREAM FATAL: (%s:%s:%d) bs.overrun %d bs.buflen %d bs.buflen_used %d rlen %d offset %d\n",
+						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen, offset);
+#endif
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+				if (bitsProcessed) {
+					ltn_pes_packet_dump(pes, "\t");
+					ltn_pes_packet_free(pes);
+				}
+				free(buf);
+				return -2;
+#else
+				overrun = 1;
+#endif
+			}
+
 			if (bitsProcessed && ctx->cb) {
 				
 				pes->rawBufferLengthBytes = rlen - (rlen - offset);
@@ -292,6 +312,10 @@ static int _processRing(struct pes_extractor_s *ctx)
 	printf("%s() ring processing complete, size now %d\n", __func__, rb_used(ctx->rb));
 #endif
 
+	if (overrun) {
+		return -2;
+	}
+
 	return 0; /* Success */
 }
 
@@ -326,7 +350,13 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 2) {
 			/* Process any existing data in the ring. */
 			_trimRing(ctx);
-			_processRing(ctx);
+			int pr_ret = _processRing(ctx);
+			if (pr_ret == -2) { /* buffer overrun */
+#if KLBITSTREAM_DEBUG
+				fprintf(stderr, "KLBITSTREAM FATAL: (%s:%s:%d) buffer overrun in _processRing() for pid 0x%04x pkt size %d offset %d didOverflow %d\n",
+						__FILE__, __func__, __LINE__, ctx->pid, 188, offset, didOverflow);
+#endif
+			}
 			ctx->appending = 1;
 
 			/* Now flush the buffer up to the next pes header marker */

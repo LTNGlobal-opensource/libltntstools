@@ -356,6 +356,16 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				klbs_read_bits(bs, 1); /* market bit */
 				pkt->PES_extension_field_length = klbs_read_bits(bs, 7);
 				bits += 8;
+				/* check if we overrun the buffer here */
+				if (klbs_get_byte_count_free(bs) < pkt->PES_extension_field_length) {
+#if KLBITSTREAM_DEBUG
+					printf("KLBITSTREAM FATAL: (%s:%s:%d) PES extension field size %d, but only %d bytes left in buffer\n",
+							__FILE__, __func__, __LINE__, pkt->PES_extension_field_length, klbs_get_byte_count_free(bs));
+#endif
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+					return -1;
+#endif
+				}
 				for (int i = 0; i < pkt->PES_extension_field_length; i++) {
 					klbs_read_bits(bs, 8); /* reserved */
 					bits += 8;
@@ -372,6 +382,17 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				pkt->dataLengthBytes = pkt->PES_packet_length - ((bits - 48) / 8);
 			} else {
 				pkt->dataLengthBytes = klbs_get_byte_count_free(bs);
+			}
+
+			/* check if our buffer is big enough for the rest of the packet */
+			if (klbs_get_byte_count_free(bs) < pkt->dataLengthBytes) {
+#if KLBITSTREAM_DEBUG
+				printf("KLBITSTREAM FATAL: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
+						__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
+#endif
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+				return -1;
+#endif
 			}
 
 			/* Handle data */
@@ -393,6 +414,16 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		(pkt->stream_id == 0xF2 /* DSMCC_stream */) ||
 		(pkt->stream_id == 0xF8 /* H.222.1 type E */))
 	{
+		/* check if our buffer is big enough for the rest of the packet */
+		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length) {
+#if KLBITSTREAM_DEBUG
+			printf("KLBITSTREAM FATAL: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
+					__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
+#endif
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+			return -1;
+#endif
+		}
 		pkt->data = malloc(pkt->PES_packet_length);
 		if (pkt->data) {
 			for (int i = 0; i < pkt->PES_packet_length; i++) {
@@ -402,8 +433,17 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		} else {
 			pkt->dataLengthBytes = 0;
 		}
-	} else
-	if (pkt->stream_id == 0xBE /* padding_stream */) {
+	} else if (pkt->stream_id == 0xBE /* padding_stream */) {
+		/* check if our buffer is big enough for the rest of the packet */
+		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length) {
+#if KLBITSTREAM_DEBUG
+			printf("KLBITSTREAM FATAL: (%s:%s:%d) PES packet size %d, but only %d bytes left in buffer\n",
+					__FILE__, __func__, __LINE__, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
+#endif
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+			return -1;
+#endif
+		}
 		for (int i = 0; i < pkt->PES_packet_length; i++) {
 			klbs_read_bits(bs, 8); /* padding_byte */
 			bits += 8;
