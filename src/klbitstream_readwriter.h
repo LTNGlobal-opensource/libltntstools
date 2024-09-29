@@ -21,6 +21,7 @@
 #define KLBITSTREAM_RETURN_ON_OVERRUN 1
 #define KLBITSTREAM_RESET_ON_OVERRUN 1
 #define KLBITSTREAM_TRUNCATE_ON_OVERRUN 1
+#define KTBITSTREAM_DUMP_ON_OVERRUN 1
 
 struct klbs_context_s
 {
@@ -37,6 +38,7 @@ struct klbs_context_s
 
 	int      didAllocateStorage;
 	int	     overrun; // flag overrun errors
+	int      truncated; // flag truncated packet length from overruns
 };
 
 /**

@@ -250,12 +250,19 @@ static int _processRing(struct pes_extractor_s *ctx)
 				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Process Ring Buffer bs.overrun %d bs.buflen %d bs.buflen_used %d rlen %d offset %d\n",
 						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen, offset);
 #endif
+#if KTBITSTREAM_DUMP_ON_OVERRUN
+				ltn_pes_packet_dump(pes, "\t");
+#endif
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 				ltn_pes_packet_free(pes);
 				free(buf);
 				return -2;
 #else
 				overrun = 1;
+#endif
+			} else if (bs.truncated) {
+#if KTBITSTREAM_DUMP_ON_OVERRUN
+				ltn_pes_packet_dump(pes, "\t");
 #endif
 			}
 

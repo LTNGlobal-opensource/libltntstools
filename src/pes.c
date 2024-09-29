@@ -371,6 +371,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 					if (pkt->PES_packet_length < 0) {
 						pkt->PES_packet_length = 0;
 					}
+					bs->truncated = 1;
+#elif KLBITSTREAM_RETURN_ON_OVERRUN
+					bs->overrun = 1;
+					return bits;
 #endif
 				}
 				for (int i = 0; i < pkt->PES_extension_field_length; i++) {
@@ -402,6 +406,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				if (pkt->dataLengthBytes < 0) {
 					pkt->dataLengthBytes = 0;
 				}
+				bs->truncated = 1;
+#elif KLBITSTREAM_RETURN_ON_OVERRUN
+				bs->overrun = 1;
+				return bits;
 #endif
 			}
 
@@ -435,6 +443,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			if (pkt->PES_packet_length < 0) {
 				pkt->PES_packet_length = 0;
 			}
+			bs->truncated = 1;
+#elif KLBITSTREAM_RETURN_ON_OVERRUN
+			bs->overrun = 1;
+			return bits;
 #endif
 		}
 		pkt->data = malloc(pkt->PES_packet_length);
@@ -458,6 +470,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			if (pkt->PES_packet_length < 0) {
 				pkt->PES_packet_length = 0;
 			}
+			bs->truncated = 1;
+#elif KLBITSTREAM_RETURN_ON_OVERRUN
+			bs->overrun = 1;
+			return bits;
 #endif
 		}
 		for (int i = 0; i < pkt->PES_packet_length; i++) {
