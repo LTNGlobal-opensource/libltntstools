@@ -357,16 +357,20 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				pkt->PES_extension_field_length = klbs_read_bits(bs, 7);
 				bits += 8;
 				/* check if we overrun the buffer here */
-				if (klbs_get_byte_count_free(bs) < pkt->PES_extension_field_length || pkt->PES_extension_field_length < 0) {
+				int byte_count_free = klbs_get_byte_count_free(bs);
+				if (byte_count_free < 0) {
+					fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Byte count free is negative %d\n",
+							__FILE__, __func__, __LINE__, pkt->stream_id, byte_count_free);
+					byte_count_free = 0;
+				}
+				if (byte_count_free < pkt->PES_extension_field_length || pkt->PES_extension_field_length < 0) {
 #if KLBITSTREAM_DEBUG
 					fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Packet Parse PES_extension_field_length %d, but only %d bytes left in buffer\n",
-							__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_extension_field_length, klbs_get_byte_count_free(bs));
+							__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_extension_field_length, byte_count_free);
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
-					pkt->PES_extension_field_length = klbs_get_byte_count_free(bs);
-					if (pkt->PES_extension_field_length < 0) {
-						pkt->PES_extension_field_length = 0;
-					}
+					pkt->PES_extension_field_length = byte_count_free;
+					/* measure what the actual PES_packet_length should be */					
 					pkt->PES_packet_length = (bits - 48) / 8 + pkt->PES_extension_field_length;
 					if (pkt->PES_packet_length < 0) {
 						pkt->PES_packet_length = 0;
@@ -389,23 +393,25 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 
 		if (skipData) {
 		} else {
-			if (pkt->PES_packet_length) {
+			/* check if our buffer is big enough for the rest of the packet */
+			int byte_count_free = klbs_get_byte_count_free(bs);
+			if (byte_count_free < 0) {
+				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Byte count free is negative %d\n",
+						__FILE__, __func__, __LINE__, pkt->stream_id, byte_count_free);
+				byte_count_free = 0;
+			}
+			if (pkt->PES_packet_length >= ((bits - 48) / 8)) { /* PES_packet_length is valid */
 				pkt->dataLengthBytes = pkt->PES_packet_length - ((bits - 48) / 8);
 			} else {
-				pkt->dataLengthBytes = klbs_get_byte_count_free(bs);
+				pkt->dataLengthBytes = byte_count_free;
 			}
-
-			/* check if our buffer is big enough for the rest of the packet */
-			if (klbs_get_byte_count_free(bs) < pkt->dataLengthBytes || pkt->dataLengthBytes < 0) {
+			if (pkt->dataLengthBytes > byte_count_free) {
 #if KLBITSTREAM_DEBUG
 				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Packet Parse PES_packet_length %d dataLengthBytes %d, but only %d bytes left in buffer\n",
-						__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, pkt->dataLengthBytes, klbs_get_byte_count_free(bs));
+						__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, pkt->dataLengthBytes, byte_count_free);
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
-				pkt->dataLengthBytes = klbs_get_byte_count_free(bs);
-				if (pkt->dataLengthBytes < 0) {
-					pkt->dataLengthBytes = 0;
-				}
+				pkt->dataLengthBytes = byte_count_free;
 				bs->truncated = 1;
 #elif KLBITSTREAM_RETURN_ON_OVERRUN
 				bs->overrun = 1;
@@ -433,16 +439,20 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		(pkt->stream_id == 0xF8 /* H.222.1 type E */))
 	{
 		/* check if our buffer is big enough for the rest of the packet */
-		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length || pkt->PES_packet_length < 0) {
+		int byte_count_free = klbs_get_byte_count_free(bs);
+		if (byte_count_free < 0) {
+			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Byte count free is negative %d\n",
+					__FILE__, __func__, __LINE__, pkt->stream_id, byte_count_free);
+			byte_count_free = 0;
+		}
+
+		if (byte_count_free < pkt->PES_packet_length || pkt->PES_packet_length < 0) {
 #if KLBITSTREAM_DEBUG
 			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Packet Parse PES_packet_length %d, but only %d bytes left in buffer\n",
-					__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
+					__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, byte_count_free);
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
-			pkt->PES_packet_length = klbs_get_byte_count_free(bs);
-			if (pkt->PES_packet_length < 0) {
-				pkt->PES_packet_length = 0;
-			}
+			pkt->PES_packet_length = byte_count_free;
 			bs->truncated = 1;
 #elif KLBITSTREAM_RETURN_ON_OVERRUN
 			bs->overrun = 1;
@@ -460,16 +470,20 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		}
 	} else if (pkt->stream_id == 0xBE /* padding_stream */) {
 		/* check if our buffer is big enough for the rest of the packet */
-		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length || pkt->PES_packet_length < 0) {
+		int byte_count_free = klbs_get_byte_count_free(bs);
+		if (byte_count_free < 0) {
+			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Byte count free is negative %d\n",
+					__FILE__, __func__, __LINE__, pkt->stream_id, byte_count_free);
+			byte_count_free = 0;
+		}
+
+		if (byte_count_free < pkt->PES_packet_length || pkt->PES_packet_length < 0) {
 #if KLBITSTREAM_DEBUG
 			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Packet Parse PES_packet_length %d, but only %d bytes left in buffer\n",
-					__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
+					__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, byte_count_free);
 #endif
 #if KLBITSTREAM_TRUNCATE_ON_OVERRUN
-			pkt->PES_packet_length = klbs_get_byte_count_free(bs);
-			if (pkt->PES_packet_length < 0) {
-				pkt->PES_packet_length = 0;
-			}
+			pkt->PES_packet_length = byte_count_free;
 			bs->truncated = 1;
 #elif KLBITSTREAM_RETURN_ON_OVERRUN
 			bs->overrun = 1;
