@@ -357,7 +357,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				pkt->PES_extension_field_length = klbs_read_bits(bs, 7);
 				bits += 8;
 				/* check if we overrun the buffer here */
-				if (klbs_get_byte_count_free(bs) < pkt->PES_extension_field_length || pkt->PES_extension_field_length <= 0) {
+				if (klbs_get_byte_count_free(bs) < pkt->PES_extension_field_length || pkt->PES_extension_field_length < 0) {
 #if KLBITSTREAM_DEBUG
 					fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Packet Parse PES_extension_field_length %d, but only %d bytes left in buffer\n",
 							__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_extension_field_length, klbs_get_byte_count_free(bs));
@@ -396,7 +396,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			}
 
 			/* check if our buffer is big enough for the rest of the packet */
-			if (klbs_get_byte_count_free(bs) < pkt->dataLengthBytes || pkt->dataLengthBytes <= 0) {
+			if (klbs_get_byte_count_free(bs) < pkt->dataLengthBytes || pkt->dataLengthBytes < 0) {
 #if KLBITSTREAM_DEBUG
 				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Packet Parse PES_packet_length %d dataLengthBytes %d, but only %d bytes left in buffer\n",
 						__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, pkt->dataLengthBytes, klbs_get_byte_count_free(bs));
@@ -433,7 +433,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		(pkt->stream_id == 0xF8 /* H.222.1 type E */))
 	{
 		/* check if our buffer is big enough for the rest of the packet */
-		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length || pkt->PES_packet_length <= 0) {
+		if (klbs_get_byte_count_free(bs) < pkt->PES_packet_length || pkt->PES_packet_length < 0) {
 #if KLBITSTREAM_DEBUG
 			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) PES id 0x%04x Packet Parse PES_packet_length %d, but only %d bytes left in buffer\n",
 					__FILE__, __func__, __LINE__, pkt->stream_id, pkt->PES_packet_length, klbs_get_byte_count_free(bs));
