@@ -7,14 +7,12 @@ links = "ltntstools"
 build = "build.rs"
 
 [dependencies]
-libc = "0.2.155"
+libc.workspace = true
 pcap = "2.0.0"
 
 [build-dependencies]
 anyhow.workspace = true
 bindgen = { version = "0.69.4", default-features = false, features = ["runtime"] }
+cc = "1.1.14"
 doxygen-rs = "0.4.2"
 pkg-config = "0.3.30"
-
-[dev-dependencies]
-base64 = "0.22.1"
