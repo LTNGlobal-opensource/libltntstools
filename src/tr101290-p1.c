@@ -30,7 +30,7 @@ static int isPIDActive(struct ltntstools_tr101290_s *s, uint16_t pidNr, time_t n
 
 /* P1.6 - Referred PID does not occur for a user specified period. */
 /* We're called with a valid stream model. */
-static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_pat_s *pat, time_t now)
+static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_pat_s *pat, struct timeval time_now, time_t now)
 {
 	/* Walk each pid in the model, make sure we've received a packet in the last 1000ms
 	 * or less, otherwise raise an error.
@@ -65,14 +65,14 @@ static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_p
 	}
 
 	if (!raiseIssue) {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_6__PID_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_6__PID_ERROR, &time_now);
 	} else {
-		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P1_6__PID_ERROR, msg);
+		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P1_6__PID_ERROR, msg, &time_now);
 	}
 
 }
 
-static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	/* Sections with table_id 0x02, (i.e. a PMT), do not occur at least every 0,5 s on the PID which is
 	 * referred to in the PAT.
@@ -89,12 +89,11 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 	//printf("complete %d\n", complete);
 	if (complete) {
 		time_t now = time(NULL);
-
 		if (s->lastCompleteTime < now) {
 			s->lastCompleteTime = now;
 
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_5__PMT_ERROR);
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_5a__PMT_ERROR_2);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_5__PMT_ERROR, &time_now);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_5a__PMT_ERROR_2, &time_now);
 
 			/* Performance issue. Calling query_model is too expensive to happen on
 			 * every transport packet write. Make sure we cache the results then age them out
@@ -110,7 +109,7 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 				p2_process_pat_model(s, pat);
 
 				/* Check 1.6 Now that we have a stream model. */
-				p1_process_p1_6(s, pat, now);
+				p1_process_p1_6(s, pat, time_now, now);
 				free(pat);
 			}
 		}
@@ -123,7 +122,7 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 }
 
 /* P1_4: Incorrect packet order */
-static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(&s->streamStatistics);
 
@@ -136,9 +135,9 @@ static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *b
 #endif
 	/* P1_4: Incorrect packet order */
 	if (s->CCCounterLastWrite != count) {
-		ltntstools_tr101290_alarm_raise(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR);
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR, &time_now);
 	} else {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR, &time_now);
 	}
 	s->CCCounterLastWrite = count;
 
@@ -146,7 +145,7 @@ static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *b
 }
 
 /* P1.3 - PAT_error */
-static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	/* Look for a PAT */
 	int patIssue = 0;
@@ -175,19 +174,19 @@ static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *b
 		struct timeval interval = { 0, 500 * 1000 };
 		struct timeval window;
 		timeradd(&s->lastPAT, &interval, &window);
-		if (timercmp(&s->now, &window, >= )) {
+		if (timercmp(&time_now, &window, >= )) {
 			patIssue++;
 		}
 	} else {
-		s->lastPAT = s->now;
+		s->lastPAT = time_now;
 	}
 
 	if (patIssue) {
-		ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
-		ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR, &time_now);
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2, &time_now);
 	} else {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_3__PAT_ERROR);
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_3a__PAT_ERROR_2);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_3__PAT_ERROR, &time_now);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_3a__PAT_ERROR_2, &time_now);
 	}
 
 	/* PID 0x0000 does not occur at least every 0,5 s
@@ -229,12 +228,12 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 		} else {
 			/* Raise */
 			s->consecutiveSyncBytes = 0;
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR);
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
 		}
 	}
 
 	if (s->consecutiveSyncBytes > 5) {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
 	}
 
 	if (s->consecutiveSyncBytes >= 50000) {
@@ -246,15 +245,15 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 	/* End: P1.2 - Sync Byte Error, sync byte != 0x47. */
 
 	/* P1.3 - PAT_error */
-	p1_process_p1_3(s, buf, packetCount);
+	p1_process_p1_3(s, buf, packetCount, *time_now);
 	/* End: P1.3 - PAT_error */
 
 	/* P1.4 */
-	p1_process_p1_4(s, buf, packetCount);
+	p1_process_p1_4(s, buf, packetCount, *time_now);
 	/* End: P1.4 */
 	
 	/* P1.5/6 */
-	p1_process_p1_56(s, buf, packetCount);
+	p1_process_p1_56(s, buf, packetCount, *time_now);
 	/* End: P1.5/6 */
 	
 	return packetCount;

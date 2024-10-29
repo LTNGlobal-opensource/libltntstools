@@ -86,7 +86,7 @@ void p2_process_p2_2(struct ltntstools_tr101290_s *s)
 	}
 
 	if (alarmCount) {
-		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P2_2__CRC_ERROR, msg);
+		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P2_2__CRC_ERROR, msg, &s->now);
 	}
 
 }
@@ -95,7 +95,7 @@ void p2_process_p2_2(struct ltntstools_tr101290_s *s)
  * PCR discontinuity of more than 100 ms occurring without specific indication.
  * Time interval between two consecutive PCR values more than 40 ms.
  */
-static void p2_process_p2_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+static void p2_process_p2_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	char msg[128];
 	msg[0] = 0;
@@ -139,11 +139,11 @@ static void p2_process_p2_3(struct ltntstools_tr101290_s *s, const uint8_t *buf,
 	}
 
 	if (raiseIssue) {
-		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P2_3__PCR_ERROR, msg);
-		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P2_3a__PCR_REPETITION_ERROR, msg);
+		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P2_3__PCR_ERROR, msg, &time_now);
+		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P2_3a__PCR_REPETITION_ERROR, msg, &time_now);
 	} else {
-		ltntstools_tr101290_alarm_clear(s, E101290_P2_3__PCR_ERROR);
-		ltntstools_tr101290_alarm_clear(s, E101290_P2_3a__PCR_REPETITION_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P2_3__PCR_ERROR, &time_now);
+		ltntstools_tr101290_alarm_clear(s, E101290_P2_3a__PCR_REPETITION_ERROR, &time_now);
 	}
 }
 
@@ -167,58 +167,58 @@ printf("arg %d\n", args->arg);
 	case STREAMMODEL_CB_CONTEXT_PAT:
 		s->p2.lastPAT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "PAT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "PAT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	case STREAMMODEL_CB_CONTEXT_PMT:
 		s->p2.lastPMT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "PMT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "PMT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	case STREAMMODEL_CB_CONTEXT_CAT:
 		s->p2.lastCAT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "CAT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "CAT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	case STREAMMODEL_CB_CONTEXT_SDT:
 		s->p2.lastSDT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "SDT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "SDT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	case STREAMMODEL_CB_CONTEXT_BAT:
 		s->p2.lastBAT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "BAT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "BAT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	case STREAMMODEL_CB_CONTEXT_NIT:
 		s->p2.lastNIT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "NIT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "NIT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	case STREAMMODEL_CB_CONTEXT_TOT:
 		s->p2.lastTOT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "TOT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "TOT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	case STREAMMODEL_CB_CONTEXT_EIT:
 		s->p2.lastEIT = s->now;
 		if (args->arg == CRC_ARG_INVALID)
-			ltntstools_tr101290_alarm_raise_with_arg(s, id, "EIT");
+			ltntstools_tr101290_alarm_raise_with_arg(s, id, "EIT", &s->now);
 		else
-			ltntstools_tr101290_alarm_clear(s, id);
+			ltntstools_tr101290_alarm_clear(s, id, &s->now);
 		break;
 	}
 
@@ -231,9 +231,9 @@ ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 
 	/* P2.1 - Transport_Error TEI bit set. */
 	if (s->preTEIErrors != ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics)) {
-		ltntstools_tr101290_alarm_raise(s, E101290_P2_1__TRANSPORT_ERROR);
+		ltntstools_tr101290_alarm_raise(s, E101290_P2_1__TRANSPORT_ERROR, time_now);
 	} else {
-		ltntstools_tr101290_alarm_clear(s, E101290_P2_1__TRANSPORT_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P2_1__TRANSPORT_ERROR, time_now);
 	}
 
 	/* P2.6 - Packets with transport_scrambling_control not 00 present, but no section with table_id = 0x01 (i.e. a CAT) present. */
@@ -244,15 +244,15 @@ ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 		/* We haven't seen a CAT table in a while. */
 		if (s->preScrambledCount != ltntstools_pid_stats_stream_get_scrambled_count(&s->streamStatistics)) {
 			/* New scrambled packets have arrived */
-			ltntstools_tr101290_alarm_raise(s, E101290_P2_6__CAT_ERROR);
+			ltntstools_tr101290_alarm_raise(s, E101290_P2_6__CAT_ERROR, time_now);
 		} else {
-			ltntstools_tr101290_alarm_clear(s, E101290_P2_6__CAT_ERROR);
+			ltntstools_tr101290_alarm_clear(s, E101290_P2_6__CAT_ERROR, time_now);
 		}
 	} else {
-		ltntstools_tr101290_alarm_clear(s, E101290_P2_6__CAT_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P2_6__CAT_ERROR, time_now);
 	}
 
-	p2_process_p2_3(s, buf, packetCount);
+	p2_process_p2_3(s, buf, packetCount, *time_now);
 
 	return packetCount;
 }

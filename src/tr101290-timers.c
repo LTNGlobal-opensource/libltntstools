@@ -43,11 +43,11 @@ void timer_thread_handler(union sigval sv)
 		if (s->PATCountLastTimer == count) {
 			/* PAT Activity has stopped. */
 			//ltntstools_tr101290_alarm_raise(s, ev->id);
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR, &s->now);
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2, &s->now);
 		} else {
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_3__PAT_ERROR);
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_3a__PAT_ERROR_2);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_3__PAT_ERROR, &s->now);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_3a__PAT_ERROR_2, &s->now);
 		}
 		s->PATCountLastTimer = count;
 		break;
@@ -57,7 +57,7 @@ void timer_thread_handler(union sigval sv)
 			(int)ev->lastChanged.tv_sec,
 			(int)ev->lastChanged.tv_usec,
 			ltntstools_tr101290_event_name_ascii(ev->id));
-		ltntstools_tr101290_alarm_raise(s, ev->id);
+		ltntstools_tr101290_alarm_raise(s, ev->id, &s->now);
 	}
 }
 

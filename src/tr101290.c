@@ -15,15 +15,14 @@
 
 #define LOCAL_DEBUG 0
 
-static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
+static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s, struct timeval *time_now)
 {
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	s->now = *time_now;
 
 	/* Assume we have transport loss until the stats tell us different. */
 	int lost = 1;
 
-	int64_t ms = ltn_timeval_subtract_ms(&now, &s->lastWriteCall);
+	int64_t ms = ltn_timeval_subtract_ms(&s->now, &s->lastWriteCall);
 	if (ms < 20) {
 		lost = 0;
 	}
@@ -145,11 +144,11 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		usleep(10 * 1000);
 		gettimeofday(&now, NULL);
 
-		int conditionLOS = didExperienceTransportLoss(s);
+		int conditionLOS = didExperienceTransportLoss(s, &now);
 		if (!conditionLOS) {
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS, &now);
 		} else {
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS, &now);
 		}
 
 		/* For each possible event, determine if we need to build and alarm
@@ -192,7 +191,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				alarm->id = ev->id;
 				alarm->priorityNr = ltntstools_tr101290_event_priority(ev->id);
 				alarm->raised = ev->raised;
-				gettimeofday(&alarm->timestamp, NULL);
+				alarm->timestamp = now;
 
 				time_t when = alarm->timestamp.tv_sec;
 				struct tm *whentm = localtime(&when);
@@ -219,7 +218,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			 * in the event of no data, or something holding them clear.
 			 */
 			if (timercmp(&now, &ev->nextAlarm, >= )) {
-				ltntstools_tr101290_alarm_raise(s, ev->id);
+				ltntstools_tr101290_alarm_raise(s, ev->id, &now);
 			}
 
 		}
