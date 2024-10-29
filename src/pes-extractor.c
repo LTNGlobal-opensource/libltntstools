@@ -40,11 +40,11 @@ struct item_s
 	struct ltn_pes_packet_s *pes;
 };
 
-int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext)
+int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
 	struct pes_extractor_s *ctx = calloc(1, sizeof(*ctx));
 
-	ctx->rb = rb_new(4 * 1048576, 32 * 1048576);
+	ctx->rb = rb_new(buffer_min, buffer_max);
 	ctx->pid = pid;
 	ctx->streamId = streamId;
 	ctx->cb = cb;
@@ -211,6 +211,8 @@ static int _processRing(struct pes_extractor_s *ctx)
 #if LOCAL_DEBUG
 	printf("%s() ring size %d\n", __func__, rb_used(ctx->rb));
 #endif
+
+	//fprintf(stderr, "_processRing (%s:%s:%d) rlen %d\n", __FILE__, __func__, __LINE__, rlen);
 
 	unsigned char *buf = malloc(rlen);
 	if (buf) {
