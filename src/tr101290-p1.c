@@ -199,8 +199,9 @@ static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *b
 
 ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
 {
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	struct timespec now_ts;
+	clock_gettime(CLOCK_MONOTONIC, &now_ts);
+	struct timeval now = timespec_to_timeval(&now_ts);
 
 	/* P1.1 is taken care of by the background thread.
 	 * It monitors calls to _write, and if they stop, we declare that

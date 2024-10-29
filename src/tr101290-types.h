@@ -119,6 +119,14 @@ struct ltntstools_tr101290_s
 	struct ltn_histogram_s *h1;
 };
 
+/* convert timespec to timeval with reduced cpu over gettimeofday() */
+static inline struct timeval timespec_to_timeval(const struct timespec *ts) {
+    struct timeval tv;
+    tv.tv_sec = ts->tv_sec;
+    tv.tv_usec = ts->tv_nsec / 1000;
+    return tv;
+}
+
 #include "tr101290-events.h"
 #include "tr101290-alarms.h"
 #include "tr101290-timers.h"
