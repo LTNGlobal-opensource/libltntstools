@@ -227,9 +227,8 @@ printf("arg %d\n", args->arg);
 
 ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
 {
-	struct timespec now_ts;
-	clock_gettime(CLOCK_MONOTONIC, &now_ts);
-	struct timeval now = timespec_to_timeval(&now_ts);
+	struct timeval now;
+	gettimeofday(&now, NULL);
 
 	/* P2.1 - Transport_Error TEI bit set. */
 	if (s->preTEIErrors != ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics)) {
