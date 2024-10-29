@@ -225,10 +225,9 @@ printf("arg %d\n", args->arg);
 	return NULL; /* Success */
 }
 
-ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval *time_now)
 {
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	s->now = *time_now;
 
 	/* P2.1 - Transport_Error TEI bit set. */
 	if (s->preTEIErrors != ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics)) {

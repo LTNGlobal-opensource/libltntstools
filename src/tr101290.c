@@ -329,7 +329,7 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	pthread_mutex_lock(&s->mutex);
 
 	/* The thread needs to understand how frequently we're getting write calls. */
-	gettimeofday(&s->lastWriteCall, NULL);
+	s->lastWriteCall = s->now;
 
 	s->preTEIErrors = ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics);
 	s->preScrambledCount = ltntstools_pid_stats_stream_get_scrambled_count(&s->streamStatistics);
@@ -338,10 +338,10 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	ltntstools_pid_stats_update(&s->streamStatistics, buf, packetCount);
 
 	/* Pass all of the packets to the P1 analysis layer. */
-	p1_write(s, buf, packetCount);
+	p1_write(s, buf, packetCount, &s->now);
 
 	/* Pass all of the packets to the P1 analysis layer. */
-	p2_write(s, buf, packetCount);
+	p2_write(s, buf, packetCount, &s->now);
 
 	pthread_mutex_unlock(&s->mutex);
 
