@@ -258,7 +258,7 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
 
 			/* If we reach the threshold of consecutive sync errors, raise P1.1 - TS Sync Loss */
-			if (s->consecutiveSyncErrors >= 2)
+			if (s->consecutiveSyncErrors >= SYNC_LOSS_THRESHOLD)
 			{
 				ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS, time_now);
 			}

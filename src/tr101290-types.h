@@ -27,7 +27,7 @@ extern "C" {
 #pragma message "TR101290 WARNING: ENABLE_TESTING IS ACTIVE, remove before flight."
 #endif
 
-#define SYNC_LOSS_THRESHOLD 5 /* 5 consecutive sync bytes */
+#define SYNC_LOSS_THRESHOLD 2 /* consecutive sync bytes before error */
 
 /* TR101290 isn't supported on MAC Yet, but keep the compiler happy. */
 #if defined(__APPLE__)
