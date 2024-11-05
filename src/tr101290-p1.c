@@ -200,62 +200,84 @@ ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 {
 	s->now = *time_now;
 
-	/* P1.1 is taken care of by the background thread.
-	 * It monitors calls to _write, and if they stop, we declare that
-	 * TS_SYNC_LOSS. We're generally more flexible in this design because we
-	 * aren't dealing with RF, we're dealing with IP networks, and the metric
-	 * we truly care about is, the the network stall for more than X ms?
+	/* P1.1 - TS Sync Loss
+	 * TS Sync Loss is detected when the sync byte (0x47) is missing in consecutive TS packets.
+	 * We check each packet for the presence of the sync byte.
+	 * If a certain number of consecutive packets are missing the sync byte, we declare TS Sync Loss.
+	 * This replaces the previous method where TS Sync Loss was detected based on the timing between write calls.
 	 */
 
 	/* P1.2 - Sync Byte Error, sync byte != 0x47.
-	 * Most TR101290 processors assume this condition rises when P1.1 is bad,
-	 * it's not true, especially in a IP network. In the event of a packet stall,
-	 * or jitter, transport is lost for N ms, but resumes perfectly with zero
-	 * packet loss, in this case we never want to declare P1.2.
+	 * Most TR101290 processors assume this condition arises when P1.1 is bad,
+	 * but that's not always true, especially in an IP network.
+	 * In the event of a packet stall or jitter, transport might be lost for N ms,
+	 * but resume perfectly with zero packet loss; in this case, we never want to declare P1.2.
 	 */
-	for (int i = 0; i < packetCount; i++) {
+
+	for (int i = 0; i < packetCount; i++)
+	{
 #if ENABLE_TESTING
 		FILE *fh = fopen("/tmp/manglesyncbyte", "rb");
-		if (fh) {
+		if (fh)
+		{
 			unsigned char *p = (unsigned char *)&buf[i * 188];
 			*(p + 0) = 0x46;
 			fclose(fh);
 		}
 #endif
 
-		if (ltntstools_sync_present(&buf[i * 188])) {
+		if (ltntstools_sync_present(&buf[i * 188]))
+		{
 			s->consecutiveSyncBytes++;
-		} else {
-			/* Raise */
+			s->consecutiveSyncErrors = 0; /* Reset consecutive sync errors */
+
+			/* If we had previously raised P1.1 due to sync errors, clear it now */
+			if (s->consecutiveSyncBytes > 5)
+			{
+				ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
+				ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS, time_now);
+			}
+
+			/* Prevent integer wraparound */
+			if (s->consecutiveSyncBytes >= 50000)
+			{
+				/* We never want the int to wrap back to zero during long term test.
+				 * Once we're at a certain size, reset it to avoid overflow.
+				 */
+				s->consecutiveSyncBytes = 16; /* Stay clear of the window where sync byte is cleared. */
+			}
+		}
+		else
+		{
+			/* Sync byte missing */
+
 			s->consecutiveSyncBytes = 0;
+			s->consecutiveSyncErrors++; /* Increment consecutive sync errors */
+
+			/* Raise P1.2 - Sync Byte Error */
 			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
+
+			/* If we reach the threshold of consecutive sync errors, raise P1.1 - TS Sync Loss */
+			if (s->consecutiveSyncErrors >= 2)
+			{
+				ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS, time_now);
+			}
 		}
 	}
 
-	if (s->consecutiveSyncBytes > 5) {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
-	}
-
-	if (s->consecutiveSyncBytes >= 50000) {
-		/* We never want the int to wrap back to zero during long term test. Once we're a certain size,
-		 * our wrap point needs to clear a value of zero.
-		 */
-		s->consecutiveSyncBytes = 16; /* Stay clear of the window where sync byte is cleared. */
-	}
-	/* End: P1.2 - Sync Byte Error, sync byte != 0x47. */
+	/* End: P1.1 - TS Sync Loss and P1.2 - Sync Byte Error */
 
 	/* P1.3 - PAT_error */
 	p1_process_p1_3(s, buf, packetCount, *time_now);
 	/* End: P1.3 - PAT_error */
 
-	/* P1.4 */
+	/* P1.4 - Continuity Counter Error */
 	p1_process_p1_4(s, buf, packetCount, *time_now);
 	/* End: P1.4 */
-	
-	/* P1.5/6 */
+
+	/* P1.5/6 - PMT Error and PID Error */
 	p1_process_p1_56(s, buf, packetCount, *time_now);
 	/* End: P1.5/6 */
-	
+
 	return packetCount;
 }
-

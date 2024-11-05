@@ -15,28 +15,6 @@
 
 #define LOCAL_DEBUG 0
 
-static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s, struct timeval *time_now)
-{
-	s->now = *time_now;
-
-	/* Assume we have transport loss until the stats tell us different. */
-	int lost = 1;
-
-	int64_t ms = ltn_timeval_subtract_ms(&s->now, &s->lastWriteCall);
-	if (ms < 20)
-	{
-		lost = 0;
-	}
-	else
-	{
-#if LOCAL_DEBUG
-		fprintf(stderr, "TR101290: TS SYNC LOSS 1.1 - last write %" PRIi64 " ms\n", ms);
-#endif
-	}
-
-	return lost;
-}
-
 int ltntstools_tr101290_log_append(struct ltntstools_tr101290_s *s, int addTimestamp, const char *format, ...)
 {
 	int ret = 0;
@@ -148,13 +126,6 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		usleep(10 * 1000);
 		gettimeofday(&now, NULL);
 
-		int conditionLOS = didExperienceTransportLoss(s, &now);
-		if (!conditionLOS) {
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS, &now);
-		} else {
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS, &now);
-		}
-
 		/* For each possible event, determine if we need to build and alarm
 		 * record to inform the user (via callback.
 		 */
@@ -260,6 +231,8 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 	s->cb_notify = cb_notify;
 	pthread_mutex_init(&s->mutex, NULL);
 	pthread_mutex_init(&s->logMutex, NULL);
+
+	s->consecutiveSyncErrors = 0;
 
 	ltn_histogram_alloc_video_defaults(&s->h1, "write arrival latency");
 
