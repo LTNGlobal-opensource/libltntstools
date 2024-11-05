@@ -29,11 +29,10 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s, struct ti
 	}
 	else
 	{
-		fprintf(stderr, "TR101290: TS SYNC LOSS 1.1 - last write %" PRIi64 " ms\n", ms);
-	}
 #if LOCAL_DEBUG
-	//printf("TR101290: TS SYNC LOSS 1.1 - last write %" PRIi64 " ms\n", ms);
+		fprintf(stderr, "TR101290: TS SYNC LOSS 1.1 - last write %" PRIi64 " ms\n", ms);
 #endif
+	}
 
 	return lost;
 }
