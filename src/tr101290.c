@@ -23,11 +23,16 @@ static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s, struct ti
 	int lost = 1;
 
 	int64_t ms = ltn_timeval_subtract_ms(&s->now, &s->lastWriteCall);
-	if (ms < 20) {
+	if (ms < 20)
+	{
 		lost = 0;
 	}
+	else
+	{
+		printf("TR101290: TS SYNC LOSS 1.1 - last write %" PRIi64 " ms\n", ms);
+	}
 #if LOCAL_DEBUG
-	//printf("LOS for %" PRIi64 " ms\n", ms);
+	//printf("TR101290: TS SYNC LOSS 1.1 - last write %" PRIi64 " ms\n", ms);
 #endif
 
 	return lost;
