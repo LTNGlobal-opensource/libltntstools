@@ -123,9 +123,22 @@ int network_addr_compare(
 	if (src_iphdr->daddr != dst_iphdr->daddr)
 		return 0;
 #endif
-	if (src_udphdr->source != dst_udphdr->source)
+
+#ifdef __APPLE__
+	uint16_t src_port_source = ntohs(*((uint16_t *)src_udphdr));
+	uint16_t dst_port_source = ntohs(*((uint16_t *)dst_udphdr));
+	uint16_t src_port_dest = ntohs(*((uint16_t *)src_udphdr + 1));
+	uint16_t dst_port_dest = ntohs(*((uint16_t *)dst_udphdr + 1));
+#else
+	uint16_t src_port_source = ntohs(src_udphdr->source);
+	uint16_t dst_port_source = ntohs(dst_udphdr->source);
+	uint16_t dst_port_dest = ntohs(dst_udphdr->dest);
+	uint16_t src_port_dest = ntohs(src_udphdr->dest);
+#endif
+
+	if (src_port_source != dst_port_source)
 		return 0;
-	if (src_udphdr->dest != dst_udphdr->dest)
+	if (src_port_dest != dst_port_dest)
 		return 0;
 
 	return 1; /* Success, matched */
@@ -143,9 +156,17 @@ char *network_stream_ascii(struct iphdr *iphdr, struct udphdr *udphdr)
 	dstaddr.s_addr = iphdr->ip_dst.s_addr;
 #endif
 
+#ifdef __APPLE__
+	uint16_t src_port = ntohs(*((uint16_t *)udphdr));
+	uint16_t dst_port = ntohs(*((uint16_t *)udphdr + 1));
+#else
+	uint16_t src_port = ntohs(udphdr->source);
+	uint16_t dst_port = ntohs(udphdr->dest);
+#endif
+
 	char *str = malloc(256);
-	sprintf(str, "%s:%d", inet_ntoa(srcaddr), ntohs(udphdr->source));
-	sprintf(str + strlen(str), " -> %s:%d", inet_ntoa(dstaddr), ntohs(udphdr->dest));
+	sprintf(str, "%s:%d", inet_ntoa(srcaddr), src_port);
+	sprintf(str + strlen(str), " -> %s:%d", inet_ntoa(dstaddr), dst_port);
 
 	return str;
 }

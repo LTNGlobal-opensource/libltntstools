@@ -48,7 +48,7 @@ typedef void (*pes_extractor_callback)(void *userContext, struct ltn_pes_packet_
  * @param[in]   void *userContext - user private context, passed back to caller during callback.
  * @return      0 on success, else < 0.
  */
-int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext);
+int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max);
 
 /**
  * @brief       Free a previously allocate context.

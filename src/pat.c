@@ -246,38 +246,50 @@ int ltntstools_pat_compare(struct ltntstools_pat_s *a, struct ltntstools_pat_s *
 	return 0; /* Identical */
 }
 
-int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t *pid)
+int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t **pid_array, int *pid_count)
 {
-	if (!pat || !pmtptr || !e || !pid)
-		return -1;
+    if (!pat || !pmtptr || !e || !pid_array || !pid_count)
+        return -1;
 
-	if ((*e) + 1 > pat->program_count)
-		return -1;
+    if ((*e) + 1 > pat->program_count)
+        return -1;
 
-	*pmtptr = NULL;
-	*pid = 0;
+    *pmtptr = NULL;
+    *pid_array = NULL;
+    *pid_count = 0;
 
-	for (int i = 0; i < pat->program_count; i++) {
+    for (int i = 0; i < pat->program_count; i++) {
+        struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
 
-		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+        if (ltntstools_descriptor_list_contains_scte35_cue_registration(&pmt->descr_list) == 0) {
+            continue;
+        }
 
-		if (ltntstools_descriptor_list_contains_scte35_cue_registration(&pmt->descr_list) == 0) {
-			continue;
-		}
+        /* Allocate memory for PIDs array */
+        *pid_array = (uint16_t *)malloc(pmt->stream_count * sizeof(uint16_t));
+        if (!*pid_array)
+            return -1; /* Memory allocation failure */
 
-		/* Find the SCTE35 pid */
-		for (int j = 0; j < pmt->stream_count; j++) {
-			if (pmt->streams[j].stream_type == 0x86) {
-				*pid = pmt->streams[j].elementary_PID;
-				*pmtptr = pmt;
-				(*e)++;
-				return 0; /* Success */
-			}
-		}
+        /* Find all SCTE-35 PIDs */
+        for (int j = 0; j < pmt->stream_count; j++) {
+            if (pmt->streams[j].stream_type == 0x86) {
+                (*pid_array)[*pid_count] = pmt->streams[j].elementary_PID;
+                (*pid_count)++;
+            }
+        }
 
-	}
+        if (*pid_count > 0) {
+            *pmtptr = pmt;
+            (*e)++;
+            return 0; /* Success */
+        } else {
+            /* Free the allocated memory if no PIDs were found */
+            free(*pid_array);
+            *pid_array = NULL;
+        }
+    }
 
-	return -1; /* Error */
+    return -1; /* Error */
 }
 
 int ltntstools_pat_enum_services_smpte2038(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t *pid)

@@ -5,6 +5,7 @@
 #include <libltntstools/ltntstools.h>
 #include "klringbuffer.h"
 #include "klbitstream_readwriter.h"
+#include "memmem.h"
 
 #define LOCAL_DEBUG 0
 #define ORDERED_LIST_DEPTH 10
@@ -39,11 +40,11 @@ struct item_s
 	struct ltn_pes_packet_s *pes;
 };
 
-int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext)
+int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
 	struct pes_extractor_s *ctx = calloc(1, sizeof(*ctx));
 
-	ctx->rb = rb_new(4 * 1048576, 32 * 1048576);
+	ctx->rb = rb_new(buffer_min, buffer_max);
 	ctx->pid = pid;
 	ctx->streamId = streamId;
 	ctx->cb = cb;
@@ -156,25 +157,35 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
 /* Remove any bytes leading up to a 00 00 01 pattern, align the ring.  */
 static void _trimRing(struct pes_extractor_s *ctx)
 {
-	unsigned char pattern[4] = { 0x00, 0x00, 0x01, ctx->streamId };
-
+	unsigned char pattern[4] = {0x00, 0x00, 0x01, ctx->streamId};
 	int rlen = rb_used(ctx->rb);
-	if (rlen <= 0)
+	if (rlen < 4)
 		return;
-
-	int count = 0;
-	uint8_t buf[8];
-
-	while (1) {
-		size_t l = rb_peek(ctx->rb, (char *)&buf[0], 4);
-		if (l != 4)
+	size_t trimmed = 0;
+	uint8_t buf[1024];	// Buffer for peeking data
+	size_t overlap = 3; // Overlap to handle pattern spanning chunks
+	while (rlen >= 4)
+	{
+		// Determine how much to read in this iteration
+		size_t toRead = (rlen > sizeof(buf)) ? sizeof(buf) : rlen;
+		size_t len = rb_peek(ctx->rb, (char *)buf, toRead);
+		if (len < 4)
 			break;
-
-		if (memcmp(pattern, buf, 4) != 0) {
-			rb_discard(ctx->rb, 1);
-			count++;
-		} else
+		// Search for the pattern in the current buffer using memmem
+		const void *pos = ltn_memmem(buf, len, pattern, sizeof(pattern));
+		if (pos)
+		{
+			// Pattern found, calculate offset and discard up to pattern
+			size_t index = (const uint8_t *)pos - buf;
+			rb_discard(ctx->rb, index);
+			trimmed += index;
 			break;
+		}
+		// If pattern not found, discard up to overlap size to preserve possible pattern start
+		size_t toDiscard = (len > overlap) ? (len - overlap) : len;
+		rb_discard(ctx->rb, toDiscard);
+		trimmed += toDiscard;
+		rlen = rb_used(ctx->rb); // Update remaining data size
 	}
 }
 
@@ -195,10 +206,13 @@ static int _processRing(struct pes_extractor_s *ctx)
 	int rlen = rb_used(ctx->rb);
 	if (rlen < 16)
 		return -1;
+	int overrun = 0;
 
 #if LOCAL_DEBUG
 	printf("%s() ring size %d\n", __func__, rb_used(ctx->rb));
 #endif
+
+	//fprintf(stderr, "_processRing (%s:%s:%d) rlen %d\n", __FILE__, __func__, __LINE__, rlen);
 
 	unsigned char *buf = malloc(rlen);
 	if (buf) {
@@ -231,6 +245,29 @@ static int _processRing(struct pes_extractor_s *ctx)
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
 			//ssize_t xlen =
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
+
+			/* check for buffer overrun */
+			if (bs.overrun) {
+#if KLBITSTREAM_DEBUG
+				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Process Ring Buffer bs.overrun %d bs.buflen %d bs.buflen_used %d rlen %d offset %d\n",
+						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen, offset);
+#endif
+#if KTBITSTREAM_DUMP_ON_OVERRUN
+				ltn_pes_packet_dump(pes, "\t");
+#endif
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+				ltn_pes_packet_free(pes);
+				free(buf);
+				return -2;
+#else
+				overrun = 1;
+#endif
+			} else if (bs.truncated) {
+#if KTBITSTREAM_DUMP_ON_OVERRUN
+				ltn_pes_packet_dump(pes, "\t");
+#endif
+			}
+
 			if (bitsProcessed && ctx->cb) {
 				
 				pes->rawBufferLengthBytes = rlen - (rlen - offset);
@@ -292,6 +329,10 @@ static int _processRing(struct pes_extractor_s *ctx)
 	printf("%s() ring processing complete, size now %d\n", __func__, rb_used(ctx->rb));
 #endif
 
+	if (overrun) {
+		return -2;
+	}
+
 	return 0; /* Success */
 }
 
@@ -299,7 +340,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
-	int didOverflow;
+	int didOverflow, overrun = 0;
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
 		if (ltntstools_pid(pkt) != ctx->pid)
@@ -326,7 +367,20 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 2) {
 			/* Process any existing data in the ring. */
 			_trimRing(ctx);
-			_processRing(ctx);
+			int pr_ret = _processRing(ctx);
+			if (pr_ret == -2) { /* buffer overrun */
+#if KLBITSTREAM_DEBUG
+				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Pes Extractor Write buffer overrun in _processRing() for pid 0x%04x pkt size %d offset %d didOverflow %d\n",
+						__FILE__, __func__, __LINE__, ctx->pid, 188, offset, didOverflow);
+#endif
+				overrun = 1;
+#if KLBITSTREAM_RESET_ON_OVERRUN
+				ctx->appending = 0;
+				_trimRing(ctx);
+				rb_empty(ctx->rb);
+				break;
+#endif
+			}
 			ctx->appending = 1;
 
 			/* Now flush the buffer up to the next pes header marker */
@@ -335,6 +389,11 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 
 	}
 
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+	if (overrun) {
+		return -1;
+	}
+#endif
 
 	return packetCount;
 }
