@@ -20,6 +20,15 @@ extern "C" {
 struct klbs_context_s;
 
 /**
+ * @brief Context used by a packet writer to preserve ongoing state.
+ */
+struct ltn_pes_packet_writer_ctx
+{
+	uint64_t nr;
+	char dirname[256];
+};
+
+/**
  * @brief ISO13818-1 PES packet. See ISO13818 spec table 2.18.
  */
 struct ltn_pes_packet_s
@@ -133,6 +142,21 @@ int ltn_pes_packet_is_video(struct ltn_pes_packet_s *pes);
  * @return      number of bits packed.
  */
 ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pes, struct klbs_context_s *bs);
+
+/**
+ * @brief       Initialize a packet writer context.
+ * @param[in]   struct ltn_pes_packet_writer_ctx *ctx - object
+ * @param[in]   const char *dirname - base directory where file will be recorded.
+ * @return      0 on success else < 0.
+ */
+int ltn_pes_packet_writer_init(struct ltn_pes_packet_writer_ctx *ctx, const char *dirname);
+
+/**
+ * @brief       Save the pes ES into a file, in dirname
+ * @param[in]   struct ltn_pes_packet_s *pes - object
+ * @return      0 on success else < 0.
+ */
+int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes_packet_s *pes);
 
 #ifdef __cplusplus
 };
