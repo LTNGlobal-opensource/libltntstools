@@ -34,6 +34,6 @@
 	$ cd rust
 	$ sudo yum install llvm-toolset-7-clang-devel
 	$ sudo yum update cargo
-	$ export LIBCLANG_PATH=/opt/rh/llvm-toolset-7/root/usr/lib64 RUSTFLAGS="-C relocation-model=dynamic-no-pic"
+	$ export LIBCLANG_PATH=/opt/rh/llvm-toolset-7/root/usr/lib64
 	$ cargo build
 	$ cargo test -- --nocapture

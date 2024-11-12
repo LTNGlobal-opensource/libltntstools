@@ -1,0 +1,10 @@
+[package]
+name = "libltntstools"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+libc.workspace = true
+log = "0.4.22"
+sys = { package = "libltntstools-sys", path = "../libltntstools-sys" }
