@@ -521,6 +521,10 @@ int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *p, uint16_t pid, ui
 	packet[3] = 0x00 | (cc & 0x0f);
 	writePSI(packet, sec);
 
+	dvbpsi_DeletePSISections(sec);
+	dvbpsi_pmt_delete(pmt);
+	dvbpsi_delete(dvbpsi);
+
 	//ltntstools_hexdump(packet, 188, 32);
 
 	return 0; /* Success */
