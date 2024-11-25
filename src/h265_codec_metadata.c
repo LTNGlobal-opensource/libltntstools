@@ -867,7 +867,7 @@ int ltntstools_h265_codec_metadata_alloc(void **hdl, uint16_t pid, uint8_t strea
     ctx->streamId = streamId;
     *hdl = NULL;
 
-    int ret = ltntstools_pes_extractor_alloc(&ctx->pes, pid, streamId, (pes_extractor_callback)pe_callback, ctx, (4 * 1048576), (8 * 1048576));
+    int ret = ltntstools_pes_extractor_alloc(&ctx->pes, pid, streamId, (pes_extractor_callback)pe_callback, ctx, (2 * 1048576), (4 * 1048576), 32);
     if (ret < 0) {
         fprintf(stderr, "%s() Unable to allocate a pes extractor\n", __func__);
         free(ctx);
