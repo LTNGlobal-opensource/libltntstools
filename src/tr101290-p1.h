@@ -16,7 +16,7 @@ extern "C" {
 #include "libltntstools/tr101290.h"
 #include "libltntstools/time.h"
 
-ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount);
+ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval *time_now);
 
 #ifdef __cplusplus
 };

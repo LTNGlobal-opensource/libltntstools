@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-typedef void (*ltntstools_source_pcap_raw_callback)(void *userContext, const struct pcap_pkthdr *hdr, const u_char *pkt);
+typedef void (*ltntstools_source_pcap_raw_callback)(void *userContext, const struct pcap_pkthdr *hdr, const u_char *pkt, const struct pcap_stat *stats);
 
 struct ltntstools_source_pcap_callbacks_s
 {
@@ -39,7 +39,7 @@ struct ltntstools_source_pcap_callbacks_s
  * @param[in]   const char *filter - Eg. 'host 227.1.20.80 && udp port 4001'
  * @return      0 - Success, else < 0 on error.
  */
-int  ltntstools_source_pcap_alloc(void **hdl, void *userContext, struct ltntstools_source_pcap_callbacks_s *callbacks, const char *ifname, const char *filter);
+int  ltntstools_source_pcap_alloc(void **hdl, void *userContext, struct ltntstools_source_pcap_callbacks_s *callbacks, const char *ifname, const char *filter, int buffer_size_default);
 
 /**
  * @brief       Free a previously allocated context.

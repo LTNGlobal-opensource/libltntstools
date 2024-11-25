@@ -17,7 +17,7 @@ extern "C" {
 #include "libltntstools/time.h"
 #include "libltntstools/streammodel.h"
 
-ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount);
+ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval *time_now);
 
 void *p2_streammodel_callback(void *userContext, struct streammodel_callback_args_s *args);
 
