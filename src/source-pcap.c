@@ -46,7 +46,7 @@ static void pcap_callback(u_char *args, const struct pcap_pkthdr *h, const u_cha
 	struct source_pcap_ctx_s *ctx = (struct source_pcap_ctx_s *)args;
 
 	if (ctx->callbacks.raw) {
-		ctx->callbacks.raw(ctx->userContext, h, pkt);
+		ctx->callbacks.raw(ctx->userContext, h, pkt, &ctx->pcap_stats);
 
 	}
 	//pcap_update_statistics(ctx, h, pkt); /* Update the stream stats realtime to avoid queue jitter */

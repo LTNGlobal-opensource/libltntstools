@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-typedef void (*ltntstools_source_pcap_raw_callback)(void *userContext, const struct pcap_pkthdr *hdr, const u_char *pkt);
+typedef void (*ltntstools_source_pcap_raw_callback)(void *userContext, const struct pcap_pkthdr *hdr, const u_char *pkt, const struct pcap_stat *stats);
 
 struct ltntstools_source_pcap_callbacks_s
 {
