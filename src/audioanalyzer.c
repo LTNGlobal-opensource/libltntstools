@@ -11,7 +11,6 @@
 
 #define MIN_PES_EXTRACTOR (1 * 1048576)
 #define MAX_PES_EXTRACTOR (2 * 1048576)
-#define MAX_PES_ITEMS 32
 
 struct ltntstools_audioanalyzer_stream_s
 {
@@ -373,7 +372,7 @@ int ltntstools_audioanalyzer_stream_add(void *hdl, uint16_t pid, uint8_t streamI
     pthread_mutex_init(&stream->tsmutex, NULL);
 
     /* Bring up the PES extractor */
-    int ret = ltntstools_pes_extractor_alloc(&stream->pesExtractor, pid, streamID, (pes_extractor_callback)pes_callback, stream, MIN_PES_EXTRACTOR, MAX_PES_EXTRACTOR, MAX_PES_ITEMS);
+    int ret = ltntstools_pes_extractor_alloc(&stream->pesExtractor, pid, streamID, (pes_extractor_callback)pes_callback, stream, MIN_PES_EXTRACTOR, MAX_PES_EXTRACTOR);
     if (ret < 0) {
         pthread_mutex_unlock(&ctx->mutex);
         fprintf(stderr, "%s() unable to allocate a pes extractor, aborting.\n", __func__);

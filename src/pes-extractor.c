@@ -8,6 +8,7 @@
 #include "memmem.h"
 
 #define LOCAL_DEBUG 0
+#define ORDERED_LIST_DEPTH 10
 
 struct pes_extractor_s
 {
@@ -39,7 +40,7 @@ struct item_s
 	struct ltn_pes_packet_s *pes;
 };
 
-int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max, int items)
+int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
 	struct pes_extractor_s *ctx = calloc(1, sizeof(*ctx));
 
@@ -54,8 +55,8 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
 
-	/* initialize a N item deep list */
-	for (int i = 0; i < items; i++) {
+	/* initialize a 10 item deep list */
+	for (int i = 0; i < ORDERED_LIST_DEPTH; i++) {
 		struct item_s *item = malloc(sizeof(*item));
 		if (item) {
 			item->correctedPTS = 0;
