@@ -19,3 +19,5 @@ m4
 missing
 src/.deps/
 src/.libs/
+/Cargo.lock
+/target/

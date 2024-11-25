@@ -267,6 +267,11 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		pkt->additional_copy_info_flag = klbs_read_bits(bs, 1);
 		pkt->PES_CRC_flag = klbs_read_bits(bs, 1);
 		pkt->PES_extension_flag = klbs_read_bits(bs, 1);
+
+		/* Make sure something exists in the buffer, else abort early */
+		if (klbs_get_byte_count_free(bs) < 1)
+			return bits;
+
 		pkt->PES_header_data_length = klbs_read_bits(bs, 8);
 
 		bits += 72;
@@ -324,6 +329,10 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			bits += 8;
 
 			if (pkt->PES_private_data_flag == 1) {
+				/* Make sure something exists in the buffer, else abort early */
+				if (klbs_get_byte_count_free(bs) < 16)
+					return bits;
+
 				klbs_read_bits(bs, 32); /* private data */
 				klbs_read_bits(bs, 32); /* private data */
 				klbs_read_bits(bs, 32); /* private data */
@@ -334,6 +343,11 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			if (pkt->pack_header_field_flag == 1) {
 				int len = klbs_read_bits(bs, 8);
 				bits += 8;
+
+				/* Make sure something exists in the buffer, else abort early */
+				if (klbs_get_byte_count_free(bs) < len)
+					return bits;
+
 				for (int i = 0; i < len; i++) {
 					klbs_read_bits(bs, 8); /* No support */
 					bits += 8;
@@ -587,4 +601,52 @@ int ltn_pes_packet_is_video(struct ltn_pes_packet_s *pes)
 	}
 
 	return 0;
+}
+
+int ltn_pes_packet_writer_init(struct ltn_pes_packet_writer_ctx *ctx, const char *dirname)
+{
+	if ((ctx == NULL) || (dirname == NULL))
+		return -1;
+
+	ctx->nr = 0;
+	strncpy(&ctx->dirname[0], dirname, sizeof(ctx->dirname));
+
+	return 0; /* Success */
+}
+
+int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes_packet_s *pes)
+{
+	int ret = -1;
+
+	if ((ctx == NULL) || (pes == NULL))
+		return ret;
+
+	/* 014d PTS %014d DTS (or zero) %08d length 32bit crc (all decimal), crc %08x
+	 * Eg. seq00000000000000-pts00000000000000-dts00000000000000-len00000000-crc00000000
+	 */
+
+	uint32_t crc32 = 0;
+	ltntstools_getCRC32(pes->data, pes->dataLengthBytes, &crc32);
+
+	char fn[256];
+
+	sprintf(fn, "%s/seq%014" PRIu64 "-pts%014" PRIu64 "-dts%014" PRIu64 "-len%08" PRIu32 "-crc%08x",
+		ctx->dirname,
+		ctx->nr++,
+		pes->PTS,
+		pes->DTS,
+		pes->dataLengthBytes,
+		crc32);
+
+	FILE *ofh = fopen(fn, "wb");
+	if (!ofh)
+		return ret;
+
+	ssize_t w = fwrite(pes->data, 1, pes->dataLengthBytes, ofh);
+	if (w == pes->dataLengthBytes) {
+		ret = 0;
+	}
+	fclose(ofh);
+
+	return ret;
 }

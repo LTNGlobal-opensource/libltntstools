@@ -32,6 +32,20 @@ void ltntstools_pat_free(struct ltntstools_pat_s *pat)
 	free(pat);
 }
 
+struct ltntstools_pat_s *ltntstools_pat_clone(struct ltntstools_pat_s *pat)
+{
+	if (!pat) {
+		return NULL;
+	}
+
+	struct ltntstools_pat_s *dst = calloc(1, sizeof(*pat));
+	if (dst) {
+		memcpy(dst, pat, sizeof(*pat));
+	}
+
+	return dst;
+}
+
 void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd)
 {
 	dprintf(fd, "pat.transport_stream_id = 0x%x\n", pat->transport_stream_id);
@@ -376,4 +390,154 @@ int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, str
 	}
 
 	return -1; /* Failed */
+}
+
+int ltntstools_pat_enum_services(struct ltntstools_pat_s *pat, int *e, uint16_t pid, struct ltntstools_pmt_s **pmtptr)
+{
+	if (!pmtptr || !e)
+		return -1;
+
+	if ((*e) + 1 > pat->program_count)
+		return -1;
+
+	for (int i = (*e); i < pat->program_count; i++) {
+
+		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+
+		if (pat->programs[*e].program_map_PID == pid) {
+			(*e)++;
+			*pmtptr = pmt;
+			return 0; /* Success */
+		}
+		(*e)++;
+	}
+
+	return -1; /* Failed */
+}
+
+int ltntstools_pmt_remove_es_for_pid(struct ltntstools_pmt_s *pmt, uint16_t pid)
+{
+	if (!pmt)
+		return -1;
+
+	for (int i = 0; i < pmt->stream_count; i++) {
+		struct ltntstools_pmt_entry_s *e = &pmt->streams[i];
+		if (e->elementary_PID == pid) {
+			if (i == pmt->stream_count - 1) {
+				/* Last element in the last */
+				pmt->stream_count = pmt->stream_count - 1;
+				break;
+			} else {
+				/* Remove one entry from the middle or start of the list */
+				int count = pmt->stream_count - i - 1;
+				memmove(&pmt->streams[i], &pmt->streams[i + 1], count * sizeof(struct ltntstools_pmt_entry_s));
+				pmt->stream_count = pmt->stream_count - 1;
+				break;
+			}
+		}
+	}
+	return 0; /* Success */
+}
+
+/* DVBPSI - I don't like this fun, I don't think we need it. TODO, remove in future. */
+static void message(dvbpsi_t *handle, const dvbpsi_msg_level_t level, const char* msg)
+{
+	switch(level) {
+	case DVBPSI_MSG_ERROR: fprintf(stderr, "Error: "); break;
+	case DVBPSI_MSG_WARN:  fprintf(stderr, "Warning: "); break;
+	case DVBPSI_MSG_DEBUG: fprintf(stderr, "Debug: "); break;
+	default: /* do nothing */
+		return;
+	}
+	fprintf(stderr, "%s\n", msg);
+}
+
+/* Straight out of the libdvbpsi sample project. */
+static void writePSI(uint8_t *p_packet, dvbpsi_psi_section_t *p_section)
+{
+  p_packet[0] = 0x47;
+
+  while(p_section)
+  {
+    uint8_t* p_pos_in_ts;
+    uint8_t* p_byte = p_section->p_data;
+    uint8_t* p_end  = p_section->p_payload_end + (p_section->b_syntax_indicator ? 4 : 0);
+
+    p_packet[1] |= 0x40;
+    p_packet[3]  = (p_packet[3] & 0x0f) | 0x10;
+    p_packet[4]  = 0x00; /* pointer_field */
+    p_pos_in_ts  = p_packet + 5;
+
+    while((p_pos_in_ts < p_packet + 188) && (p_byte < p_end)) {
+      *(p_pos_in_ts++) = *(p_byte++);
+	}
+
+    while(p_pos_in_ts < p_packet + 188) {
+      *(p_pos_in_ts++) = 0xff;
+	}
+
+    p_packet[3] = (p_packet[3] + 1) & 0x0f;
+
+    while(p_byte < p_end) {
+      p_packet[1] &= 0xbf;
+      p_packet[3]  = (p_packet[3] & 0x0f) | 0x10;
+      p_pos_in_ts  = p_packet + 4;
+
+      while((p_pos_in_ts < p_packet + 188) && (p_byte < p_end)) {
+        *(p_pos_in_ts++) = *(p_byte++);
+	  }
+
+      while(p_pos_in_ts < p_packet + 188) {
+        *(p_pos_in_ts++) = 0xff;
+	  }
+
+      p_packet[3] = (p_packet[3] + 1) & 0x0f;
+    }
+
+    p_section = p_section->p_next;
+  }
+}
+
+int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *p, uint16_t pid, uint8_t cc, uint8_t *packet, int packetLength)
+{
+	if ((!p) || (packetLength != 188) || (packet == NULL))
+		return -1;
+
+	dvbpsi_pmt_t *pmt = dvbpsi_pmt_new(p->program_number, p->version_number, p->current_next_indicator, p->PCR_PID);
+
+	for (int j = 0; j < p->descr_list.count; j++) {
+		dvbpsi_pmt_descriptor_add(pmt,
+			p->descr_list.array[j].tag,
+			p->descr_list.array[j].len,
+			&p->descr_list.array[j].data[0]);
+	}
+
+	for (int i = 0; i < p->stream_count; i++) {
+		dvbpsi_pmt_es_t *es = dvbpsi_pmt_es_add(pmt, p->streams[i].stream_type, p->streams[i].elementary_PID);
+
+		for (int j = 0; j < p->streams[i].descr_list.count; j++) {
+			dvbpsi_pmt_es_descriptor_add(es,
+				p->streams[i].descr_list.array[j].tag,
+				p->streams[i].descr_list.array[j].len, &p->streams[i].descr_list.array[j].data[0]);
+		}
+	}
+
+	dvbpsi_t *dvbpsi = dvbpsi_new(&message, DVBPSI_MSG_ERROR);
+
+	dvbpsi_psi_section_t *sec = dvbpsi_pmt_sections_generate(dvbpsi, pmt);
+
+	memset(packet, 0, 188);
+	packet[0] = 0x47;
+	packet[1] = (pid & 0x1fff) >> 8;
+	packet[2] = pid & 0xff;
+	packet[3] = 0x00 | (cc & 0x0f);
+	writePSI(packet, sec);
+
+	dvbpsi_DeletePSISections(sec);
+	dvbpsi_pmt_delete(pmt);
+	dvbpsi_delete(dvbpsi);
+
+	//ltntstools_hexdump(packet, 188, 32);
+
+	return 0; /* Success */
 }
