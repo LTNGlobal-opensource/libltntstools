@@ -80,7 +80,7 @@ static void *pcap_thread_func(void *p)
 		time_t now;
 		time(&now);
 
-		/* Querying stats repeatidly is cpu expensive, we only need it 1sec intervals. */
+		/* Querying stats repeatidly is cpu expensive, we only need it 30sec intervals. */
 		if (lastStatsCheck == 0) {
 			/* Collect pcap packet loss stats */
 			if (pcap_stats(ctx->descr, &ctx->pcap_stats_startup) != 0) {
@@ -88,7 +88,7 @@ static void *pcap_thread_func(void *p)
 			}
 		}
 
-		if (now != lastStatsCheck) {
+		if (now > lastStatsCheck + 30) {
 			lastStatsCheck = now;
 			/* Collect pcap packet loss stats */
 			struct pcap_stat tmp;
