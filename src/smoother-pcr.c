@@ -147,8 +147,19 @@ static uint64_t getScheduledOutputuS(struct smoother_pcr_context_s *ctx, int64_t
 {
 	int64_t ticks = ltntstools_scr_diff(ctx->pcrFirst, pcr);
 
+#if 0
+// ST - Disabled. This patch breaks the smoothing in the mux.
+// The mux as of 12/3/24 outputs PCRs at intervals of 30ms and occasionally 1ms.
+// This variance in the pcr interval causes the smoother to improperly schedule
+// out packets, in order to reduce the amount of 'data buffered' in th smoother itself.
+// The design assumes we always buffer a moderatly fixed interval (PCR) of data
+// and then we compensate for the (mostly static) interval when packet scheduling.
+// A wildly varying interval results in the packets being improperly scheduled with
+// bursts and stalls as the pcr interval is constantly re-compputed and the buffer
+// contains too little or too much.
 	/* Reduce by one PCR interval due to the buffering in pcr_smoother_write */
 	ticks -= pcrIntervalTicks;
+#endif
 
 	uint64_t scheduledTimeuS = ctx->walltimeFirstPCRuS + (ticks / 27);
 
