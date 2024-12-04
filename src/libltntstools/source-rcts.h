@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-typedef void (*ltntstools_source_rcts_raw_callback)(void *userContext, const uint8_t *pkts, int packetCount);
+typedef void (*ltntstools_source_rcts_raw_callback)(void *userContext, const uint8_t *pkts, int packetCount, struct timeval *timestamp);
 typedef void (*ltntstools_source_rcts_pos_callback)(void *userContext, uint64_t pos, uint64_t max, double pct);
 
 struct ltntstools_source_rcts_callbacks_s

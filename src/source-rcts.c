@@ -34,8 +34,11 @@ static int sm_pcr_output_callback(void *userContext, unsigned char *pkts, int le
 {
 	struct source_rcts_ctx_s *ctx = userContext;
 
+        struct timeval current_time;
+        gettimeofday(&current_time, NULL);
+
 	if (ctx->callbacks.raw) {
-		ctx->callbacks.raw(ctx->userContext, pkts, lengthBytes / 188);
+		ctx->callbacks.raw(ctx->userContext, pkts, lengthBytes / 188, &current_time);
 	}
 
 	return 0;
