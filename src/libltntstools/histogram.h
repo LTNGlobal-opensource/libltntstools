@@ -157,6 +157,9 @@ static inline void ltn_histogram_free(struct ltn_histogram_s *ctx)
 
 static inline int ltn_histogram_alloc(struct ltn_histogram_s **handle, const char *name, uint64_t minValMs, uint64_t maxValMs)
 {
+	/* free handle if we have already allocated it */
+	if (*handle)
+		ltn_histogram_free(*handle);
 	*handle = NULL;
 
 	if (minValMs == maxValMs)
