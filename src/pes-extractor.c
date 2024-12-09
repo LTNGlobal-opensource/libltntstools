@@ -207,6 +207,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 	if (rlen < 16)
 		return -1;
 	int overrun = 0;
+	int offset = -1;
 
 #if LOCAL_DEBUG
 	printf("%s() ring size %d\n", __func__, rb_used(ctx->rb));
@@ -224,7 +225,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 			 * meaningless, becasue the buffer is expected to contain and ENTIRE PES followed by the header from
 			 * a subsequence PES.
 			 */
-			int offset = searchReverse(buf, rlen, ctx->streamId);
+			offset = searchReverse(buf, rlen, ctx->streamId);
 			if (offset < 16) {
 				/* We'll come back again in the future */
 				free(buf);
@@ -258,6 +259,15 @@ static int _processRing(struct pes_extractor_s *ctx)
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 				ltn_pes_packet_free(pes);
 				free(buf);
+
+				if (offset > 0 && offset <= rb_used(ctx->rb))
+				{
+					rb_discard(ctx->rb, offset);
+				}
+				else
+				{
+					rb_empty(ctx->rb);
+				}
 				return -2;
 #else
 				overrun = 1;
@@ -319,10 +329,9 @@ static int _processRing(struct pes_extractor_s *ctx)
 		free(buf);
 	}
 
-	uint8_t tbuf[16];
-	size_t l = rb_read(ctx->rb, (char *)&tbuf[0], sizeof(tbuf));
-	if (l == 16) {
-		//ltntstools_hexdump(buf, sizeof(tbuf), 16);
+	if (!overrun && offset > 0)
+	{
+		rb_discard(ctx->rb, offset);
 	}
 
 #if LOCAL_DEBUG
