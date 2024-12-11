@@ -346,7 +346,10 @@ static int _queueProcess(struct smoother_rtp_context_s *ctx, int64_t uS)
 	xorg_list_for_each_entry_safe(e, next, &loclist, list) {
 		if (ctx->outputCb) {
 
-			ltn_histogram_interval_update(ctx->histTransmit);
+
+			struct timeval tv;
+			gettimeofday(&tv, NULL);
+			ltn_histogram_interval_update(ctx->histTransmit, &tv);
 
 			ctx->outputCb(ctx->userContext, e->buf, e->lengthBytes);
 
@@ -555,7 +558,7 @@ int smoother_rtp_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 {
 	struct smoother_rtp_context_s *ctx = (struct smoother_rtp_context_s *)hdl;
 
-	ltn_histogram_interval_update(ctx->histReceive);
+	ltn_histogram_interval_update(ctx->histReceive, ts);
 #if LOCAL_DEBUG
 	ltn_histogram_interval_print(STDOUT_FILENO, ctx->histReceive, 5);
 	ltn_histogram_interval_print(STDOUT_FILENO, ctx->histTransmit, 5);

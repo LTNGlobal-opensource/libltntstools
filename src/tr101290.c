@@ -285,13 +285,17 @@ void ltntstools_tr101290_free(void *hdl)
 	free(s);
 }
 
-ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount)
+ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount, struct timeval *timestamp)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
 
-	gettimeofday(&s->now, NULL);
+	if (timestamp) {
+		s->now = *timestamp;
+	} else {
+		gettimeofday(&s->now, NULL);
+	}
 
-	ltn_histogram_interval_update(s->h1);
+	ltn_histogram_interval_update(s->h1, timestamp);
 	//ltn_histogram_interval_print(STDOUT_FILENO, s->h1, 10);
 
 #if ENABLE_TESTING

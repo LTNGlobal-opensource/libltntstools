@@ -18,7 +18,7 @@
  *   ltn_histogram_alloc_video_defaults(&hdl, "frame arrival times");
  *
  *   // Update the histogram every time a new frame arrives.
- *   ltn_histogram_interval_update(hdl);
+ *   ltn_histogram_interval_update(hdl, timestamp);
  *
  *   // Whenever you see fit, print the histogram content:
  *   ltn_histogram_interval_print(STDOUT_FILENO, hdl, 0);
@@ -214,14 +214,11 @@ static inline int ltn_histogram_interval_update_with_value(struct ltn_histogram_
 	return diffMs;
 }
 
-static inline int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
+static inline int ltn_histogram_interval_update(struct ltn_histogram_s *ctx, struct timeval *timestamp)
 {
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	uint32_t diffMs = ltn_timeval_subtract_ms(timestamp, &ctx->intervalLast);
 
-	uint32_t diffMs = ltn_timeval_subtract_ms(&now, &ctx->intervalLast);
-
-	ctx->intervalLast = now; /* Implicit struct copy. */
+	ctx->intervalLast = *timestamp; /* Implicit struct copy. */
 
 	if ((diffMs < ctx->minValMs) || (diffMs > ctx->maxValMs)) {
 		ctx->bucketMissCount++;
@@ -229,7 +226,7 @@ static inline int ltn_histogram_interval_update(struct ltn_histogram_s *ctx)
 	}
 
 	struct ltn_histogram_bucket_s *bucket = ltn_histogram_bucket(ctx, diffMs);
-	bucket->lastUpdate = now; /* Implicit struct copy. */
+	bucket->lastUpdate = *timestamp; /* Implicit struct copy. */
 	bucket->count++;
 	ctx->totalCount++;
 

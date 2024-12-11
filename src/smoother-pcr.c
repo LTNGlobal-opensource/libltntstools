@@ -356,7 +356,9 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 				ltntstools_pcr_position_append(&array, &arrayLength, &p);
 			}
 
-			ltn_histogram_interval_update(ctx->histTransmit);
+			struct timeval tv;
+			gettimeofday(&tv, NULL);
+			ltn_histogram_interval_update(ctx->histTransmit, &tv);
 
 			int x = e->lengthBytes;
 			uint64_t sn = e->seqno;
@@ -579,7 +581,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
 
-	ltn_histogram_interval_update(ctx->histReceive);
+	ltn_histogram_interval_update(ctx->histReceive, ts);
 #if LOCAL_DEBUG
 	ltn_histogram_interval_print(STDOUT_FILENO, ctx->histReceive, 5);
 	ltn_histogram_interval_print(STDOUT_FILENO, ctx->histTransmit, 5);

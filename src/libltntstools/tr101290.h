@@ -114,7 +114,7 @@ void    ltntstools_tr101290_free(void *hdl);
  * @param[in]   void *hdl - Handle returned to the caller.
  * @return      The number of packets inspected, or < 0 on error.
  */
-ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount);
+ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount, struct timeval *timestamp);
 
 /**
  * @brief       Convert an event id into a human readable string.
