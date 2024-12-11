@@ -18,7 +18,7 @@ extern "C" {
 
 struct tr_event_s *ltntstools_tr101290_event_table_copy();
 
-int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
+int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event, struct timeval *now);
 
 void _tr101290_event_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event);
 

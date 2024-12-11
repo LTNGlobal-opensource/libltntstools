@@ -146,7 +146,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			}
 #endif
 			/* Find all events we should be reporting on,  */
-			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
+			if (ltntstools_tr101290_event_should_report(s, ev->id, &now)) {
 
 				/* Mark the last reported time slight int the future, to avoid duplicate
 				 * reports within a few seconds of each other

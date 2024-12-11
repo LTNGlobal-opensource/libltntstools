@@ -57,11 +57,12 @@ void ltntstools_streammodel_free(void *hdl);
  * @param[in]     void *hdl - Previously allocate context handle.
  * @param[in]     const unsigned char *pkt - Buffer of transport packets, 1 or more.
  * @param[in]     int packetCount - Number of packets in the buffer.
+ * @param[in]     struct timeval *timestamp - Timestamp of the first packet in the buffer.
  * @param[out]    int *complete - Result will contain 0 or 1. When 1, you are entitled to call _query_model()
  *                                to collect a fully formed PAT object, containing the entire PAT/PMT tree.
  * @return        Number of transport packets processed.
  */
-size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int packetCount, int *complete);
+size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int packetCount, int *complete, struct timeval *timestamp);
 
 /**
  * @brief         Helper function. Print the entire current stream model to a file descriptor.

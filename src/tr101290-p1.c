@@ -81,7 +81,7 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 
 	/* PMT checking */
 	int complete = 0;
-	ltntstools_streammodel_write(s->smHandle, buf, packetCount, &complete);
+	ltntstools_streammodel_write(s->smHandle, buf, packetCount, &complete, &time_now);
 
 	/* If the stream model is completing, then the PMT's must be ok.
 	 * DVBPSI enforces the scrambling control check.

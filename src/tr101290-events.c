@@ -262,7 +262,7 @@ int ltntstools_tr101290_event_clear(void *hdl, enum ltntstools_tr101290_event_e 
 /* For a given event in the user context, see if its enabled, expected to be reported,
  * and the report window dictates that we should be reproting it, react accordingly.
  */
-int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event)
+int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event, struct timeval *now)
 {
 	struct tr_event_s *ev = &s->event_tbl[event];
 
@@ -276,8 +276,6 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 
 	/* Decide whether we need to raise an alarm record for this. */
 	int createUserAlarm = 1;
-	struct timeval now;
-	gettimeofday(&now, NULL);
 
 	/* See if we're entitled to report this change, don't report more than once in a given window.
 	 * For a given event, see how often is should be reported and skip over-reporting.
