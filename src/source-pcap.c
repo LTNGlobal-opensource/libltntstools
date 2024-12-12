@@ -74,7 +74,7 @@ static void *pcap_thread_func(void *p)
 		processed = pcap_dispatch(ctx->descr, -1, pcap_callback, (u_char *)ctx);
 		if (processed == 0) {
 			ctx->pcap_dispatch_miss++;
-			usleep(1 * 1000);
+			usleep(10 * 1000);
 		}
 
 		time_t now;
