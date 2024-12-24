@@ -155,6 +155,15 @@ int ltntstools_pat_enum_services_smpte2038(struct ltntstools_pat_s *pat, int *e,
 int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmt);
 
 /**
+ * @brief       Enumerate all services in the PAT object, find any audio programs (with a pcr) return the associated PMT.
+ * @param[in]   struct ltntstools_pat_s *pat - object
+ * @param[in]   int *e - used internally to enumerate objects. Pass 0 value int on first call then don't modify afterwards
+ * @param[out]  struct ltntstools_pmt_s **pmt - ptr to the pmt object containing in the PAT
+ * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
+ */
+int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmt, uint16_t **pid_array, int *pid_count);
+
+/**
  * @brief       Enumerate all services in the PAT object, return the associated PMT.
  * @param[in]   struct ltntstools_pat_s *pat - object
  * @param[in]   int *e - used internally to enumerate objects. Pass 0 value int on first call then don't modify afterwards
