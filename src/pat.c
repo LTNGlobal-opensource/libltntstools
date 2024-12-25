@@ -392,9 +392,9 @@ int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, str
 	return -1; /* Failed */
 }
 
-int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t **pid_array, int *pid_count)
+int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint32_t **stream_type_array, uint16_t **pid_array, int *pid_count)
 {
-	if (!pat || !pmtptr || !e || !pid_array || !pid_count)
+	if (!pat || !pmtptr || !e || !pid_array || !pid_count || !stream_type_array)
 		return -1;
 
 	if ((*e) + 1 > pat->program_count)
@@ -402,6 +402,7 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 
 	*pmtptr = NULL;
 	*pid_array = NULL;
+	*stream_type_array = NULL;
 	*pid_count = 0;
 
 	for (int i = 0; i < pat->program_count; i++) {
@@ -412,19 +413,22 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 		if (!*pid_array)
 			return -1; /* Memory allocation failure */
 
+		/* Allocate memory for stream type array */
+		*stream_type_array = (uint32_t *)malloc(pmt->stream_count * sizeof(uint32_t));
+		if (!*stream_type_array) {
+			free(*pid_array);
+			*pid_array = NULL;
+			return -1; /* Memory allocation failure */
+		}
+
 		/* Find all audio PIDs */
 		int found = 0;
 		for (int j = 0; j < pmt->stream_count; j++) {
 			if (ltntstools_is_ESPayloadType_Audio(pmt->streams[j].stream_type)) {
 				(*pid_array)[*pid_count] = pmt->streams[j].elementary_PID;
+				(*stream_type_array)[*pid_count] = pmt->streams[j].stream_type;
 				(*pid_count)++;
 				found += 1;
-			}
-			else
-			{
-				/* Padd with pid_array[pid_count] == 0 and increment pid_count */
-				(*pid_array)[*pid_count] = 0;
-				(*pid_count)++;
 			}
 		}
 
@@ -436,6 +440,8 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 			/* Free the allocated memory if no PIDs were found */
 			free(*pid_array);
 			*pid_array = NULL;
+			free(*stream_type_array);
+			*stream_type_array = NULL;
 		}
 	}
 
