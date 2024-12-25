@@ -230,6 +230,33 @@ static int _processRing(struct pes_extractor_s *ctx)
 				free(buf);
 				return -1;
 			}
+
+			/*
+			 * If this is private_stream_1 (0xbd) and the declared PES length is bigger
+			 * than the available bytes in the ring, then override the declared length
+			 * to zero so the parser won't read beyond the buffer (avoiding overrun).
+			 */
+			if ((ctx->streamId == 0xBD || ctx->streamId == 0xC0) && (offset + 6 <= rlen))
+			{
+				uint16_t declaredLen = (buf[offset + 4] << 8) | buf[offset + 5];
+				size_t have = (rlen - offset);	 // how many bytes remain from offset to the end
+				size_t needed = declaredLen + 6; // standard PES header + declaredLen
+
+				if (needed > have)
+				{
+					// Force parser to treat declaredLen as zero
+					buf[offset + 4] = 0x00;
+					buf[offset + 5] = 0x00;
+
+					//fprintf(stderr,
+					//		"PES %02x declaredLen %u rlen %d offset %d need %zu but have %zu; forcing length=0.\n",
+					//		ctx->streamId, declaredLen, rlen, offset, needed, have);
+					//free(buf);
+					/* remove ring buf up to offset */
+					//rb_discard(ctx->rb, offset);
+					//return -1;
+				}
+			}
 #if LOCAL_DEBUG
 			if (offset == 423) {
 				ltntstools_hexdump(buf, rlen, 32);
@@ -263,12 +290,13 @@ static int _processRing(struct pes_extractor_s *ctx)
 				overrun = 1;
 #endif
 			} else if (bs.truncated) {
+                overrun = 1;
 #if KTBITSTREAM_DUMP_ON_OVERRUN
 				ltn_pes_packet_dump(pes, "\t");
 #endif
 			}
 
-			if (bitsProcessed && ctx->cb) {
+			if (!overrun && bitsProcessed && ctx->cb) {
 				
 				pes->rawBufferLengthBytes = rlen - (rlen - offset);
 				pes->rawBuffer = malloc(pes->rawBufferLengthBytes);
@@ -308,8 +336,10 @@ static int _processRing(struct pes_extractor_s *ctx)
 				}
 			} else
 			if (bitsProcessed) {
+#if LOCAL_DEBUG
 				ltn_pes_packet_dump(pes, "\t");
 				ltn_pes_packet_free(pes);
+#endif
 			} else {
 #if LOCAL_DEBUG
 				printf("skipping, processedbits = %d\n", bitsProcessed);
@@ -366,7 +396,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 
 		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 2) {
 			/* Process any existing data in the ring. */
-			_trimRing(ctx);
+			//_trimRing(ctx);
 			int pr_ret = _processRing(ctx);
 			if (pr_ret == -2) { /* buffer overrun */
 #if KLBITSTREAM_DEBUG
@@ -384,7 +414,9 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			ctx->appending = 1;
 
 			/* Now flush the buffer up to the next pes header marker */
-			_trimRing(ctx);
+			if (pr_ret == 0) {
+				_trimRing(ctx);
+			}
 		}
 
 	}
