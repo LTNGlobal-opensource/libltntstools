@@ -418,6 +418,12 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 				(*pid_array)[*pid_count] = pmt->streams[j].elementary_PID;
 				(*pid_count)++;
 			}
+			else
+			{
+				/* Padd with pid_array[pid_count] == 0 and increment pid_count */
+				(*pid_array)[*pid_count] = 0;
+				(*pid_count)++;
+			}
 		}
 
 		if (*pid_count > 0) {
