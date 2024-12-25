@@ -413,10 +413,12 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 			return -1; /* Memory allocation failure */
 
 		/* Find all audio PIDs */
+		int found = 0;
 		for (int j = 0; j < pmt->stream_count; j++) {
 			if (ltntstools_is_ESPayloadType_Audio(pmt->streams[j].stream_type)) {
 				(*pid_array)[*pid_count] = pmt->streams[j].elementary_PID;
 				(*pid_count)++;
+				found += 1;
 			}
 			else
 			{
@@ -426,7 +428,7 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 			}
 		}
 
-		if (*pid_count > 0) {
+		if (found > 0 && *pid_count > 0) {
 			*pmtptr = pmt;
 			(*e)++;
 			return 0; /* Success */
