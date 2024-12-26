@@ -236,19 +236,60 @@ static int _processRing(struct pes_extractor_s *ctx)
 			 * than the available bytes in the ring, then override the declared length
 			 * to zero so the parser won't read beyond the buffer (avoiding overrun).
 			 */
-			if ((ctx->streamId == 0xBD || ctx->streamId == 0xC0) && (offset + 6 <= rlen))
+			if ((ctx->streamId == 0xBD || (ctx->streamId >= 0xC0 && ctx->streamId <= 0xDF)) && (offset + 6 <= rlen))
 			{
 				uint16_t declaredLen = (buf[offset + 4] << 8) | buf[offset + 5];
-				size_t have = rlen - offset;	 // how many bytes remain from offset to the end
-				size_t needed = declaredLen + 6; // standard PES header + declaredLen
+				size_t have = (rlen - offset);
+				size_t needed = declaredLen + 6;
 
 				if (needed > have)
 				{
-					uint16_t adjustedLen = have - 6; // Subtract header size
-					if (adjustedLen > 0)
+					// Start after PES header
+					int last_complete_frame = offset + 6;
+					int found_frame = 0;
+
+					// For PES private stream 1 (0xBD) - typically AC3
+					if (ctx->streamId == 0xBD)
 					{
-						buf[offset + 4] = (adjustedLen >> 8) & 0xFF;
-						buf[offset + 5] = adjustedLen & 0xFF;
+						// Search for AC3 sync words (0x0B77)
+						for (int i = offset + 6; i < rlen - 2; i++)
+						{
+							if (buf[i] == 0x0B && buf[i + 1] == 0x77)
+							{
+								last_complete_frame = i;
+								found_frame = 1;
+							}
+						}
+					}
+					// For MPEG audio streams (0xC0-0xDF) - MP2/AAC
+					else if (ctx->streamId >= 0xC0 && ctx->streamId <= 0xDF)
+					{
+						// Search for MPEG audio sync words (0xFFF* for AAC, 0xFFF* or 0xFFE* for MP2)
+						for (int i = offset + 6; i < rlen - 2; i++)
+						{
+							if (buf[i] == 0xFF && ((buf[i + 1] & 0xF0) == 0xF0 || (buf[i + 1] & 0xF0) == 0xE0))
+							{
+								last_complete_frame = i;
+								found_frame = 1;
+							}
+						}
+					}
+
+					if (found_frame)
+					{
+						// Adjust length to include only complete frames
+						uint16_t adjustedLen = last_complete_frame - (offset + 6);
+						if (adjustedLen > 0)
+						{
+							buf[offset + 4] = (adjustedLen >> 8) & 0xFF;
+							buf[offset + 5] = adjustedLen & 0xFF;
+						}
+					}
+					else
+					{
+						// If we can't find any frames, just process header
+						buf[offset + 4] = 0x00;
+						buf[offset + 5] = 0x00;
 					}
 				}
 			}
