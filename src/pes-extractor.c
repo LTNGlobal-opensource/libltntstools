@@ -239,26 +239,22 @@ static int _processRing(struct pes_extractor_s *ctx)
 			if ((ctx->streamId == 0xBD || ctx->streamId == 0xC0) && (offset + 6 <= rlen))
 			{
 				uint16_t declaredLen = (buf[offset + 4] << 8) | buf[offset + 5];
-				size_t have = (rlen - offset);	 // how many bytes remain from offset to the end
+				size_t have = rlen - offset;	 // how many bytes remain from offset to the end
 				size_t needed = declaredLen + 6; // standard PES header + declaredLen
 
 				if (needed > have)
 				{
-					// Force parser to treat declaredLen as zero
-					buf[offset + 4] = 0x00;
-					buf[offset + 5] = 0x00;
-
-					//fprintf(stderr,
-					//		"PES %02x declaredLen %u rlen %d offset %d need %zu but have %zu; forcing length=0.\n",
-					//		ctx->streamId, declaredLen, rlen, offset, needed, have);
-					//free(buf);
-					/* remove ring buf up to offset */
-					//rb_discard(ctx->rb, offset);
-					//return -1;
+					uint16_t adjustedLen = have - 6; // Subtract header size
+					if (adjustedLen > 0)
+					{
+						buf[offset + 4] = (adjustedLen >> 8) & 0xFF;
+						buf[offset + 5] = adjustedLen & 0xFF;
+					}
 				}
 			}
 #if LOCAL_DEBUG
-			if (offset == 423) {
+			if (offset == 423)
+			{
 				ltntstools_hexdump(buf, rlen, 32);
 			}
 			printf("%s() offset %d, rlen %d\n", __func__, offset, rlen);
@@ -290,7 +286,6 @@ static int _processRing(struct pes_extractor_s *ctx)
 				overrun = 1;
 #endif
 			} else if (bs.truncated) {
-                overrun = 1;
 #if KTBITSTREAM_DUMP_ON_OVERRUN
 				ltn_pes_packet_dump(pes, "\t");
 #endif
@@ -410,6 +405,12 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 				rb_empty(ctx->rb);
 				break;
 #endif
+			}
+			else if (pr_ret == -1)
+			{
+				/* need more data */
+				ctx->appending = 1;
+				continue;
 			}
 			ctx->appending = 1;
 
