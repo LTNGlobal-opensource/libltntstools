@@ -243,6 +243,13 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	pkt->stream_id = klbs_read_bits(bs, 8);
 	pkt->PES_packet_length = klbs_read_bits(bs, 16);
 
+	int byte_count_free = klbs_get_byte_count_free(bs);
+	if (byte_count_free < pkt->PES_packet_length)
+	{
+		// Adjust packet length to match available data
+		pkt->PES_packet_length = byte_count_free;
+	}
+
 	if ((pkt->stream_id != 0xBC /* program_stream_map */) &&
 		(pkt->stream_id != 0xBE /* padding_stream */) &&
 		(pkt->stream_id != 0xBF /* private_stream_2 */) &&
