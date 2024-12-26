@@ -189,16 +189,31 @@ static void _trimRing(struct pes_extractor_s *ctx)
 	}
 }
 
+static inline uint32_t read_u32_le(const uint8_t *p)
+{
+    return (uint32_t)(p[0]) 
+         | ((uint32_t)(p[1]) << 8)
+         | ((uint32_t)(p[2]) << 16)
+         | ((uint32_t)(p[3]) << 24);
+}
+
 static int searchReverse(const unsigned char *buf, int lengthBytes, uint8_t streamId)
 {
-	unsigned char pattern[4] = { 0x00, 0x00, 0x01, streamId };
+    /* Construct the 32-bit pattern [00 00 01 streamId] in memory order. 
+     * For little-endian, that's (streamId << 24) + 0x010000.
+     */
+    uint32_t pattern = ((uint32_t)streamId << 24) | ((uint32_t)0x01 << 16);
 
-	for (int i = lengthBytes - 4; i >= 0; i--) {
-		if (memcmp(pattern, buf + i, 4) == 0)
-			return i;
-	}
+    for (int i = lengthBytes - 4; i >= 0; i--)
+    {
+        /* Load 4 bytes from buf[i..i+3] as one 32-bit little-endian value. */
+        uint32_t val = read_u32_le(&buf[i]);
+        if (val == pattern) {
+            return i;
+        }
+    }
 
-	return -1;
+    return -1;
 }
 
 static int _processRing(struct pes_extractor_s *ctx)
