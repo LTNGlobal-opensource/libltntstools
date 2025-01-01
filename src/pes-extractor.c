@@ -135,6 +135,7 @@ void ltntstools_pes_extractor_free(void *hdl)
 			item->correctedPTS = 0;
 		}
 		xorg_list_del(&item->list);
+		free(item);
 	}
 
 	free(ctx);

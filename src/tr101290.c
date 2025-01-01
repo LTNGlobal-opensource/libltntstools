@@ -277,7 +277,8 @@ void ltntstools_tr101290_free(void *hdl)
 
 	ltntstools_tr101290_log_append(s, 1, "TR101290 Logging stopped");
 
-	ltntstools_pid_stats_free(&s->streamStatistics);
+	if (&s->streamStatistics)
+		ltntstools_pid_stats_free(&s->streamStatistics);
 
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {
@@ -287,7 +288,8 @@ void ltntstools_tr101290_free(void *hdl)
 		}
 	}
 
-	ltntstools_streammodel_free(s->smHandle);
+	if (s->smHandle)
+		ltntstools_streammodel_free(s->smHandle);
 
 	pthread_mutex_destroy(&s->mutex);
 	pthread_mutex_destroy(&s->logMutex);
