@@ -277,7 +277,18 @@ void ltntstools_tr101290_free(void *hdl)
 
 	ltntstools_tr101290_log_append(s, 1, "TR101290 Logging stopped");
 
-	free(s->event_tbl);
+	pthread_mutex_destroy(&s->mutex);
+	pthread_mutex_destroy(&s->logMutex);
+
+	ltntstools_streammodel_free(s->smHandle);
+
+	ltn_histogram_free(s->h1);
+	ltntstools_pid_stats_free(&s->streamStatistics);
+
+	if (s->alarm_tbl)
+		free(s->alarm_tbl);
+	if (s->event_tbl)
+		free(s->event_tbl);
 	if (s->logFilename) {
 		free(s->logFilename);
 		s->logFilename = NULL;
