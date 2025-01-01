@@ -277,12 +277,6 @@ void ltntstools_tr101290_free(void *hdl)
 
 	ltntstools_tr101290_log_append(s, 1, "TR101290 Logging stopped");
 
-	if (&s->streamStatistics)
-	{
-		fprintf(stderr, "TR101290: Freeing Stream Statistics\n");
-		ltntstools_pid_stats_free(&s->streamStatistics);
-	}
-
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {
 		if (s->event_tbl[i].enabled && s->event_tbl[i].timerRequired) {
