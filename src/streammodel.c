@@ -494,6 +494,8 @@ void ltntstools_streammodel_free(void *hdl)
 
 	extractors_free(ctx);
 
+	pthread_mutex_unlock(&ctx->rom_mutex);
+
 	free(ctx);
 }
 
@@ -509,6 +511,9 @@ static void NewSubtable(dvbpsi_t *p_dvbpsi, uint8_t i_table_id, uint16_t i_exten
 size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int packetCount, int *complete, struct timeval *timestamp)
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
+
+	if (!ctx || !pkt || packetCount <= 0 || &ctx->rom_mutex == NULL)
+		return -1;
 
 	pthread_mutex_lock(&ctx->rom_mutex);
 

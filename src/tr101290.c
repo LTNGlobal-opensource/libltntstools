@@ -286,6 +286,7 @@ void ltntstools_tr101290_free(void *hdl)
 	}
 
 	ltntstools_streammodel_free(s->smHandle);
+	ltntstools_pid_stats_free(&s->streamStatistics);
 
 	pthread_mutex_destroy(&s->mutex);
 	pthread_mutex_destroy(&s->logMutex);
