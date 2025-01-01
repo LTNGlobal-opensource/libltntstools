@@ -8,13 +8,15 @@ void extractors_free(struct streammodel_ctx_s *ctx)
 		return;
 
 	for (int i = 0; i < ctx->seCount; i++) {
-		struct se_array_item_s *i = ctx->seArray + ctx->seCount;
+		if (ctx->seArray) {
+			struct se_array_item_s *i = ctx->seArray + ctx->seCount;
 
-		ltntstools_sectionextractor_free(i->hdl);
+			if (i->hdl)
+				ltntstools_sectionextractor_free(i->hdl);
 
-		if (i->name)
-			free(i->name);
-
+			if (i->name)
+				free(i->name);
+		}
 	}
 }
 

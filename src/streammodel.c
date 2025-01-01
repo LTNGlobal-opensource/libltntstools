@@ -483,6 +483,9 @@ void ltntstools_streammodel_free(void *hdl)
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
 
+	if (!ctx)
+		return;
+
 	/* Take the lock forever */
 	pthread_mutex_lock(&ctx->rom_mutex);
 

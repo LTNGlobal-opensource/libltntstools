@@ -280,19 +280,20 @@ void ltntstools_tr101290_free(void *hdl)
 	pthread_mutex_destroy(&s->mutex);
 	pthread_mutex_destroy(&s->logMutex);
 
-	ltntstools_streammodel_free(s->smHandle);
-
+	fprintf(stderr, "TR101290: Freeing Event Table\n");
 	ltn_histogram_free(s->h1);
-	ltntstools_pid_stats_free(&s->streamStatistics);
 
 	if (s->alarm_tbl)
 		free(s->alarm_tbl);
+	s->alarm_tbl = NULL;
 	if (s->event_tbl)
 		free(s->event_tbl);
+	s->event_tbl = NULL;
 	if (s->logFilename) {
 		free(s->logFilename);
 		s->logFilename = NULL;
 	}
+
 	free(s);
 }
 

@@ -240,7 +240,7 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 
 void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 {
-	if (!stream)
+	if (!stream || !stream->pids)
 		return;
 
 	for (int i = 0; i < MAX_PID; i++) {
