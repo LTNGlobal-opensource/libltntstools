@@ -277,6 +277,16 @@ void ltntstools_tr101290_free(void *hdl)
 
 	ltntstools_tr101290_log_append(s, 1, "TR101290 Logging stopped");
 
+	int count = _event_table_entry_count(s);
+	for (int i = 0; i < count; i++) {
+		struct tr_event_s *ev = &s->event_tbl[i];
+		if (ev->enabled && ev->timerRequired) {
+			ltntstools_tr101290_timers_disarm(s, ev);
+		}
+	}
+
+	ltntstools_streammodel_free(s->smHandle);
+
 	pthread_mutex_destroy(&s->mutex);
 	pthread_mutex_destroy(&s->logMutex);
 
