@@ -278,18 +278,25 @@ void ltntstools_tr101290_free(void *hdl)
 	ltntstools_tr101290_log_append(s, 1, "TR101290 Logging stopped");
 
 	if (&s->streamStatistics)
+	{
+		fprintf(stderr, "TR101290: Freeing Stream Statistics\n");
 		ltntstools_pid_stats_free(&s->streamStatistics);
+	}
 
 	int count = _event_table_entry_count(s);
 	for (int i = 0; i < count; i++) {
-		struct tr_event_s *ev = &s->event_tbl[i];
-		if (ev->enabled && ev->timerRequired) {
-			ltntstools_tr101290_timers_disarm(s, ev);
+		if (s->event_tbl[i].enabled && s->event_tbl[i].timerRequired) {
+			fprintf(stderr, "TR101290: Disarming Timer #%d\n", i);
+			ltntstools_tr101290_timers_disarm(s, &s->event_tbl[i]);
 		}
 	}
 
 	if (s->smHandle)
+	{
+		fprintf(stderr, "TR101290: Freeing Stream Model\n");
 		ltntstools_streammodel_free(s->smHandle);
+		s->smHandle = NULL;
+	}
 
 	pthread_mutex_destroy(&s->mutex);
 	pthread_mutex_destroy(&s->logMutex);
