@@ -297,6 +297,8 @@ void ltntstools_tr101290_free(void *hdl)
 
 	fprintf(stderr, "TR101290: Freeing Event Table\n");
 	ltn_histogram_free(s->h1);
+	if (&s->streamStatistics)
+		ltntstools_pid_stats_free(&s->streamStatistics);
 
 	if (s->alarm_tbl)
 		free(s->alarm_tbl);
