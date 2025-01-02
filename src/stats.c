@@ -256,7 +256,7 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 		}
 	}
 
-	free(stream);
+	//free(stream);
 }
 
 struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntstools_stream_statistics_s *src)
