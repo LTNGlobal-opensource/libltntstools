@@ -80,6 +80,12 @@ static void _rom_initialize(struct streammodel_ctx_s *ctx, struct streammodel_ro
 	rom->pmtCollectionTimer.tv_sec = 0;
 }
 
+uint64_t ltntstools_streammodel_get_current_version(void *hdl)
+{
+	struct streammodel_ctx_s *ctx = hdl;
+	return ctx->currentModelVersion;
+}
+
 void _rom_activate(struct streammodel_ctx_s *ctx)
 {
 	/* Compare current and next models, bounce the version if

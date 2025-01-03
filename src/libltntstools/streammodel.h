@@ -51,6 +51,12 @@ int ltntstools_streammodel_alloc_from_url(const char *url, struct ltntstools_pat
 void ltntstools_streammodel_free(void *hdl);
 
 /**
+ * @brief         Get the current version currentModelVersion from the stream model context.
+ * @param[in]     void *hdl - Previously allocate context handle.
+ */
+uint64_t ltntstools_streammodel_get_current_version(void *hdl);
+
+/**
  * @brief         Write a buffer of properly aligned transport packets into the framework.
  *                When the frameowrk has processed enough of the packets to fully construct
  *                a PAT/PMT tree, the complete result will contain true.
