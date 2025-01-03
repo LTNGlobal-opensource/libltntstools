@@ -276,6 +276,7 @@ int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, st
         struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
 
         if (ltntstools_descriptor_list_contains_scte35_cue_registration(&pmt->descr_list) == 0) {
+			(*e)++;
             continue;
         }
 
@@ -442,6 +443,7 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 			*pid_array = NULL;
 			free(*stream_type_array);
 			*stream_type_array = NULL;
+			(*e)++;
 		}
 	}
 
