@@ -200,21 +200,29 @@ static inline uint32_t read_u32_le(const uint8_t *p)
 
 static int searchReverse(const unsigned char *buf, int lengthBytes, uint8_t streamId)
 {
-    /* Construct the 32-bit pattern [00 00 01 streamId] in memory order. 
-     * For little-endian, that's (streamId << 24) + 0x010000.
-     */
-    uint32_t pattern = ((uint32_t)streamId << 24) | ((uint32_t)0x01 << 16);
+	/* Pattern to find: [00 00 01 streamId] */
+	unsigned char pattern[4] = {0x00, 0x00, 0x01, streamId};
+	const unsigned char *searchPos = buf; /* Current search position */
+	const unsigned char *bufEnd = buf + lengthBytes;
+	int lastIndex = -1; /* Last match index */
 
-    for (int i = lengthBytes - 4; i >= 0; i--)
-    {
-        /* Load 4 bytes from buf[i..i+3] as one 32-bit little-endian value. */
-        uint32_t val = read_u32_le(&buf[i]);
-        if (val == pattern) {
-            return i;
-        }
-    }
+	while (1)
+	{
+		/* Attempt to find the pattern in the remaining buffer */
+		size_t remaining = (size_t)(bufEnd - searchPos);
+		const unsigned char *p = ltn_memmem(searchPos, remaining, pattern, 4);
+		if (p == NULL)
+		{
+			/* No further match found */
+			break;
+		}
+		/* Update last occurrence */
+		lastIndex = (int)(p - buf);
+		/* Advance search position one byte past the current match */
+		searchPos = p + 1;
+	}
 
-    return -1;
+	return lastIndex;
 }
 
 static int _processRing(struct pes_extractor_s *ctx)
