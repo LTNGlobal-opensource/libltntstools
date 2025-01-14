@@ -24,6 +24,10 @@
 
 #define LOCAL_DEBUG 0
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 struct ltntstools_proc_net_udp_ctx_s
 {
     int refreshPeriodMS; /* How often (ms) does the framework updates its internal socket stats? */

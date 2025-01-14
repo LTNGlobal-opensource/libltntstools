@@ -28,8 +28,13 @@ struct sectionextractor_ctx_s
 void ltntstools_sectionextractor_free(void *hdl)
 {
 	struct sectionextractor_ctx_s *ctx = (struct sectionextractor_ctx_s *)hdl;
-	free(ctx->section);
+	if (!ctx)
+		return;
+	if (ctx->section)
+		free(ctx->section);
+	ctx->section = NULL;
 	free(ctx);
+	ctx = NULL;
 }
 
 int ltntstools_sectionextractor_alloc(void **hdl, uint16_t PID, uint8_t tableID)

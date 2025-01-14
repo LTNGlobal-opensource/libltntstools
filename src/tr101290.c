@@ -15,25 +15,6 @@
 
 #define LOCAL_DEBUG 0
 
-static int didExperienceTransportLoss(struct ltntstools_tr101290_s *s)
-{
-	struct timeval now;
-	gettimeofday(&now, NULL);
-
-	/* Assume we have transport loss until the stats tell us different. */
-	int lost = 1;
-
-	int64_t ms = ltn_timeval_subtract_ms(&now, &s->lastWriteCall);
-	if (ms < 20) {
-		lost = 0;
-	}
-#if LOCAL_DEBUG
-	//printf("LOS for %" PRIi64 " ms\n", ms);
-#endif
-
-	return lost;
-}
-
 int ltntstools_tr101290_log_append(struct ltntstools_tr101290_s *s, int addTimestamp, const char *format, ...)
 {
 	int ret = 0;
@@ -145,13 +126,6 @@ void *ltntstools_tr101290_threadFunc(void *p)
 		usleep(10 * 1000);
 		gettimeofday(&now, NULL);
 
-		int conditionLOS = didExperienceTransportLoss(s);
-		if (!conditionLOS) {
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS);
-		} else {
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS);
-		}
-
 		/* For each possible event, determine if we need to build and alarm
 		 * record to inform the user (via callback.
 		 */
@@ -172,7 +146,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			}
 #endif
 			/* Find all events we should be reporting on,  */
-			if (ltntstools_tr101290_event_should_report(s, ev->id)) {
+			if (ltntstools_tr101290_event_should_report(s, ev->id, &now)) {
 
 				/* Mark the last reported time slight int the future, to avoid duplicate
 				 * reports within a few seconds of each other
@@ -192,26 +166,25 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				alarm->id = ev->id;
 				alarm->priorityNr = ltntstools_tr101290_event_priority(ev->id);
 				alarm->raised = ev->raised;
-				gettimeofday(&alarm->timestamp, NULL);
+				alarm->timestamp = now;
 
 				time_t when = alarm->timestamp.tv_sec;
 				struct tm *whentm = localtime(&when);
 				char ts[64];
 				strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
 
-				sprintf(alarm->description, "%s: %-40s -  Alarm %s ", ts,
-					ltntstools_tr101290_event_name_ascii(alarm->id),
-					alarm->raised ? " raised" : "cleared");
+                               sprintf(alarm->description, "%s",
+                                       ltntstools_tr101290_event_name_ascii(alarm->id));
 				strcpy(alarm->arg, ev->arg);
 
 				if (strlen(alarm->arg)) {
 					if (alarm->raised) {
-						ltntstools_tr101290_log_append(s, 0, "%s [ %s ]", alarm->description, alarm->arg);
+                                               ltntstools_tr101290_log_append(s, 0, "%s: %-40s [ %s ] - Alarm  raised", ts, alarm->description, alarm->arg);
 					} else {
-						ltntstools_tr101290_log_append(s, 0, alarm->description);
+                                               ltntstools_tr101290_log_append(s, 0, "%s: %-40s - Alarm cleared", ts, alarm->description);
 					}
 				} else {
-					ltntstools_tr101290_log_append(s, 0, alarm->description);
+                                       ltntstools_tr101290_log_append(s, 0, "%s: %-40s - %s", ts, alarm->description, alarm->raised ? " raised" : "cleared");
 				}			
 				s->alarmCount++;
 			}
@@ -220,7 +193,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 			 * in the event of no data, or something holding them clear.
 			 */
 			if (timercmp(&now, &ev->nextAlarm, >= )) {
-				ltntstools_tr101290_alarm_raise(s, ev->id);
+				ltntstools_tr101290_alarm_raise(s, ev->id, &now);
 			}
 
 		}
@@ -258,6 +231,8 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 	s->cb_notify = cb_notify;
 	pthread_mutex_init(&s->mutex, NULL);
 	pthread_mutex_init(&s->logMutex, NULL);
+
+	s->consecutiveSyncErrors = 0;
 
 	ltn_histogram_alloc_video_defaults(&s->h1, "write arrival latency");
 
@@ -302,21 +277,54 @@ void ltntstools_tr101290_free(void *hdl)
 
 	ltntstools_tr101290_log_append(s, 1, "TR101290 Logging stopped");
 
-	free(s->event_tbl);
+	int count = _event_table_entry_count(s);
+	for (int i = 0; i < count; i++) {
+		if (s->event_tbl[i].enabled && s->event_tbl[i].timerRequired) {
+			fprintf(stderr, "TR101290: Disarming Timer #%d\n", i);
+			ltntstools_tr101290_timers_disarm(s, &s->event_tbl[i]);
+		}
+	}
+
+	if (s->smHandle)
+	{
+		fprintf(stderr, "TR101290: Freeing Stream Model\n");
+		ltntstools_streammodel_free(s->smHandle);
+		s->smHandle = NULL;
+	}
+
+	pthread_mutex_destroy(&s->mutex);
+	pthread_mutex_destroy(&s->logMutex);
+
+	fprintf(stderr, "TR101290: Freeing Event Table\n");
+	ltn_histogram_free(s->h1);
+	ltntstools_pid_stats_reset(&s->streamStatistics);
+	ltntstools_pid_stats_free(&s->streamStatistics);
+
+	if (s->alarm_tbl)
+		free(s->alarm_tbl);
+	s->alarm_tbl = NULL;
+	if (s->event_tbl)
+		free(s->event_tbl);
+	s->event_tbl = NULL;
 	if (s->logFilename) {
 		free(s->logFilename);
 		s->logFilename = NULL;
 	}
+
 	free(s);
 }
 
-ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount)
+ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount, struct timeval *timestamp)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
 
-	gettimeofday(&s->now, NULL);
+	if (timestamp) {
+		s->now = *timestamp;
+	} else {
+		gettimeofday(&s->now, NULL);
+	}
 
-	ltn_histogram_interval_update(s->h1);
+	ltn_histogram_interval_update(s->h1, timestamp);
 	//ltn_histogram_interval_print(STDOUT_FILENO, s->h1, 10);
 
 #if ENABLE_TESTING
@@ -330,7 +338,7 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	pthread_mutex_lock(&s->mutex);
 
 	/* The thread needs to understand how frequently we're getting write calls. */
-	gettimeofday(&s->lastWriteCall, NULL);
+	s->lastWriteCall = s->now;
 
 	s->preTEIErrors = ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics);
 	s->preScrambledCount = ltntstools_pid_stats_stream_get_scrambled_count(&s->streamStatistics);
@@ -339,10 +347,10 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	ltntstools_pid_stats_update(&s->streamStatistics, buf, packetCount);
 
 	/* Pass all of the packets to the P1 analysis layer. */
-	p1_write(s, buf, packetCount);
+	p1_write(s, buf, packetCount, &s->now);
 
 	/* Pass all of the packets to the P1 analysis layer. */
-	p2_write(s, buf, packetCount);
+	p2_write(s, buf, packetCount, &s->now);
 
 	pthread_mutex_unlock(&s->mutex);
 

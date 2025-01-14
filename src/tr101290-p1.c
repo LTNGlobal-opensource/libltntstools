@@ -30,7 +30,7 @@ static int isPIDActive(struct ltntstools_tr101290_s *s, uint16_t pidNr, time_t n
 
 /* P1.6 - Referred PID does not occur for a user specified period. */
 /* We're called with a valid stream model. */
-static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_pat_s *pat, time_t now)
+static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_pat_s *pat, struct timeval time_now, time_t now)
 {
 	/* Walk each pid in the model, make sure we've received a packet in the last 1000ms
 	 * or less, otherwise raise an error.
@@ -65,14 +65,14 @@ static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_p
 	}
 
 	if (!raiseIssue) {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_6__PID_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_6__PID_ERROR, &time_now);
 	} else {
-		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P1_6__PID_ERROR, msg);
+		ltntstools_tr101290_alarm_raise_with_arg(s, E101290_P1_6__PID_ERROR, msg, &time_now);
 	}
 
 }
 
-static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	/* Sections with table_id 0x02, (i.e. a PMT), do not occur at least every 0,5 s on the PID which is
 	 * referred to in the PAT.
@@ -81,7 +81,7 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 
 	/* PMT checking */
 	int complete = 0;
-	ltntstools_streammodel_write(s->smHandle, buf, packetCount, &complete);
+	ltntstools_streammodel_write(s->smHandle, buf, packetCount, &complete, &time_now);
 
 	/* If the stream model is completing, then the PMT's must be ok.
 	 * DVBPSI enforces the scrambling control check.
@@ -89,12 +89,11 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 	//printf("complete %d\n", complete);
 	if (complete) {
 		time_t now = time(NULL);
-
 		if (s->lastCompleteTime < now) {
 			s->lastCompleteTime = now;
 
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_5__PMT_ERROR);
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_5a__PMT_ERROR_2);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_5__PMT_ERROR, &time_now);
+			ltntstools_tr101290_alarm_clear(s, E101290_P1_5a__PMT_ERROR_2, &time_now);
 
 			/* Performance issue. Calling query_model is too expensive to happen on
 			 * every transport packet write. Make sure we cache the results then age them out
@@ -110,7 +109,7 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 				p2_process_pat_model(s, pat);
 
 				/* Check 1.6 Now that we have a stream model. */
-				p1_process_p1_6(s, pat, now);
+				p1_process_p1_6(s, pat, time_now, now);
 				free(pat);
 			}
 		}
@@ -123,7 +122,7 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 }
 
 /* P1_4: Incorrect packet order */
-static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(&s->streamStatistics);
 
@@ -136,9 +135,9 @@ static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *b
 #endif
 	/* P1_4: Incorrect packet order */
 	if (s->CCCounterLastWrite != count) {
-		ltntstools_tr101290_alarm_raise(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR);
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR, &time_now);
 	} else {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_4__CONTINUITY_COUNTER_ERROR, &time_now);
 	}
 	s->CCCounterLastWrite = count;
 
@@ -146,7 +145,7 @@ static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *b
 }
 
 /* P1.3 - PAT_error */
-static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	/* Look for a PAT */
 	int patIssue = 0;
@@ -175,19 +174,19 @@ static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *b
 		struct timeval interval = { 0, 500 * 1000 };
 		struct timeval window;
 		timeradd(&s->lastPAT, &interval, &window);
-		if (timercmp(&s->now, &window, >= )) {
+		if (timercmp(&time_now, &window, >= )) {
 			patIssue++;
 		}
 	} else {
-		s->lastPAT = s->now;
+		s->lastPAT = time_now;
 	}
 
 	if (patIssue) {
-		ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR);
-		ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2);
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_3__PAT_ERROR, &time_now);
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_3a__PAT_ERROR_2, &time_now);
 	} else {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_3__PAT_ERROR);
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_3a__PAT_ERROR_2);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_3__PAT_ERROR, &time_now);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_3a__PAT_ERROR_2, &time_now);
 	}
 
 	/* PID 0x0000 does not occur at least every 0,5 s
@@ -197,67 +196,88 @@ static ssize_t p1_process_p1_3(struct ltntstools_tr101290_s *s, const uint8_t *b
 	return packetCount;
 }
 
-ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount)
+ssize_t p1_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval *time_now)
 {
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	s->now = *time_now;
 
-	/* P1.1 is taken care of by the background thread.
-	 * It monitors calls to _write, and if they stop, we declare that
-	 * TS_SYNC_LOSS. We're generally more flexible in this design because we
-	 * aren't dealing with RF, we're dealing with IP networks, and the metric
-	 * we truly care about is, the the network stall for more than X ms?
+	/* P1.1 - TS Sync Loss
+	 * TS Sync Loss is detected when the sync byte (0x47) is missing in consecutive TS packets.
+	 * We check each packet for the presence of the sync byte.
+	 * If a certain number of consecutive packets are missing the sync byte, we declare TS Sync Loss.
+	 * This replaces the previous method where TS Sync Loss was detected based on the timing between write calls.
 	 */
 
 	/* P1.2 - Sync Byte Error, sync byte != 0x47.
-	 * Most TR101290 processors assume this condition rises when P1.1 is bad,
-	 * it's not true, especially in a IP network. In the event of a packet stall,
-	 * or jitter, transport is lost for N ms, but resumes perfectly with zero
-	 * packet loss, in this case we never want to declare P1.2.
+	 * Most TR101290 processors assume this condition arises when P1.1 is bad,
+	 * but that's not always true, especially in an IP network.
+	 * In the event of a packet stall or jitter, transport might be lost for N ms,
+	 * but resume perfectly with zero packet loss; in this case, we never want to declare P1.2.
 	 */
-	for (int i = 0; i < packetCount; i++) {
+
+	for (int i = 0; i < packetCount; i++)
+	{
 #if ENABLE_TESTING
 		FILE *fh = fopen("/tmp/manglesyncbyte", "rb");
-		if (fh) {
+		if (fh)
+		{
 			unsigned char *p = (unsigned char *)&buf[i * 188];
 			*(p + 0) = 0x46;
 			fclose(fh);
 		}
 #endif
 
-		if (ltntstools_sync_present(&buf[i * 188])) {
+		if (ltntstools_sync_present(&buf[i * 188]))
+		{
 			s->consecutiveSyncBytes++;
-		} else {
-			/* Raise */
+			s->consecutiveSyncErrors = 0; /* Reset consecutive sync errors */
+
+			/* If we had previously raised P1.1 due to sync errors, clear it now */
+			if (s->consecutiveSyncBytes > 5)
+			{
+				ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
+				ltntstools_tr101290_alarm_clear(s, E101290_P1_1__TS_SYNC_LOSS, time_now);
+			}
+
+			/* Prevent integer wraparound */
+			if (s->consecutiveSyncBytes >= 50000)
+			{
+				/* We never want the int to wrap back to zero during long term test.
+				 * Once we're at a certain size, reset it to avoid overflow.
+				 */
+				s->consecutiveSyncBytes = 16; /* Stay clear of the window where sync byte is cleared. */
+			}
+		}
+		else
+		{
+			/* Sync byte missing */
+
 			s->consecutiveSyncBytes = 0;
-			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR);
+			s->consecutiveSyncErrors++; /* Increment consecutive sync errors */
+
+			/* Raise P1.2 - Sync Byte Error */
+			ltntstools_tr101290_alarm_raise(s, E101290_P1_2__SYNC_BYTE_ERROR, time_now);
+
+			/* If we reach the threshold of consecutive sync errors, raise P1.1 - TS Sync Loss */
+			if (s->consecutiveSyncErrors >= SYNC_LOSS_THRESHOLD)
+			{
+				ltntstools_tr101290_alarm_raise(s, E101290_P1_1__TS_SYNC_LOSS, time_now);
+			}
 		}
 	}
 
-	if (s->consecutiveSyncBytes > 5) {
-		ltntstools_tr101290_alarm_clear(s, E101290_P1_2__SYNC_BYTE_ERROR);
-	}
-
-	if (s->consecutiveSyncBytes >= 50000) {
-		/* We never want the int to wrap back to zero during long term test. Once we're a certain size,
-		 * our wrap point needs to clear a value of zero.
-		 */
-		s->consecutiveSyncBytes = 16; /* Stay clear of the window where sync byte is cleared. */
-	}
-	/* End: P1.2 - Sync Byte Error, sync byte != 0x47. */
+	/* End: P1.1 - TS Sync Loss and P1.2 - Sync Byte Error */
 
 	/* P1.3 - PAT_error */
-	p1_process_p1_3(s, buf, packetCount);
+	p1_process_p1_3(s, buf, packetCount, *time_now);
 	/* End: P1.3 - PAT_error */
 
-	/* P1.4 */
-	p1_process_p1_4(s, buf, packetCount);
+	/* P1.4 - Continuity Counter Error */
+	p1_process_p1_4(s, buf, packetCount, *time_now);
 	/* End: P1.4 */
-	
-	/* P1.5/6 */
-	p1_process_p1_56(s, buf, packetCount);
+
+	/* P1.5/6 - PMT Error and PID Error */
+	p1_process_p1_56(s, buf, packetCount, *time_now);
 	/* End: P1.5/6 */
-	
+
 	return packetCount;
 }
-

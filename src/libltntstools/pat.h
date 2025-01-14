@@ -132,7 +132,7 @@ void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t
  * @param[out]  struct ltntstools_pmt_s **pmt - ptr to the pmt object containing in the PAT
  * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
  */
-int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmt, uint16_t *pid);
+int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t **pid_array, int *pid_count);
 
 int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
 
@@ -153,6 +153,18 @@ int ltntstools_pat_enum_services_smpte2038(struct ltntstools_pat_s *pat, int *e,
  * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
  */
 int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmt);
+
+/**
+ * @brief       Enumerate all services in the PAT object, find any audio programs (with a pcr) return the associated PMT.
+ * @param[in]   struct ltntstools_pat_s *pat - object
+ * @param[in]   int *e - used internally to enumerate objects. Pass 0 value int on first call then don't modify afterwards
+ * @param[out]  struct ltntstools_pmt_s **pmt - ptr to the pmt object containing in the PAT
+ * @param[out]  uint32_t **stream_type_array - ptr to the stream type array
+ * @param[out]  uint16_t **pid_array - ptr to the pid array
+ * @param[out]  int *pid_count - ptr to the pid count
+ * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
+ */
+int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmt, uint32_t **stream_type_array, uint16_t **pid_array, int *pid_count);
 
 /**
  * @brief       Enumerate all services in the PAT object, return the associated PMT.

@@ -7,15 +7,24 @@ void extractors_free(struct streammodel_ctx_s *ctx)
 	if (!ctx->enableSectionCRCChecks)
 		return;
 
-	for (int i = 0; i < ctx->seCount; i++) {
-		struct se_array_item_s *i = ctx->seArray + ctx->seCount;
+	if (!ctx->seArray)
+		return;
 
-		ltntstools_sectionextractor_free(i->hdl);
+	for (int idx = 0; idx < ctx->seCount; idx++)
+	{
+		struct se_array_item_s *item = &ctx->seArray[idx];
 
-		if (i->name)
-			free(i->name);
+		if (item->hdl)
+			ltntstools_sectionextractor_free(item->hdl);
+		item->hdl = NULL;
 
+		if (item->name)
+			free(item->name);
+		item->name = NULL;
 	}
+
+	free(ctx->seArray);
+	ctx->seArray = NULL;
 }
 
 int extractors_add(struct streammodel_ctx_s *ctx, uint16_t pid, uint8_t tableId, char *name, uint32_t context)

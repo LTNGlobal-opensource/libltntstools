@@ -60,7 +60,9 @@ int rtp_hdr_write(struct rtp_hdr_analyzer_s *ctx, const struct rtp_hdr *hdr)
 {
 	ctx->totalPackets++;
 
-    ltn_histogram_interval_update(ctx->tsArrival);
+	struct timeval now;
+	gettimeofday(&now, NULL);
+    ltn_histogram_interval_update(ctx->tsArrival, &now);
 
 	/* Push a clock measurement between old and new TS into a histogram */
 	if (ctx->last.ts) {

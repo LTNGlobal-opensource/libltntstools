@@ -80,6 +80,12 @@ static void _rom_initialize(struct streammodel_ctx_s *ctx, struct streammodel_ro
 	rom->pmtCollectionTimer.tv_sec = 0;
 }
 
+uint64_t ltntstools_streammodel_get_current_version(void *hdl)
+{
+	struct streammodel_ctx_s *ctx = hdl;
+	return ctx->currentModelVersion;
+}
+
 void _rom_activate(struct streammodel_ctx_s *ctx)
 {
 	/* Compare current and next models, bounce the version if
@@ -451,7 +457,9 @@ int ltntstools_streammodel_alloc_from_url(const char *url, struct ltntstools_pat
 			break;
 
 		int complete = 0;
-		ltntstools_streammodel_write(sm, &buf[0], rlen / 188, &complete);
+		struct timeval now;
+		gettimeofday(&now, NULL);
+		ltntstools_streammodel_write(sm, &buf[0], rlen / 188, &complete, &now);
 
 		if (complete) {
 
@@ -481,6 +489,9 @@ void ltntstools_streammodel_free(void *hdl)
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
 
+	if (!ctx)
+		return;
+
 	/* Take the lock forever */
 	pthread_mutex_lock(&ctx->rom_mutex);
 
@@ -488,6 +499,8 @@ void ltntstools_streammodel_free(void *hdl)
 	_rom_initialize(ctx, &ctx->roms[1], 1);
 
 	extractors_free(ctx);
+
+	pthread_mutex_unlock(&ctx->rom_mutex);
 
 	free(ctx);
 }
@@ -501,13 +514,16 @@ static void NewSubtable(dvbpsi_t *p_dvbpsi, uint8_t i_table_id, uint16_t i_exten
 }
 
 /* pkt lists must be aligned. list may contant one or more packets. */
-size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int packetCount, int *complete)
+size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int packetCount, int *complete, struct timeval *timestamp)
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
 
+	if (!ctx || !pkt || packetCount <= 0 || &ctx->rom_mutex == NULL)
+		return -1;
+
 	pthread_mutex_lock(&ctx->rom_mutex);
 
-	gettimeofday(&ctx->now, NULL);
+	ctx->now = *timestamp;
 
 	ctx->writePackets = 0;
 

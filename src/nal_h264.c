@@ -1,6 +1,7 @@
 #include "libltntstools/nal_h264.h"
 #include "libltntstools/ts.h"
 #include <inttypes.h>
+#include "memmem.h"
 
 #include <libavutil/internal.h>
 #include <libavcodec/golomb.h>
@@ -13,21 +14,44 @@ int ltn_nal_h264_find_headers(const uint8_t *buf, int lengthBytes, struct ltn_na
 	if (!a)
 		return -1;
 
-	int offset = -1;
-	struct ltn_nal_headers_s *curr = a, *prev = a;
-	while (ltn_nal_h264_findHeader(buf, lengthBytes, &offset) == 0) {
-		curr->ptr = buf + offset;
-		curr->nalType = buf[offset + 3] & 0x1f;
-		curr->nalName = h264Nals_lookupName(curr->nalType);
-		if (curr != prev) {
-			prev->lengthBytes = curr->ptr - prev->ptr;
+       const uint8_t start_code[3] = {0, 0, 1};
+       const uint8_t *end = buf + lengthBytes;
+       const uint8_t *p = buf;
+
+       while (p < end - 3)
+       {
+               p = ltn_memmem(p, end - p, start_code, sizeof(start_code));
+               if (!p)
+                       break;
+
+               if (idx >= maxitems)
+               {
+                       maxitems *= 2;
+                       struct ltn_nal_headers_s *temp = realloc(a, sizeof(struct ltn_nal_headers_s) * maxitems);
+                       if (!temp)
+                       {
+                               free(a);
+                               return -1;
+                       }
+                       a = temp;
+               }
+
+               a[idx].ptr = p;
+               a[idx].nalType = p[3] & 0x1f;
+               a[idx].nalName = h264Nals_lookupName(a[idx].nalType);
+               if (idx > 0)
+               {
+                       a[idx - 1].lengthBytes = p - a[idx - 1].ptr;
 		}
-		
-		prev = curr;
-		curr++;
+
 		idx++;
+               p += 3; // Move past start code
+       }
+
+       if (idx > 0)
+       {
+               a[idx - 1].lengthBytes = end - a[idx - 1].ptr;
 	}
-	prev->lengthBytes = (buf + lengthBytes) - prev->ptr;
 
 	*array = a;
 	*arrayLength = idx;

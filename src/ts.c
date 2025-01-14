@@ -146,6 +146,24 @@ int ltntstools_is_ESPayloadType_Video(uint8_t esPayloadType)
     }
 }
 
+int ltntstools_is_ESPayloadType_Audio(uint8_t esPayloadType)
+{
+	switch (esPayloadType)
+	{
+		case 0x03: // ISO/IEC 11172 Audio
+		case 0x04: // ISO/IEC 13818-3 Audio
+		case 0x07: // ISO/IEC 13522 MHEG
+		case 0x0F: // ISO/IEC 13818-7 Audio with ADTS transport syntax
+		case 0x81: // ATSC AC-3 Audio
+		case 0xC1: // ATSC AC-3 Audio (HLS TS Encryption)
+		case 0xC2: // ATSC EAC-3 Audio (HLS TS Encryption)
+		case 0xCF: // ISO/IEC 13818-7 Audio with ADTS transport syntax (HLS TS Encryption)
+			return 1;
+		default:
+			return 0;
+	}
+}
+
 const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType)
 {
     switch (esPayloadType)

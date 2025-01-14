@@ -46,7 +46,7 @@ static void pcap_callback(u_char *args, const struct pcap_pkthdr *h, const u_cha
 	struct source_pcap_ctx_s *ctx = (struct source_pcap_ctx_s *)args;
 
 	if (ctx->callbacks.raw) {
-		ctx->callbacks.raw(ctx->userContext, h, pkt);
+		ctx->callbacks.raw(ctx->userContext, h, pkt, &ctx->pcap_stats);
 
 	}
 	//pcap_update_statistics(ctx, h, pkt); /* Update the stream stats realtime to avoid queue jitter */
@@ -74,13 +74,13 @@ static void *pcap_thread_func(void *p)
 		processed = pcap_dispatch(ctx->descr, -1, pcap_callback, (u_char *)ctx);
 		if (processed == 0) {
 			ctx->pcap_dispatch_miss++;
-			usleep(1 * 1000);
+			usleep(10 * 1000);
 		}
 
 		time_t now;
 		time(&now);
 
-		/* Querying stats repeatidly is cpu expensive, we only need it 1sec intervals. */
+		/* Querying stats repeatidly is cpu expensive, we only need it 30sec intervals. */
 		if (lastStatsCheck == 0) {
 			/* Collect pcap packet loss stats */
 			if (pcap_stats(ctx->descr, &ctx->pcap_stats_startup) != 0) {
@@ -88,7 +88,7 @@ static void *pcap_thread_func(void *p)
 			}
 		}
 
-		if (now != lastStatsCheck) {
+		if (now > lastStatsCheck + 30) {
 			lastStatsCheck = now;
 			/* Collect pcap packet loss stats */
 			struct pcap_stat tmp;
@@ -108,7 +108,7 @@ static void *pcap_thread_func(void *p)
 	return 0;
 }
 
-int ltntstools_source_pcap_alloc(void **hdl, void *userContext, struct ltntstools_source_pcap_callbacks_s *callbacks, const char *ifname, const char *filter)
+int ltntstools_source_pcap_alloc(void **hdl, void *userContext, struct ltntstools_source_pcap_callbacks_s *callbacks, const char *ifname, const char *filter, int buffer_size_default)
 {
 	if (!ifname || !filter)
 		return -1;
@@ -119,7 +119,7 @@ int ltntstools_source_pcap_alloc(void **hdl, void *userContext, struct ltntstool
 
 	pthread_mutex_init(&ctx->mutex, NULL);
 	ctx->snaplen = g_snaplen_default;
-	ctx->bufferSize = g_buffer_size_default;
+	ctx->bufferSize = buffer_size_default == -1 ? g_buffer_size_default : buffer_size_default;
 	ctx->callbacks = *callbacks;
 	ctx->userContext = userContext;
 	ctx->ifname = strdup(ifname);
