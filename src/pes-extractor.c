@@ -44,6 +44,11 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 {
 	struct pes_extractor_s *ctx = calloc(1, sizeof(*ctx));
 
+	if (buffer_min == -1)
+		buffer_min = 4 * 1048576;
+	if (buffer_max == -1)
+		buffer_max = 32 * 1048576;
+
 	ctx->rb = rb_new(buffer_min, buffer_max);
 	ctx->pid = pid;
 	ctx->streamId = streamId;
