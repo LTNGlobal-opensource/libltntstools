@@ -272,6 +272,7 @@ fn main() -> Fallible<()> {
         .raw_line("use libc::{pthread_cond_t, pthread_mutex_t, pthread_t};")
         .raw_line("use libc::{time_t, timeval};")
         .raw_line("use pcap::PacketHeader as pcap_pkthdr;")
+        .raw_line("use pcap::Stat as pcap_stat;")
         .default_enum_style(bindgen::EnumVariation::NewType {
             is_bitfield: false,
             is_global: false,
