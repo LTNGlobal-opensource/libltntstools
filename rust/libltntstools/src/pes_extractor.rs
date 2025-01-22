@@ -153,7 +153,7 @@ mod tests {
         static EXPECTED_PTS: &[i64] = &[3591437680, 3591441280, 3591444880, 3591448480, 3591452080];
 
         let mut packets = Vec::new();
-        let mut extractor = PesExtractor::new(0x31, 0xe0, |packet| packets.push(packet));
+        let mut extractor = PesExtractor::new(0x31, 0xe0, |packet| packets.push(packet), -1, -1);
         let mut ts_file = io::BufReader::with_capacity(
             // Needs to be more than 8 KiB so io::copy will use
             // the reader's buffer and our IO is packet-aligned

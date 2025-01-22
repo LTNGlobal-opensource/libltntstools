@@ -193,6 +193,8 @@ fn test_basic_pes_extractor() {
             0xe0,
             Some(basic_pe_callback),
             ptr::null_mut(),
+            -1,
+            -1
         );
     }
 
