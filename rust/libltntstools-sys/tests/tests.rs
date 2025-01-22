@@ -131,8 +131,14 @@ fn test_basic_stream_model() {
         let b: i32 = nbytes.try_into().unwrap();
 
         unsafe {
+            let mut timestamp: libc::timeval = libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            };        
+            libc::gettimeofday(&mut timestamp, std::ptr::null_mut());
+
             let val_ptr = &mut val as *mut c_int;
-            streammodel_write(handle, &buffer[0], b / 188, val_ptr);
+            streammodel_write(handle, &buffer[0], b / 188, val_ptr, &mut timestamp);
             if val == 1 {
                 let mut pat = ptr::null_mut();
                 streammodel_query_model(handle, &mut pat as _);
