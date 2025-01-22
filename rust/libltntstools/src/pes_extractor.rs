@@ -19,6 +19,8 @@ where
     streamid: u8,
     callback: *mut F,
     phantom_callback: PhantomData<F>,
+    buffer_min: i32,
+    buffer_max: i32,
 }
 
 impl<F> PesExtractor<F>
@@ -31,8 +33,8 @@ where
     /// StreamID given by `streamid` (e.g. `0xc0` for audio and `0xe0` for video).
     ///
     /// Found PES frames will be supplied to the given `callback`.
-    pub fn new(pid: u16, streamid: u8, callback: F) -> Self {
-        log::debug!("Creating PES Extractor for PID {pid}, StreamID {streamid}");
+    pub fn new(pid: u16, streamid: u8, callback: F, buffer_min: i32, buffer_max: i32) -> Self {
+        log::debug!("Creating PES Extractor for PID {pid}, StreamID {streamid} {buffer_min} {buffer_max}");
 
         let callback = Box::into_raw(Box::new(callback));
 
@@ -55,6 +57,8 @@ where
                 streamid,
                 Some(callback_trampoline::<F>),
                 callback as _,
+                buffer_min,
+                buffer_max,
             );
         }
 
@@ -64,6 +68,8 @@ where
             streamid,
             callback,
             phantom_callback: PhantomData,
+            buffer_min,
+            buffer_max,
         }
     }
 
@@ -76,6 +82,17 @@ where
     pub fn streamid(&self) -> u8 {
         self.streamid
     }
+
+    /// Returns the PES ring buffer minimum size
+    pub fn buffer_min(&self) -> i32 {
+        self.buffer_min
+    }
+
+    /// Returns the PES ring buffer minimum size
+    pub fn buffer_max(&self) -> i32 {
+        self.buffer_max
+    }
+    
 }
 
 impl<F> Write for PesExtractor<F>
