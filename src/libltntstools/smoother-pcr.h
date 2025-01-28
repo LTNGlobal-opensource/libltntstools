@@ -85,7 +85,7 @@ int  smoother_pcr_write(void *hdl, const uint8_t *pkts, int lengthBytes, struct 
 int64_t smoother_pcr_get_size(void *hdl);
 
 /**
- * @brief       DElete all queued content, reset clocks, used when rewinding files, going back in PCR time.
+ * @brief       Delete all queued content, reset clocks, used when rewinding files, going back in PCR time.
  * @param[in]   void *hdl - Handle / context.
  */
 void smoother_pcr_reset(void *hdl);
