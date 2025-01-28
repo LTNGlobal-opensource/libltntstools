@@ -34,8 +34,8 @@ extern "C" {
 #endif
 
 /**
- * @brief       Callback function definition, where demuxed and parsed PES frames are delivered
- *              to your function.
+ * @brief       Callback function definition, where grouops of transport packets will be
+ *              delivered to your function.
  *              Receiving thread doesn't own the lifespan of the buffer,
  *              applications should send the output to the network inside
  *              this callback.
