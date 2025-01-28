@@ -221,3 +221,59 @@ fn test_basic_pes_extractor() {
         pes_extractor_free(handle);
     }
 }
+
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn basic_smoother_callback(_user_context: *mut c_void, buf: *mut u8, byteCount: i32, array: *mut pcr_position_s, arrayLength: i32) -> i32 {
+    println!("basic_smoother_callback - {:6?} bytes, arrayLength {:?}", byteCount, arrayLength);
+    unsafe {
+        //hexdump(buf, byteCount, 16);
+    };
+    return 0;
+}
+
+#[test]
+fn test_pcr_smoother() {
+    let mut handle = ptr::null_mut();
+
+    unsafe {
+        smoother_pcr_alloc(
+            &mut handle as _,
+            ptr::null_mut(), // user context
+            Some(basic_smoother_callback),
+            5000,
+            1316,
+            0x31,
+            50
+        );
+    }
+
+    let mut file_in = File::open("../test-data/pcrsmoother.ts").unwrap();
+    let mut buffer = [0u8; 7 * 188];
+    //let mut processed = 0;
+
+    loop {
+        let nbytes = file_in.read(&mut buffer).unwrap();
+        if nbytes < buffer.len() {
+            break;
+        }
+        //processed += nbytes;
+        //println!("pcr_smoother - Read {} / {} bytes", nbytes, processed);
+
+        let b: i32 = nbytes.try_into().unwrap();
+
+        unsafe {
+            // Reading packets from disk and smoothing them out with gettome of day,
+            // is this even reliable?
+            let mut timestamp: libc::timeval = libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            };        
+            libc::gettimeofday(&mut timestamp, std::ptr::null_mut());
+            smoother_pcr_write(handle, &buffer[0], b, &mut timestamp);
+        }
+    }
+
+    unsafe {
+        smoother_pcr_free(handle);
+    }
+}
