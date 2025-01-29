@@ -142,7 +142,8 @@ mod tests {
             println!("StreamModel: Callback received buffer with entire pat object");
             println!("StreamModel: Total programs in stream {}", pat.program_count);
             if pat.program_count > 0 {
-                println!("StreamModel: program #{} PCR_PID 0x{:x} ", pat.programs[0].program_number, pat.programs[0].pmt.PCR_PID);
+                println!("StreamModel: program #{} PCR_PID 0x{:x} ",
+                    pat.programs[0].program_number, pat.programs[0].pmt.PCR_PID);
             }
             stop_looking.store(1, Ordering::Relaxed);
 
