@@ -223,11 +223,8 @@ fn test_basic_pes_extractor() {
 }
 
 #[allow(clippy::missing_safety_doc)]
-pub unsafe extern "C" fn basic_smoother_callback(_user_context: *mut c_void, buf: *mut u8, byteCount: i32, array: *mut pcr_position_s, arrayLength: i32) -> i32 {
-    println!("basic_smoother_callback - {:6?} bytes, arrayLength {:?}", byteCount, arrayLength);
-    unsafe {
-        //hexdump(buf, byteCount, 16);
-    };
+pub unsafe extern "C" fn basic_smoother_callback(_user_context: *mut c_void, _buf: *mut u8, _byte_count: i32, _array: *mut pcr_position_s, _array_length: i32) -> i32 {
+    //println!("basic_smoother_callback - {:6?} bytes, arrayLength {:?}", byte_count, array_length);
     return 0;
 }
 
