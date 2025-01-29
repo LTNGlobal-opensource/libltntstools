@@ -6,11 +6,12 @@ use std::{
     alloc,
     ptr,
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]
 pub struct StreamModel<F>
 where
-    F: FnMut(Vec<u8>),
+    F: FnMut(&mut sys::pat_s),
 {
     handle: *mut c_void,
     callback: *mut F,
@@ -19,7 +20,7 @@ where
 
 impl<F> StreamModel<F>
 where
-    F: FnMut(Vec<u8>),
+    F: FnMut(&mut sys::pat_s),
 {
     pub fn new(callback: F) -> Self {
         println!("Creating StreamModel");
@@ -41,7 +42,7 @@ where
 
 impl<F> Write for StreamModel<F>
 where
-    F: FnMut(Vec<u8>),
+    F: FnMut(&mut sys::pat_s),
 {
     /// Write an entire MPTS into the framework, pid filtering and demuxing the stream.
     ///
@@ -87,8 +88,15 @@ where
                     ptr::write_bytes(sm_ptr, 0, sm_layout.size());
                     Box::from_raw(pat as *mut sys::pat_s)
                 };
-                let sm_ptr = sm.as_mut();
-                println!("Total programs in stream {}", (*sm_ptr).program_count);
+                let _sm_ptr = sm.as_mut();
+
+//                if !pat.is_null() {
+                    //callback(&mut *pat);
+//                }
+                let callback = &mut *(self.callback as *mut F);
+                callback(&mut *pat);
+
+                //println!("Total programs in stream {}", sm_ptr.program_count);
 
                 /* Display the entire pat, pmt and descriptor model to console */
                 //sys::pat_dprintf(pat, 1);
@@ -108,7 +116,7 @@ where
 
 impl<F> Drop for StreamModel<F>
 where
-    F: FnMut(Vec<u8>),
+    F: FnMut(&mut sys::pat_s),
 {
     fn drop(&mut self) {
         unsafe {
@@ -126,26 +134,35 @@ mod tests {
     #[test]
     fn test_stream_model() {
 
-        println!("Running a test of the stream_model");
+        println!("StreamModel: Running a test");
 
-        let callback = |v: Vec<u8>| {
-            println!("Callback received buffer with entire pat object");
+        let stop_looking = AtomicUsize::new(0);
+
+        let callback = |pat: &mut sys::pat_s| {
+            println!("StreamModel: Callback received buffer with entire pat object");
+            println!("StreamModel: Total programs in stream {}", pat.program_count);
+            if pat.program_count > 0 {
+                println!("StreamModel: program #{} PCR_PID 0x{:x} ", pat.programs[0].program_number, pat.programs[0].pmt.PCR_PID);
+            }
+            stop_looking.store(1, Ordering::Relaxed);
+
+            // Do we need to release the pat or something?
         };
 
         // Instantiate a model object
         let mut model = StreamModel::new(callback);
-
         let mut file_in = fs::File::open("../test-data/demo.ts").unwrap();
         let mut buffer = [0u8; 7 * 188];
 
         // Feed it content from a file
-        loop {
+        while stop_looking.load(Ordering::Relaxed) == 0 {
             let nbytes = file_in.read(&mut buffer).unwrap();
             if nbytes < buffer.len() {
                 break;
             }
             let _ = model.write(&buffer);
-        }
+        };
         drop(model);
+        println!("StreamModel: Stopping a test");
     }
 }
