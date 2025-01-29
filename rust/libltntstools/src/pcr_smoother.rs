@@ -6,6 +6,7 @@ use std::{
     ptr,
 };
 use sys::pcr_position_s;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]
 pub struct PcrSmoother<F>
@@ -26,7 +27,7 @@ where
     F: FnMut(Vec<u8>),
 {
     pub fn new(pcr_pid: u16, items_per_second: i32, write_size: i32, latency_ms: i32, callback: F) -> Self {
-        println!("Creating PCR Smoother for PID {pcr_pid}");
+        println!("Creating PCR Smoother for PID 0x{:x}", pcr_pid);
 
         let callback = Box::into_raw(Box::new(callback));
 
@@ -157,8 +158,11 @@ mod tests {
 
         println!("Running a test of the smoother");
 
+        let stop_looking = AtomicUsize::new(0);
+        
         let callback = |v: Vec<u8>| {
             println!("Callback received buffer with {} bytes, please send to UDP.", v.len());
+            stop_looking.store(1, Ordering::Relaxed);
         };
 
         // Instantiate a smoother object
@@ -168,7 +172,7 @@ mod tests {
         let mut buffer = [0u8; 7 * 188];
 
         // Feed it content from a file
-        loop {
+        while stop_looking.load(Ordering::Relaxed) == 0 {
             let nbytes = file_in.read(&mut buffer).unwrap();
             if nbytes < buffer.len() {
                 break;
