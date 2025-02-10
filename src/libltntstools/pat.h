@@ -27,13 +27,13 @@ extern "C" {
 /**
  * @brief       PMT table entry. an ES stream type and related descriptors.
  */
-struct ltntstools_pmt_entry_s
+typedef struct ltntstools_pmt_entry_s
 {
 	uint32_t stream_type;
 	uint32_t elementary_PID;
 
 	struct ltntstools_descriptor_list_s descr_list;
-};
+} ltntstools_pmt_entry_t;
 int ltntstools_pmt_entry_compare(struct ltntstools_pmt_entry_s *a, struct ltntstools_pmt_entry_s *b);
 
 /**
@@ -180,5 +180,13 @@ int ltntstools_pat_enum_services(struct ltntstools_pat_s *pat, int *e, uint16_t 
 #endif
 
 int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
+
+/**
+ * @brief       Look at the stream-type AND descriptors to determine if this is an audio pid.
+ * @param[in]   uint8_t esPayloadType - pmt elementary stream type.
+ * @return      Boolean
+ * @see        ltntstools_is_ESPayloadType_Audio()
+ */
+int ltntstools_pmt_entry_is_audio(ltntstools_pmt_entry_t *pmt);
 
 #endif /* TR101290_PAT_H */
