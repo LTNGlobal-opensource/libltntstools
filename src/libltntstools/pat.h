@@ -182,11 +182,21 @@ int ltntstools_pat_enum_services(struct ltntstools_pat_s *pat, int *e, uint16_t 
 int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
 
 /**
+ * @brief      Finds audio pids.
+ * @param[in]  pmt - the pmt entry.
+ * @param[out] pid_count - a pointer to the count of discovered audio pids.
+ * @return     An array[pid_count] of pmt_entry_t pointers. only the top-level pointer should be freed. Returns null on failure.
+ */
+const ltntstools_pmt_entry_t ** ltntstools_pmt_enum_services_audio(const struct ltntstools_pmt_s *pmt, int *pid_count);
+
+/**
  * @brief       Look at the stream-type AND descriptors to determine if this is an audio pid.
  * @param[in]   uint8_t esPayloadType - pmt elementary stream type.
- * @return      Boolean
+ * @return      - 0  if not audio
+ *		- 1  if the stream_type indicates the codec
+ *		- the descriptor tag of the matching audio descriptor (>1)
  * @see        ltntstools_is_ESPayloadType_Audio()
  */
-int ltntstools_pmt_entry_is_audio(ltntstools_pmt_entry_t *pmt);
+int ltntstools_pmt_entry_is_audio(const ltntstools_pmt_entry_t *pmt);
 
 #endif /* TR101290_PAT_H */
