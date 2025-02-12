@@ -57,7 +57,7 @@ void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd)
 			pat->programs[i].program_number);
 		dprintf(fd, "\tpat.entry[%d].program_map_PID = 0x%04x\n", i,
 			pat->programs[i].program_map_PID);
-		
+
 		if (pat->programs[i].service_id == 0) {
 			dprintf(fd, "\tsdt.service_id       = n/a\n");
 			dprintf(fd, "\tsdt.service_type     = n/a\n");
@@ -111,7 +111,7 @@ void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd)
 				dprintf(fd, "  [");
 				for (int z = 0; z < pmt->streams[j].descr_list.array[k].len; z++)
 					dprintf(fd, "%c",
-						isprint(pmt->streams[j].descr_list.array[k].data[z]) ? 
+						isprint(pmt->streams[j].descr_list.array[k].data[z]) ?
 							pmt->streams[j].descr_list.array[k].data[z] : '.');
 				dprintf(fd, "]\n");
 			}
@@ -302,7 +302,7 @@ int ltntstools_pat_get_services_teletext(struct ltntstools_pat_s *pat, uint16_t 
 			(*pid_array)[idx++] = pmt->streams[j].elementary_PID;
 		}
 	}
-	
+
 	*pid_count = cnt;
 
     return 0; /* Error */
@@ -414,7 +414,7 @@ int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, 
 	return -1; /* Failed */
 }
 
-int ltntstools_pmt_entry_is_audio(ltntstools_pmt_entry_t *pmt) {
+int ltntstools_pmt_entry_is_audio(const ltntstools_pmt_entry_t *pmt) {
 	if (ltntstools_is_ESPayloadType_Audio(pmt->stream_type)) {
 		return 1;
 	}
@@ -434,7 +434,7 @@ int ltntstools_pmt_entry_is_audio(ltntstools_pmt_entry_t *pmt) {
 			case 0x7a: /* Enhanced AC-3 descriptor */
 			case 0x7c: /* AAC descriptor */
 
-			return 1;
+			return pmt->descr_list.array[i].tag;
 		}
 	}
 
@@ -454,13 +454,13 @@ int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, str
 		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
 
 		for (int j = 0; j < pmt->stream_count; j++) {
-			
+
 			if (ltntstools_is_ESPayloadType_Video(pmt->streams[j].stream_type)) {
 				(*e)++;
 				*pmtptr = pmt;
 				return 0; /* Success */
 			}
-			
+
 		}
 		(*e)++;
 	}
@@ -488,7 +488,7 @@ int ltntstools_pat_enum_services_teletext(struct ltntstools_pat_s *pat, int *e, 
 				*pmtptr = pmt;
 				return 0; /* Success */
 			}
-			
+
 		}
 		(*e)++;
 	}
@@ -496,8 +496,33 @@ int ltntstools_pat_enum_services_teletext(struct ltntstools_pat_s *pat, int *e, 
 	return -1; /* Failed */
 }
 
-int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint32_t **stream_type_array, uint16_t **pid_array, int *pid_count)
+const ltntstools_pmt_entry_t ** ltntstools_pmt_enum_services_audio(const struct ltntstools_pmt_s *pmt, int *pid_count)
 {
+	*pid_count = 0;
+
+	/* Allocate memory for PIDs array */
+	const ltntstools_pmt_entry_t ** streams = malloc(pmt->stream_count * sizeof(ltntstools_pmt_entry_t*));
+	if (!streams)
+		return NULL; /* Memory allocation failure */
+
+	/* Find all audio PIDs */
+	for (int j = 0; j < pmt->stream_count; j++) {
+		const ltntstools_pmt_entry_t *stream = &pmt->streams[j];
+		if (ltntstools_pmt_entry_is_audio(stream)) {
+			streams[(*pid_count)++] = stream;
+		}
+	}
+
+	if (*pid_count <= 0) {
+		/* Free the allocated memory if no PIDs were found */
+		free(streams);
+		streams = NULL;
+	}
+
+	return streams;
+}
+
+int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint32_t **stream_type_array, uint16_t **pid_array, int *pid_count) {
 	if (!pat || !pmtptr || !e || !pid_array || !pid_count || !stream_type_array)
 		return -1;
 
@@ -526,18 +551,16 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 		}
 
 		/* Find all audio PIDs */
-		int found = 0;
 		for (int j = 0; j < pmt->stream_count; j++) {
 			ltntstools_pmt_entry_t *stream = &pmt->streams[j];
 			if (ltntstools_pmt_entry_is_audio(stream)) {
 				(*pid_array)[*pid_count] = stream->elementary_PID;
 				(*stream_type_array)[*pid_count] = stream->stream_type;
 				(*pid_count)++;
-				found += 1;
 			}
 		}
 
-		if (found > 0 && *pid_count > 0) {
+		if (*pid_count > 0) {
 			*pmtptr = pmt;
 			(*e)++;
 			return 0; /* Success */
