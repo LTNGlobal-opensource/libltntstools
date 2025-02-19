@@ -449,7 +449,7 @@ static void *_threadFunc(void *p)
 			break;
 		}
 
-		/* We can unlock before calling _queueProcess() because _queueProcess()
+		/* Unlock before calling _queueProcess() because _queueProcess()
 		 * itself locks/unlocks the same mutex internally.
 		 */
 		pthread_mutex_unlock(&ctx->listMutex);
@@ -458,9 +458,6 @@ static void *_threadFunc(void *p)
 		int64_t uS = makeTimestampFromNow();
 		if (_queueProcess(ctx, uS) < 0)
 		{
-			/* If there's nothing due, do a short wait or sleep.
-			 * You could also do a timed wait on the condition variable.
-			 */
 			usleep(1000);
 		}
 	}
