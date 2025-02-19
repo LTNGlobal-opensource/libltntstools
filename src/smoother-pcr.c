@@ -98,6 +98,7 @@ struct smoother_pcr_context_s
 	struct xorg_list itemsFree;
 	struct xorg_list itemsBusy;
 	pthread_mutex_t listMutex;
+	pthread_cond_t listCond;
 
 	void *userContext;
 	smoother_pcr_output_callback outputCb;
@@ -271,6 +272,7 @@ void smoother_pcr_free(void *hdl)
 		itemFree(item);
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
+	pthread_cond_destroy(&ctx->listCond);
 
 	byte_array_free(&ctx->ba);
 
@@ -345,6 +347,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 #endif
 
 	pthread_mutex_unlock(&ctx->listMutex);
+	pthread_cond_signal(&ctx->listCond);
 
 	if (count <= 0) {
 		return -1; /* Nothing scheduled, bail out early. */
@@ -410,13 +413,14 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 		xorg_list_append(&e->list, &ctx->itemsFree);
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
+	pthread_cond_signal(&ctx->listCond);
 
 	return 0;
 }
 
 extern int ltnpthread_setname_np(pthread_t thread, const char *name);
 
-static void * _threadFunc(void *p)
+static void *_threadFunc(void *p)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)p;
 
@@ -426,27 +430,44 @@ static void * _threadFunc(void *p)
 	ctx->threadTerminated = 0;
 	ctx->threadRunning = 1;
 
-	while (!ctx->threadTerminate) {
+	while (!ctx->threadTerminate)
+	{
+
+		/* Lock the mutex and check if the busy list is empty. */
 		pthread_mutex_lock(&ctx->listMutex);
-		if (xorg_list_is_empty(&ctx->itemsBusy)) {
-			pthread_mutex_unlock(&ctx->listMutex);
-			usleep(1 * 1000);
-			continue;
+
+		/* If empty and we're not terminating, wait for a condition signal. */
+		while (!ctx->threadTerminate && xorg_list_is_empty(&ctx->itemsBusy))
+		{
+			pthread_cond_wait(&ctx->listCond, &ctx->listMutex);
 		}
 
-		int64_t uS = makeTimestampFromNow();
+		/* If we woke up because the thread is terminating, break. */
+		if (ctx->threadTerminate)
+		{
+			pthread_mutex_unlock(&ctx->listMutex);
+			break;
+		}
 
-		/* Service the output schedule queue, output any UDP packets when they're due.
-		 * Important to remember that we're calling this func while we're holding the mutex.
+		/* We can unlock before calling _queueProcess() because _queueProcess()
+		 * itself locks/unlocks the same mutex internally.
 		 */
-		if (_queueProcess(ctx, uS) < 0)
-			usleep(1 * 1000);
+		pthread_mutex_unlock(&ctx->listMutex);
 
+		/* Service the output schedule queue. */
+		int64_t uS = makeTimestampFromNow();
+		if (_queueProcess(ctx, uS) < 0)
+		{
+			/* If there's nothing due, do a short wait or sleep.
+			 * You could also do a timed wait on the condition variable.
+			 */
+			usleep(1000);
+		}
 	}
+
 	ctx->threadRunning = 1;
 	ctx->threadTerminated = 1;
 
-	/* TODO: pthread detach else we'll cause a small leak in valgrind. */
 	return NULL;
 }
 
@@ -460,6 +481,7 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	xorg_list_init(&ctx->itemsFree);
 	xorg_list_init(&ctx->itemsBusy);
 	pthread_mutex_init(&ctx->listMutex, NULL);
+	pthread_cond_init(&ctx->listCond, NULL);
 	ctx->userContext = userContext;
 	ctx->outputCb = cb;
 	ctx->itemLengthBytes = itemLengthBytes;
@@ -487,6 +509,7 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 		xorg_list_append(&item->list, &ctx->itemsFree);
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
+	pthread_cond_signal(&ctx->listCond);
 
 	/* Spawn a thread that manages the scheduled output queue. */
 	pthread_create(&ctx->threadId, NULL, _threadFunc, ctx);
@@ -520,6 +543,7 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 
 	xorg_list_del(&item->list);
 	pthread_mutex_unlock(&ctx->listMutex);
+	pthread_cond_signal(&ctx->listCond);
 
 	item->received_TSuS = makeTimestampFromNow();
 	item->pcrIntervalPerPacketTicks = pcrIntervalPerPacketTicks;
@@ -584,6 +608,7 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 	/* Queue this for scheduled output */
 	xorg_list_append(&item->list, &ctx->itemsBusy);
 	pthread_mutex_unlock(&ctx->listMutex);
+	pthread_cond_signal(&ctx->listCond);
 
 	return 0;
 }
@@ -783,4 +808,5 @@ void smoother_pcr_reset(void *hdl)
 	}
 
 	pthread_mutex_unlock(&ctx->listMutex);
+	pthread_cond_signal(&ctx->listCond);
 }
