@@ -302,7 +302,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 			ctx->pcrHead = e->pcrdata.pcr;
 		}
 
-		if (e->scheduled_TSuS <= uS) {
+		if (e->scheduled_TSuS <= (uint64_t)uS) {
 			xorg_list_del(&e->list);
 			xorg_list_append(&e->list, &loclist);
 			count++;
@@ -311,10 +311,11 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 				/* Time ordering problem on the list now. Dump both lists and abort, later.*/
 				redundantItems++;
 			}
+			/* The list is time ordered so we shoud be able to break
+			 * when we find a time that's beyond out window, and save CPU time.
+			 */
+			break;
 		}
-		/* TODO: The list is time ordered so we shoud be able to break
-		 * when we find a time that's beyond out window, and save CPU time.
-		 */
 	}
 
 	/* Make sure the busy list is contigious */
@@ -328,7 +329,8 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 		if (countSeq > 1) {
 			if (last_seq + 1 != e->seqno) {
 				/* Almost certainly, the schedule US time is out of order, warn. */
-				printf("List possibly mangled, seqnos might be bad now, %" PRIu64 ", %" PRIu64 "\n", last_seq, e->seqno);
+				printf("List possibly mangled, seqnos might be bad now, %" PRIu64 ", %" PRIu64 "\n",
+				       last_seq, e->seqno);
 #if LOCAL_DEBUG
 				_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
 				_queuePrintList(ctx, &loclist, "loclist");
@@ -350,7 +352,6 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	/* Process the local list.
 	 * Call the callback with any scheduled packets
 	 */
-	e = NULL, next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &loclist, list) {
 		if (ctx->outputCb) {
 
@@ -359,7 +360,8 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 			 */
 			struct ltntstools_pcr_position_s *array = NULL;
 			int arrayLength = 0;
-			for (int i = 0; i < e->lengthBytes / 188; i++) {
+			int packetCount = e->lengthBytes / 188;
+			for (int i = 0; i < packetCount; i++) {
 				struct ltntstools_pcr_position_s p;
 				p.offset = i * 188;
 				p.pcr = e->pcrdata.pcr + (i * e->pcrIntervalPerPacketTicks);
@@ -379,10 +381,11 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 				printf("%s() ERROR %d != %d, mangled returned object length\n", __func__, x, e->lengthBytes);
 			}
 			if (sn != e->seqno) {
-				printf("%s() ERROR %" PRIu64 " != %" PRIu64 ", mangled returned object seqno\n", __func__, sn, e->seqno);
+				printf("%s() ERROR %" PRIu64 " != %" PRIu64 ", mangled returned object seqno\n",
+				       __func__, sn, e->seqno);
 			}
 
-			pthread_mutex_lock(&ctx->listMutex);			
+			pthread_mutex_lock(&ctx->listMutex);
 			ctx->totalSizeBytes -= e->lengthBytes;
 			pthread_mutex_unlock(&ctx->listMutex);
 
@@ -390,9 +393,8 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 
 			/* Throw a packet loss warning if the queue gets confused, should never happen. */
 			if (ctx->last_seqno && ctx->last_seqno + 1 != e->seqno) {
-				printf("%s() seq err %" PRIu64 " vs %" PRIu64 "\n",__func__, ctx->last_seqno, e->seqno);
+				printf("%s() seq err %" PRIu64 " vs %" PRIu64 "\n", __func__, ctx->last_seqno, e->seqno);
 			}
-
 			ctx->last_seqno = e->seqno;
 		}
 	}
