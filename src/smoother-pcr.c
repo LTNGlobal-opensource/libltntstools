@@ -318,6 +318,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 		}
 	}
 
+#if LOCAL_DEBUG
 	/* Make sure the busy list is contigious */
 	e = NULL;
 	next = NULL;
@@ -329,25 +330,29 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 		if (countSeq > 1) {
 			if (last_seq + 1 != e->seqno) {
 				/* Almost certainly, the schedule US time is out of order, warn. */
-				printf("List possibly mangled, seqnos might be bad now, %" PRIu64 ", %" PRIu64 "\n",
-				       last_seq, e->seqno);
-#if LOCAL_DEBUG
-				_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
-				_queuePrintList(ctx, &loclist, "loclist");
-				fflush(stdout);
-				fflush(stderr);
-				exit(1);
-#endif
+				printf("List possibly mangled, seqnos might be bad now, %" PRIu64 ", %" PRIu64 "\n", last_seq, e->seqno);
+				#if LOCAL_DEBUG
+					_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
+					_queuePrintList(ctx, &loclist, "loclist");
+					fflush(stdout);
+					fflush(stderr);
+					exit(1);
+				#endif
 			}
 		}
 		last_seq = e->seqno;
 	}
+#endif
 
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	if (count <= 0) {
 		return -1; /* Nothing scheduled, bail out early. */
 	}
+
+	/* Call gettimeofday() only once for all items in this batch */
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
 
 	/* Process the local list.
 	 * Call the callback with any scheduled packets
@@ -369,8 +374,6 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 				ltntstools_pcr_position_append(&array, &arrayLength, &p);
 			}
 
-			struct timeval tv;
-			gettimeofday(&tv, NULL);
 			ltn_histogram_interval_update(ctx->histTransmit, &tv);
 
 			int x = e->lengthBytes;
@@ -381,8 +384,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 				printf("%s() ERROR %d != %d, mangled returned object length\n", __func__, x, e->lengthBytes);
 			}
 			if (sn != e->seqno) {
-				printf("%s() ERROR %" PRIu64 " != %" PRIu64 ", mangled returned object seqno\n",
-				       __func__, sn, e->seqno);
+				printf("%s() ERROR %" PRIu64 " != %" PRIu64 ", mangled returned object seqno\n", __func__, sn, e->seqno);
 			}
 
 			pthread_mutex_lock(&ctx->listMutex);
