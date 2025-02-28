@@ -34,8 +34,8 @@ extern "C" {
 #endif
 
 /**
- * @brief       Callback function definition, where demuxed and parsed PES frames are delivered
- *              to your function.
+ * @brief       Callback function definition, where grouops of transport packets will be
+ *              delivered to your function.
  *              Receiving thread doesn't own the lifespan of the buffer,
  *              applications should send the output to the network inside
  *              this callback.
@@ -85,7 +85,7 @@ int  smoother_pcr_write(void *hdl, const uint8_t *pkts, int lengthBytes, struct 
 int64_t smoother_pcr_get_size(void *hdl);
 
 /**
- * @brief       DElete all queued content, reset clocks, used when rewinding files, going back in PCR time.
+ * @brief       Delete all queued content, reset clocks, used when rewinding files, going back in PCR time.
  * @param[in]   void *hdl - Handle / context.
  */
 void smoother_pcr_reset(void *hdl);

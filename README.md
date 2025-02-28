@@ -30,15 +30,9 @@
 	* libdvbpsi
 
 ## Rust Library Bindings
-	$ make && make install
-	$ cd rust/libltntstools-sys
-	$ git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
-	$ cd ffmpeg && git checkout 63f5c007a7da69248f664c988398204c21eac7cf && cd ..
-	$ git clone https://code.videolan.org/videolan/libdvbpsi.git libdvbpsi
-	$ cd libdvbpsi && git checkout d2a81c20a7704676048111b4f7ab24b95a904008 && cd ..
+	$ git submodule update --init --checkout
 	$ sudo yum install llvm-toolset-7-clang-devel
 	$ sudo yum update cargo
 	$ export LIBCLANG_PATH=/opt/rh/llvm-toolset-7/root/usr/lib64
-	$ cd ..
 	$ cargo build
 	$ cargo test -- --nocapture

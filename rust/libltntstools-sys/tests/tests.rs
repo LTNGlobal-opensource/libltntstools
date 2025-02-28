@@ -131,8 +131,14 @@ fn test_basic_stream_model() {
         let b: i32 = nbytes.try_into().unwrap();
 
         unsafe {
+            let mut timestamp: libc::timeval = libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            };        
+            libc::gettimeofday(&mut timestamp, std::ptr::null_mut());
+
             let val_ptr = &mut val as *mut c_int;
-            streammodel_write(handle, &buffer[0], b / 188, val_ptr);
+            streammodel_write(handle, &buffer[0], b / 188, val_ptr, &mut timestamp);
             if val == 1 {
                 let mut pat = ptr::null_mut();
                 streammodel_query_model(handle, &mut pat as _);
@@ -187,6 +193,8 @@ fn test_basic_pes_extractor() {
             0xe0,
             Some(basic_pe_callback),
             ptr::null_mut(),
+            -1,
+            -1
         );
     }
 
@@ -211,5 +219,58 @@ fn test_basic_pes_extractor() {
 
     unsafe {
         pes_extractor_free(handle);
+    }
+}
+
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn basic_smoother_callback(_user_context: *mut c_void, _buf: *mut u8, _byte_count: i32, _array: *mut pcr_position_s, _array_length: i32) -> i32 {
+    //println!("basic_smoother_callback - {:6?} bytes, arrayLength {:?}", byte_count, array_length);
+    return 0;
+}
+
+#[test]
+fn test_pcr_smoother() {
+    let mut handle = ptr::null_mut();
+
+    unsafe {
+        smoother_pcr_alloc(
+            &mut handle as _,
+            ptr::null_mut(), // user context
+            Some(basic_smoother_callback),
+            5000,
+            1316,
+            0x31,
+            50
+        );
+    }
+
+    let mut file_in = File::open("../test-data/pcrsmoother.ts").unwrap();
+    let mut buffer = [0u8; 7 * 188];
+    //let mut processed = 0;
+
+    loop {
+        let nbytes = file_in.read(&mut buffer).unwrap();
+        if nbytes < buffer.len() {
+            break;
+        }
+        //processed += nbytes;
+        //println!("pcr_smoother - Read {} / {} bytes", nbytes, processed);
+
+        let b: i32 = nbytes.try_into().unwrap();
+
+        unsafe {
+            // Reading packets from disk and smoothing them out with gettome of day,
+            // is this even reliable?
+            let mut timestamp: libc::timeval = libc::timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            };        
+            libc::gettimeofday(&mut timestamp, std::ptr::null_mut());
+            smoother_pcr_write(handle, &buffer[0], b, &mut timestamp);
+        }
+    }
+
+    unsafe {
+        smoother_pcr_free(handle);
     }
 }
