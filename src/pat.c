@@ -260,6 +260,54 @@ int ltntstools_pat_compare(struct ltntstools_pat_s *a, struct ltntstools_pat_s *
 	return 0; /* Identical */
 }
 
+int ltntstools_pat_get_services_teletext(struct ltntstools_pat_s *pat, uint16_t **pid_array, int *pid_count)
+{
+    if (!pat || !pid_array || !pid_count)
+        return -1;
+
+    *pid_array = NULL;
+    *pid_count = 0;
+
+	int cnt = 0;
+	for (int i = 0; i < pat->program_count; i++) {
+        struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
+
+		for (int j = 0; j < pmt->stream_count; j++) {
+			struct ltntstools_pmt_entry_s *se = &pmt->streams[j];
+
+			if (ltntstools_descriptor_list_contains_teletext(&se->descr_list) == 0) {
+				continue;
+			}
+
+			cnt++;
+		}
+	}
+
+	/* Allocate memory for PIDs array */
+	*pid_array = (uint16_t *)malloc(cnt * sizeof(uint16_t));
+	if (!*pid_array)
+		return -1; /* Memory allocation failure */
+
+	int idx = 0;
+	for (int i = 0; i < pat->program_count; i++) {
+		struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
+
+		for (int j = 0; j < pmt->stream_count; j++) {
+			struct ltntstools_pmt_entry_s *se = &pmt->streams[j];
+
+			if (ltntstools_descriptor_list_contains_teletext(&se->descr_list) == 0) {
+				continue;
+			}
+
+			(*pid_array)[idx++] = pmt->streams[j].elementary_PID;
+		}
+	}
+	
+	*pid_count = cnt;
+
+    return 0; /* Error */
+}
+
 int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t **pid_array, int *pid_count)
 {
     if (!pat || !pmtptr || !e || !pid_array || !pid_count)
@@ -381,6 +429,34 @@ int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, str
 		for (int j = 0; j < pmt->stream_count; j++) {
 			
 			if (ltntstools_is_ESPayloadType_Video(pmt->streams[j].stream_type)) {
+				(*e)++;
+				*pmtptr = pmt;
+				return 0; /* Success */
+			}
+			
+		}
+		(*e)++;
+	}
+
+	return -1; /* Failed */
+}
+
+int ltntstools_pat_enum_services_teletext(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr)
+{
+	if (!pmtptr || !e)
+		return -1;
+
+	if ((*e) + 1 > pat->program_count)
+		return -1;
+
+	for (int i = (*e); i < pat->program_count; i++) {
+
+		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+
+		for (int j = 0; j < pmt->stream_count; j++) {
+			struct ltntstools_pmt_entry_s *se = &pmt->streams[j];
+
+			if (ltntstools_descriptor_list_contains_teletext(&se->descr_list)) {
 				(*e)++;
 				*pmtptr = pmt;
 				return 0; /* Success */

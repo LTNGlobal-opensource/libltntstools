@@ -134,7 +134,24 @@ void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t
  */
 int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr, uint16_t **pid_array, int *pid_count);
 
-int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
+/**
+ * @brief       Enumerate all services in the PAT object, find any Teletext/OP47/WST pids and return and array of pids
+ *              Caller is responsible for freeing the array after use.
+ * @param[in]   struct ltntstools_pat_s *pat - object
+ * @param[out]  uint16_t **pid_array - list of pids containing OP47/Teletext services
+ * @param[out]  int *pid_count - number of elements in the list
+ * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
+ */
+int ltntstools_pat_get_services_teletext(struct ltntstools_pat_s *pat, uint16_t **pid_array, int *pid_count);
+
+/**
+ * @brief       Enumerate all services in the PAT object, find any OP47/Teletext pids and return the associated PMT (and pid).
+ * @param[in]   struct ltntstools_pat_s *pat - object
+ * @param[in]   int *e - used internally to enumerate objects. Pass 0 value int on first call then don't modify afterwards
+ * @param[out]  struct ltntstools_pmt_s **pmt - ptr to the pmt object containing in the PAT
+ * @return      0 - Success, PMT and PID contain details. < 0, no nore SCTE35 sevices, or error.
+ */
+int ltntstools_pat_enum_services_teletext(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr);
 
 /**
  * @brief       Enumerate all services in the PAT object, find any SMPTE2038 pids and return the associated PMT (and pid).
