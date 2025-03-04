@@ -86,53 +86,71 @@ uint64_t ltntstools_streammodel_get_current_version(void *hdl)
 	return ctx->currentModelVersion;
 }
 
-void _rom_activate(struct streammodel_ctx_s *ctx)
+static int _rom_compare_current_next(struct streammodel_ctx_s *ctx)
 {
 	/* Compare current and next models, bounce the version if
 	 * we've detected a change.
 	 */
 
-	int ret;
+	 int ret;
+	 int changes = 0;
 
-	struct ltntstools_pat_s *patCurrent = NULL;
-	struct ltntstools_pat_s *patNext = NULL;
-	ret = _streammodel_query_model(ctx, ctx->current, &patCurrent);
-	ret = _streammodel_query_model(ctx, ctx->next, &patNext);
-
-	if (patCurrent && patNext) {
-		ret = ltntstools_pat_compare(patCurrent, patNext);
-		if (ret != 0) {
-			ctx->currentModelVersion++;
-			printf("*** NEW MODEL DETECTED as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
-		} else {
-#if 0
-			printf("*** current/next models are identical, no changes detected ***\n");
+	 struct ltntstools_pat_s *patCurrent = NULL;
+	 struct ltntstools_pat_s *patNext = NULL;
+	 ret = _streammodel_query_model(ctx, ctx->current, &patCurrent);
+	 ret = _streammodel_query_model(ctx, ctx->next, &patNext);
+ 
+	 if (patCurrent && patNext) {
+		 ret = ltntstools_pat_compare(patCurrent, patNext);
+		 if (ret != 0) {
+			 ctx->currentModelVersion++;
+			 printf("*** NEW MODEL DETECTED(1) as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
+			 changes = 1;
+		 } else {
+ #if 0
+			 printf("*** current/next models are identical, no changes detected ***\n");
+ #endif
+		 }
+	 } else
+	 if (patCurrent == NULL && patNext) {
+		ctx->currentModelVersion++;
+#if CHATTY_CALLBACKS
+		printf("*** NEW MODEL DETECTED(2) as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
 #endif
-		}
+		changes = 1;
+	 }
+ 
+	 if (patCurrent) {
+		 ltntstools_pat_free(patCurrent);
+		 patCurrent = NULL;
+	 }
+	 if (patNext) {
+		 ltntstools_pat_free(patNext);
+		 patNext = NULL;
+	 }
+
+	 return changes;
+}
+
+void _rom_activate(struct streammodel_ctx_s *ctx)
+{
+	if (_rom_compare_current_next(ctx) == 1) {
+
+		/* Promote the 'next' rom */
+		struct streammodel_rom_s *c = ctx->current;
+
+		ctx->current = ctx->next;
+
+		ctx->next = c;
+
+		/* Re-initialize what was current. */
+		_rom_initialize(ctx, ctx->next, ctx->next->nr);
+
+		/* Don't start writing packets into the next model for 1 second. */
+		struct timeval future = { 0, 500 * 1000 };
+		timeradd(&future, &ctx->now, &ctx->next->allowableWriteTime);
 	}
 
-	if (patCurrent) {
-		ltntstools_pat_free(patCurrent);
-		patCurrent = NULL;
-	}
-	if (patNext) {
-		ltntstools_pat_free(patNext);
-		patNext = NULL;
-	}
-
-	/* Promote the 'next' rom */
-	struct streammodel_rom_s *c = ctx->current;
-
-	ctx->current = ctx->next;
-
-	ctx->next = c;
-
-	/* Re-initialize what was current. */
-	_rom_initialize(ctx, ctx->next, ctx->next->nr);
-
-	/* Don't start writing packets into the next model for 1 second. */
-	struct timeval future = { 0, 500 * 1000 };
-	timeradd(&future, &ctx->now, &ctx->next->allowableWriteTime);
 }
 
 static struct streammodel_pid_s *_rom_find_pid(struct streammodel_rom_s *rom, uint16_t pid)
@@ -546,8 +564,11 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 	}
 
 #if 0
-	if (!ctx->writePackets)
-		printf("Not writing packets\n");
+	if (!ctx->writePackets) {
+		//printf("Not writing packets\n");
+	} else {
+		printf("writing packets\n");
+	}
 #endif
 
 	if (ctx->enableSectionCRCChecks) {
@@ -758,9 +779,13 @@ static int _streammodel_query_model(struct streammodel_ctx_s *ctx, struct stream
 int ltntstools_streammodel_query_model(void *hdl, struct ltntstools_pat_s **pat)
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
+	int ret = -1;
 
 	pthread_mutex_lock(&ctx->rom_mutex);
-	int ret = _streammodel_query_model(ctx, ctx->current, pat);
+	if (ctx->current->modelComplete == 1) {
+		ret = _streammodel_query_model(ctx, ctx->current, pat);
+		ctx->current->modelComplete = 0;
+	}
 	pthread_mutex_unlock(&ctx->rom_mutex);
 
 	return ret;
