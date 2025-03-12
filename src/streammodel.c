@@ -1,6 +1,7 @@
 #include "streammodel-types.h"
 
 #define LOCAL_DEBUG 0
+#define CHATTY_CALLBACKS 0
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,11 +25,28 @@ extern void extractors_free(struct streammodel_ctx_s *ctx);
 
 static void message(dvbpsi_t *handle, const dvbpsi_msg_level_t level, const char* msg);
 static int _streammodel_query_model(struct streammodel_ctx_s *ctx, struct streammodel_rom_s *rom, struct ltntstools_pat_s **pat);
+int _rom_compare_current_next(struct streammodel_ctx_s *ctx);
 
 /* ROM */
 static void _rom_next_complete(struct streammodel_ctx_s *ctx)
 {
 	ctx->next->modelComplete = 1;
+
+#if CHATTY_CALLBACKS
+	struct streammodel_rom_s *rom = ctx->next;
+	printf("Next Model#%d collection complete, %d PMTs collected\n", rom->nr, rom->parsedPMTs);
+#endif
+
+	/* See if the model has changed. */
+	if (_rom_compare_current_next(ctx) == 1) {
+	} else {
+#if CHATTY_CALLBACKS
+		printf("*** current/next models are identical, no changes detected ***\n");
+#endif
+		ctx->restartReason = 0;
+		ctx->restartModel = 1;
+	}
+
 }
 
 static void _rom_initialize(struct streammodel_ctx_s *ctx, struct streammodel_rom_s *rom, int nr)
@@ -86,14 +104,13 @@ uint64_t ltntstools_streammodel_get_current_version(void *hdl)
 	return ctx->currentModelVersion;
 }
 
-static int _rom_compare_current_next(struct streammodel_ctx_s *ctx)
+int _rom_compare_current_next(struct streammodel_ctx_s *ctx)
 {
 	/* Compare current and next models, bounce the version if
 	 * we've detected a change.
 	 */
 
 	 int ret;
-	 int changes = 0;
 
 	 struct ltntstools_pat_s *patCurrent = NULL;
 	 struct ltntstools_pat_s *patNext = NULL;
@@ -104,20 +121,29 @@ static int _rom_compare_current_next(struct streammodel_ctx_s *ctx)
 		 ret = ltntstools_pat_compare(patCurrent, patNext);
 		 if (ret != 0) {
 			 ctx->currentModelVersion++;
-			 printf("*** NEW MODEL DETECTED(1) as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
-			 changes = 1;
+			 ctx->modelChanged = 1;
+#if CHATTY_CALLBACKS
+			 printf("*** NEW INCOMING MODEL DETECTED as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
+#endif
 		 } else {
- #if 0
-			 printf("*** current/next models are identical, no changes detected ***\n");
- #endif
+			 // No model change detected
+			if (ctx->restartReason == 1) {
+				/* Models didnt change but the PAT indicated a CC error, force a new model */
+			 	ctx->currentModelVersion++;
+			 	ctx->modelChanged = 1;
+				ctx->restartReason = 0;
+#if CHATTY_CALLBACKS
+			 	printf("*** NEW INCOMING MODEL DUE TO PAT DISCONTINUITY as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
+#endif
+			}
 		 }
 	 } else
 	 if (patCurrent == NULL && patNext) {
 		ctx->currentModelVersion++;
+		ctx->modelChanged = 1;
 #if CHATTY_CALLBACKS
-		printf("*** NEW MODEL DETECTED(2) as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
+		printf("*** FIRST MODEL DETECTED as 0x%016" PRIx64 "***\n", ctx->currentModelVersion);
 #endif
-		changes = 1;
 	 }
  
 	 if (patCurrent) {
@@ -129,28 +155,30 @@ static int _rom_compare_current_next(struct streammodel_ctx_s *ctx)
 		 patNext = NULL;
 	 }
 
-	 return changes;
+	 return ctx->modelChanged;
 }
 
-void _rom_activate(struct streammodel_ctx_s *ctx)
+void _rom_activate(struct streammodel_ctx_s *ctx, int duringalloc)
 {
-	if (_rom_compare_current_next(ctx) == 1) {
-
-		/* Promote the 'next' rom */
-		struct streammodel_rom_s *c = ctx->current;
-
-		ctx->current = ctx->next;
-
-		ctx->next = c;
-
-		/* Re-initialize what was current. */
-		_rom_initialize(ctx, ctx->next, ctx->next->nr);
-
-		/* Don't start writing packets into the next model for 1 second. */
-		struct timeval future = { 0, 500 * 1000 };
-		timeradd(&future, &ctx->now, &ctx->next->allowableWriteTime);
+#if CHATTY_CALLBACKS
+	if (!duringalloc) {
+		printf("next model complete, activating\n");
 	}
+#endif
 
+	/* Promote the 'next' rom */
+	struct streammodel_rom_s *c = ctx->current;
+
+	ctx->current = ctx->next;
+
+	ctx->next = c;
+
+	/* Re-initialize what was current. */
+	_rom_initialize(ctx, ctx->next, ctx->next->nr);
+
+	/* Don't start writing packets into the next model for 1 second. */
+	struct timeval future = { 0, 500 * 1000 };
+	timeradd(&future, &ctx->now, &ctx->next->allowableWriteTime);
 }
 
 static struct streammodel_pid_s *_rom_find_pid(struct streammodel_rom_s *rom, uint16_t pid)
@@ -184,8 +212,6 @@ static void message(dvbpsi_t *handle, const dvbpsi_msg_level_t level, const char
 	}
 	fprintf(stderr, "%s\n", msg);
 }
-
-#define CHATTY_CALLBACKS 0
 
 static int sdt_add(struct streammodel_rom_s *rom, struct streammodel_sdt_s *sdt)
 {
@@ -308,11 +334,7 @@ static void cb_pmt(void *p_zero, dvbpsi_pmt_t *p_pmt)
 	printf("%s() parsed %d expecting %d\n", __func__, rom->parsedPMTs, rom->totalPMTsInPAT);
 #endif
 	if (rom->parsedPMTs == rom->totalPMTsInPAT) {
-#if CHATTY_CALLBACKS
-		printf("Model#%d collection complete, %d PMTs collected\n", rom->nr, rom->parsedPMTs);
-#endif
 		_rom_next_complete(ctx);
-//		_rom_activate(ctx);
 	}
 }
 
@@ -437,8 +459,9 @@ int ltntstools_streammodel_alloc(void **hdl, void *userContext)
 	ctx->current = &ctx->roms[0];
 	ctx->next = &ctx->roms[1];
 	ctx->userContext = userContext;
+	ctx->lastPATCC = 0xea;
 
-	_rom_activate(ctx);
+	_rom_activate(ctx, 1);
 
 	*hdl = ctx;
 	return 0;
@@ -571,6 +594,7 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 	}
 #endif
 
+	/* For TR101290 */
 	if (ctx->enableSectionCRCChecks) {
 		if (ctx->seCount == 0) {
 			extractors_alloc(ctx);
@@ -594,6 +618,19 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 
 		/* Find the next pid struct for this pid */
 		struct streammodel_pid_s *ps = _rom_next_find_pid(ctx, pid);
+
+		if (pid == TSTOOLS_PID_PAT) {
+			/* Check the PAT CC counter. We'll trigger a model refresh if we detect a CC error on PAT */
+			if (ctx->lastPATCC != 0xea &&ltntstools_isCCInError(&pkt[i * 188], ctx->lastPATCC)) {
+#if CHATTY_CALLBACKS
+				printf("Detected PAT CC error on write, triggering model update\n");
+#endif
+				ctx->restartModel = 1;
+				ctx->restartReason = 1;
+				ctx->writePackets = 1;
+			}
+			ctx->lastPATCC = ltntstools_continuity_counter(&pkt[i * 188]);
+		}
 
 		if (pid == 0x11 /* SDT PID */ && ps->packetCount == 0) {
 			ps->present = 1;
@@ -655,19 +692,29 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 			/* Re-initialize what was current. */
 			_rom_initialize(ctx, ctx->next, ctx->next->nr);
 
-			/* Don't start writing packets into the next model for N time period */
-			struct timeval future = { 0, 500 * 1000 };
+			struct timeval future = { 0, 0 };
+			if (ctx->restartReason == 1) {
+				/* PAT error, request an immediate model */
+				future.tv_sec = 0;
+				future.tv_usec = 500 * 1000;
+			} else if (ctx->restartReason == 0) {
+				/* duplicate model, slow the next model down */
+				future.tv_sec = 15;
+				future.tv_usec = 0;
+			}
 			timeradd(&future, &ctx->now, &ctx->next->allowableWriteTime);
 
 			break;
 		}
 	}
 
-	if (ctx->next->modelComplete) {
-		_rom_activate(ctx);
+	if (ctx->modelChanged) {
+		_rom_activate(ctx, 0);
+		*complete = 1;;
+		ctx->modelChanged = 0;
+	} else {
+		*complete = 0;
 	}
-
-	*complete = ctx->current->modelComplete;
 
 	pthread_mutex_unlock(&ctx->rom_mutex);
 
@@ -784,7 +831,6 @@ int ltntstools_streammodel_query_model(void *hdl, struct ltntstools_pat_s **pat)
 	pthread_mutex_lock(&ctx->rom_mutex);
 	if (ctx->current->modelComplete == 1) {
 		ret = _streammodel_query_model(ctx, ctx->current, pat);
-		ctx->current->modelComplete = 0;
 	}
 	pthread_mutex_unlock(&ctx->rom_mutex);
 

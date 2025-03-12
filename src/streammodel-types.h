@@ -133,6 +133,8 @@ struct streammodel_ctx_s
 	struct streammodel_rom_s *current;	/* Model any user queries will run against. */
 	struct streammodel_rom_s *next;		/* Model currently being build by the framework, never user accessible. */
 	struct streammodel_rom_s roms[2];	/* Storage for the models. */
+	int modelChanged;                       /* Boolean. current and next models differ. */
+	uint8_t lastPATCC;                      /* CC counter from the last PAT packet observed. */
 	void *userContext;                  /* User specific pointer, return to the caller during callbacks. */
 
 	/* Housekeeping */
@@ -141,6 +143,9 @@ struct streammodel_ctx_s
 	/* */
 	int writePackets;
 	int restartModel;
+	int restartReason;			/* 0, duplicate models scan again at a later time.
+						 * 1, PAT CC error discovered, possible model change, scan again immediately.
+						 */
 
 	/* TR101290 CRC32 checks - see streammodel-extractors.c */
 	int   enableSectionCRCChecks;
@@ -155,3 +160,4 @@ int  extractors_write(struct streammodel_ctx_s *ctx, const uint8_t *pkts, int pa
 void extractors_free(struct streammodel_ctx_s *ctx);
 
 #endif /* STREAMMODEL_TYPES_H */
+
