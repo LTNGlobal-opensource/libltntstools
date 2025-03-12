@@ -37,6 +37,18 @@ extern "C" {
 
 #define MAX_PID 8192
 
+#define LTNTSTOOLS_CC_REORDER_LIST_SIZE 32
+#define LTNTSTOOLS_CC_REORDER_TRACKING_COUNT 16
+
+struct ltntstools_cc_reorder_table_s
+{
+        uint16_t pid;                           /* We don't need this */
+        uint32_t updateCount;                   /* Count up to REORDER_LIST_SIZE then stop */
+        uint32_t writeIdx;                      /* Value 0..REORDER_LIST_SIZE */
+        uint8_t  arr[LTNTSTOOLS_CC_REORDER_LIST_SIZE];
+        uint32_t ccerror[LTNTSTOOLS_CC_REORDER_LIST_SIZE];
+};
+
 /**
  * @brief A pid specific statistics container, contained within struct ltntstools_stream_statistics_s
  */
@@ -67,6 +79,8 @@ struct ltntstools_pid_statistics_s
 	struct ltn_histogram_s *pcrTickIntervals; /** < Measure tick differences between adjacent PCR clocks, track the deltas. */
 	struct ltn_histogram_s *pcrWallDrift; /** < Measure PCR vs Walltime and look for clock drift */
 	int64_t lastPCRWalltimeDriftMs;       /** amount of drift in ms, positive or minus, from walltime. */
+
+	struct ltntstools_cc_reorder_table_s *reorderTable; /** Detect UDP packet reordering */
 };
 
 /**
@@ -83,6 +97,7 @@ struct ltntstools_stream_statistics_s
 	uint64_t scrambledCount;       /**< Total number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Total number of times the PCR interval has exceeded 40ms */
 	uint64_t prev_pcrExceeds40ms;  /**< Prior value of pcrExceeds40ms, updated every ltntstools_pid_stats_update() call */
+	uint64_t reorderErrors;        /**< Total number of times we've seen out of order packets create CC errors */
 
 	time_t pps_last_update;        /**< Maintain a packets per second count, we can convert this into Mb/ps */
 	uint32_t pps;                  /**< Helper var for computing bitrate */
@@ -169,6 +184,13 @@ double   ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_st
  * @return      double - bitrate
  */
 double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream, cumulative count of out of order UDP frame issues measured.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      double - bitrate
+ */
+uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - transport packets per second.

@@ -2,6 +2,14 @@
 
 #include "libltntstools/ltntstools.h"
 
+/* Forward defines */
+uint32_t ltntstools_cc_reorder_table_readpos(struct ltntstools_cc_reorder_table_s *t, int offset);
+void     ltntstools_cc_reorder_table_add(struct ltntstools_cc_reorder_table_s *t, uint16_t pid, uint8_t cc, int isCCError);
+void     ltntstools_cc_reorder_table_sum(struct ltntstools_cc_reorder_table_s *t, uint32_t *value, uint32_t *ccerrors);
+void     ltntstools_cc_reorder_table_print(struct ltntstools_cc_reorder_table_s *t);
+int      ltntstools_cc_reorder_table_corelate(struct ltntstools_cc_reorder_table_s *t);
+void     ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s *t);
+
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC)
 {
 	unsigned int adap = ltntstools_adaption_field_control(pkt);
@@ -103,6 +111,11 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		pid->enabled = 1;
 		pid->packetCount++;
 
+		if (pid->packetCount == 1) {
+			/* Initialize the packet re-order table for the discovered pid */
+			pid->reorderTable = calloc(1, sizeof(struct ltntstools_cc_reorder_table_s));			
+		}
+
 		if (now != pid->pps_last_update) {
 			pid->pps = pid->pps_window;
 			pid->pps_window = 0;
@@ -114,11 +127,17 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		pid->pps_window++;
 
 		uint8_t cc = ltntstools_continuity_counter(pkts + offset);
-		if (ltntstools_isCCInError(pkts + offset, pid->lastCC)) {
+		int isCCError = ltntstools_isCCInError(pkts + offset, pid->lastCC);
+		if (isCCError) {
 			if (pid->packetCount > 1 && pidnr != 0x1fff) {
 				pid->ccErrors++;
 				stream->ccErrors++;
 			}
+		}
+
+		if (pid->reorderTable) {
+			ltntstools_cc_reorder_table_add(pid->reorderTable, pidnr, cc, isCCError);
+			stream->reorderErrors += ltntstools_cc_reorder_table_corelate(pid->reorderTable);
 		}
 
 		uint8_t sc = ltntstools_transport_scrambling_control(pkts + offset);
@@ -193,6 +212,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		}
 
 	}
+
 }
 
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
@@ -201,6 +221,7 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->teiErrors = 0;
 	stream->ccErrors = 0;
 	stream->mbps = 0;
+	stream->reorderErrors = 0;
 
 	for (int i = 0; i < MAX_PID; i++) {
 		if (!stream->pids[i].enabled)
@@ -220,6 +241,9 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 		}
 		if (stream->pids[i].pcrWallDrift) {
 			ltn_histogram_reset(stream->pids[i].pcrWallDrift);
+		}
+		if (stream->pids[i].reorderTable) {
+			ltntstools_cc_reorder_table_reset(stream->pids[i].reorderTable);
 		}
 	}
 }
@@ -253,6 +277,10 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 		if (stream->pids[i].pcrWallDrift) {
 			ltn_histogram_free(stream->pids[i].pcrWallDrift);
 			stream->pids[i].pcrWallDrift = NULL;
+		}
+		if (stream->pids[i].reorderTable) {
+			free(stream->pids[i].reorderTable);
+			stream->pids[i].reorderTable = NULL;
 		}
 	}
 
@@ -303,6 +331,11 @@ double ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_
 {
 	_expire_per_second_stream_stats(stream);
 	return stream->mbps;
+}
+
+uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->reorderErrors;
 }
 
 uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream)
@@ -465,4 +498,70 @@ void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream,
 			stream->pids[i].ccErrors,
 			stream->pids[i].mbps);
 	}
+}
+
+uint32_t ltntstools_cc_reorder_table_readpos(struct ltntstools_cc_reorder_table_s *t, int offset)
+{
+        return ((t->writeIdx + 12) + offset) % LTNTSTOOLS_CC_REORDER_LIST_SIZE;
+}
+
+void ltntstools_cc_reorder_table_add(struct ltntstools_cc_reorder_table_s *t, uint16_t pid, uint8_t cc, int isCCError)
+{
+        if (t->updateCount < LTNTSTOOLS_CC_REORDER_LIST_SIZE) {
+                t->updateCount++;
+        }
+
+        t->arr[t->writeIdx] = cc;
+        t->ccerror[t->writeIdx] = isCCError;
+        t->writeIdx = (t->writeIdx + 1) % LTNTSTOOLS_CC_REORDER_LIST_SIZE;
+}
+
+void ltntstools_cc_reorder_table_sum(struct ltntstools_cc_reorder_table_s *t, uint32_t *value, uint32_t *ccerrors)
+{
+        uint32_t v = 0;
+		uint32_t cc = 0;
+        for (int i = 0; i < LTNTSTOOLS_CC_REORDER_TRACKING_COUNT; i++) {
+                uint32_t pos = ltntstools_cc_reorder_table_readpos(t, i);
+                v += t->arr[pos];
+                cc += t->ccerror[pos];
+        }
+		*value = v;
+		*ccerrors = cc; 
+}
+
+int ltntstools_cc_reorder_table_corelate(struct ltntstools_cc_reorder_table_s *t)
+{
+	uint32_t total = 0, ccerrors = 0;
+	int oopdetected_as_ccerrors = 0;
+	ltntstools_cc_reorder_table_sum(t, &total, &ccerrors);
+	if (total == 120 && ccerrors) {
+		/* The sum of 0..f is 120 decimal */
+		/* If the table shows a sum of 120 but has ccerrors, these were out of order packets */
+		oopdetected_as_ccerrors = 1;
+	}
+
+	return oopdetected_as_ccerrors;
+}
+
+void ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s *t)
+{
+	memset(t, 0, sizeof(*t));
+}
+
+void ltntstools_cc_reorder_table_print(struct ltntstools_cc_reorder_table_s *t)
+{
+		uint32_t total = 0, ccerrors = 0;
+        ltntstools_cc_reorder_table_sum(t, &total, &ccerrors);
+
+		int oop_detected = ltntstools_cc_reorder_table_corelate(t);
+
+        printf("reordertable: writeIdx = %02d, updateCount %d, rb %02d re %02d, total %3d, OOP detected as CC %s\n",
+                t->writeIdx, t->updateCount,
+				ltntstools_cc_reorder_table_readpos(t, 0),
+				ltntstools_cc_reorder_table_readpos(t, LTNTSTOOLS_CC_REORDER_TRACKING_COUNT - 1),
+				total,
+				oop_detected ? "true" : "false");
+        for (int i = 0; i < LTNTSTOOLS_CC_REORDER_LIST_SIZE; i++) {
+                printf("reordertable: arr[%2d] 0x%02x %02d, error %d\n", i, t->arr[i], t->arr[i], t->ccerror[i]);
+        }
 }
