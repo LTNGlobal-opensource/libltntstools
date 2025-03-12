@@ -427,7 +427,10 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
-	int didOverflow, overrun = 0;
+	int didOverflow;
+#if KLBITSTREAM_RETURN_ON_OVERRUN
+	int overrun = 0;
+#endif
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
 		if (ltntstools_pid(pkt) != ctx->pid)
@@ -460,7 +463,9 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Pes Extractor Write buffer overrun in _processRing() for pid 0x%04x pkt size %d offset %d didOverflow %d\n",
 						__FILE__, __func__, __LINE__, ctx->pid, 188, offset, didOverflow);
 #endif
+#if KLBITSTREAM_RETURN_ON_OVERRUN
 				overrun = 1;
+#endif
 #if KLBITSTREAM_RESET_ON_OVERRUN
 				ctx->appending = 0;
 				_trimRing(ctx);
