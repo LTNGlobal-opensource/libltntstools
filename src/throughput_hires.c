@@ -83,7 +83,9 @@ int throughput_hires_alloc(void **hdl, int itemsPerSecond)
 
 	for (int i = 0; i < itemsPerSecond; i++) {
 		struct throughput_hires_item_s *item = itemAlloc();
-		xorg_list_append(&item->list, &ctx->itemsFree);
+		if (item) {
+			xorg_list_append(&item->list, &ctx->itemsFree);
+		}
 	}
 
 	*hdl = ctx;
@@ -99,16 +101,22 @@ void throughput_hires_write_i64(void *hdl, uint32_t channel, int64_t value, stru
 	if (xorg_list_is_empty(&ctx->itemsFree)) {
 		for (int i = 0; i < 64; i++) {
 			item = itemAlloc();
-			xorg_list_append(&item->list, &ctx->itemsFree);
+			if (item) {
+				xorg_list_append(&item->list, &ctx->itemsFree);
+			}
 		}
 	}
 	
 	item = xorg_list_first_entry(&ctx->itemsFree, struct throughput_hires_item_s, list);
+	if (!item) {
+		return;
+	}
+
 	xorg_list_del(&item->list);
 
-	if (ts)
+	if (ts) {
 		item->timestamp = makeTimestampFromTimeval(ts);
-	else {
+	} else {
 		item->timestamp = makeTimestampFromNow();
 	}
 	item->channel = channel;
