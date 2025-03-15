@@ -412,7 +412,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 
 extern int ltnpthread_setname_np(pthread_t thread, const char *name);
 
-static void * _threadFunc(void *p)
+static void * smoother_pcr_threadFunc(void *p)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)p;
 
@@ -485,7 +485,7 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	/* Spawn a thread that manages the scheduled output queue. */
-	pthread_create(&ctx->threadId, NULL, _threadFunc, ctx);
+	pthread_create(&ctx->threadId, NULL, smoother_pcr_threadFunc, ctx);
 
 	*hdl = ctx;
 
