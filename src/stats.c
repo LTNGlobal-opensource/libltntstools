@@ -111,7 +111,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		pid->enabled = 1;
 		pid->packetCount++;
 
-		if (pid->packetCount == 1) {
+		if (0 && pid->packetCount == 1) { /* DISABLED */
 			/* Initialize the packet re-order table for the discovered pid */
 			pid->reorderTable = calloc(1, sizeof(struct ltntstools_cc_reorder_table_s));			
 		}

@@ -186,7 +186,7 @@ double   ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_st
 double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 
 /**
- * @brief       Query TRANSPORT stream, cumulative count of out of order UDP frame issues measured.
+ * @brief       Query TRANSPORT stream, cumulative count of out of order UDP frame issues measured. (DISABLED)
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @return      double - bitrate
  */
