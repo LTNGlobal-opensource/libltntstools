@@ -1,6 +1,7 @@
 /* Copyright LiveTimeNet, Inc. 2021. All Rights Reserved. */
 
 #include <unistd.h>
+#include <sys/errno.h>
 
 #include "libltntstools/ltntstools.h"
 #include "xorg-list.h"
@@ -119,6 +120,7 @@ struct smoother_pcr_context_s
 	int threadRunning, threadTerminate, threadTerminated;
 
 	int64_t totalSizeBytes;
+	pthread_cond_t item_add;      /**< signalling on queue addition */
 
 	/* A contigious chunk of ram containing transport packets, in order.
 	 * starting with a transport packet containing a PCR on pid ctx->pcrPid
@@ -280,19 +282,8 @@ void smoother_pcr_free(void *hdl)
 	free(ctx);
 }
 
-/*  Service the busy list. Find any items due for output
- *  and send via the callback.
- *  It's important that we hold the mutex for a short time so we don't block
- *  the _write() method.
- */
-static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
+static int _queueProcess_makeloc(struct smoother_pcr_context_s *ctx, int64_t uS, struct xorg_list *loclist)
 {
-	/* Take any node on the Busy list up to and including items with a timestamp of uS.
-	 * Put them on a local list so we can free the holding mutex as fast as possible
-	 */
-	struct xorg_list loclist;
-	xorg_list_init(&loclist);
-
 	int count = 0, totalItems = 0, redundantItems = 0;
 	struct smoother_pcr_item_s *e = NULL, *next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
@@ -304,24 +295,26 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 
 		if (e->scheduled_TSuS <= uS) {
 			xorg_list_del(&e->list);
-			xorg_list_append(&e->list, &loclist);
+			xorg_list_append(&e->list, loclist);
 			count++;
 		} else {
 			if (count > 0) {
 				/* Time ordering problem on the list now. Dump both lists and abort, later.*/
 				redundantItems++;
 			}
+			break; /* Everything beyond this point is in the future, don't service it yet. */
 		}
-		/* TODO: The list is time ordered so we shoud be able to break
-		 * when we find a time that's beyond out window, and save CPU time.
-		 */
 	}
+	return count;
+}
 
+#if LOCAL_DEBUG
+static void _queueProcess_checkbusy(struct smoother_pcr_context_s *ctx, int64_t uS, struct xorg_list *loclist)
+{
 	/* Make sure the busy list is contigious */
-	e = NULL;
-	next = NULL;
 	int countSeq = 0;
 	uint64_t last_seq = 0;
+	struct smoother_pcr_item_s *e = NULL, *next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &ctx->itemsBusy, list) {
 		countSeq++;
 
@@ -331,7 +324,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 				printf("List possibly mangled, seqnos might be bad now, %" PRIu64 ", %" PRIu64 "\n", last_seq, e->seqno);
 #if LOCAL_DEBUG
 				_queuePrintList(ctx, &ctx->itemsBusy, "Busy");
-				_queuePrintList(ctx, &loclist, "loclist");
+				_queuePrintList(ctx, loclist, "loclist");
 				fflush(stdout);
 				fflush(stderr);
 				exit(1);
@@ -340,6 +333,28 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 		}
 		last_seq = e->seqno;
 	}
+}
+#endif
+
+/*  Service the busy list. Find any items due for output
+ *  and send via the callback.
+ *  It's important that we hold the mutex for a short time so we don't block
+ *  the _write() method.
+ *  Returns: 0 when something was processed, < 0 when nothing was to be done.
+ */
+static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
+{
+	/* Take any node on the Busy list up to and including items with a timestamp of uS.
+	 * Put them on a local list so we can free the holding mutex as fast as possible
+	 */
+	struct xorg_list loclist;
+	xorg_list_init(&loclist);
+
+	int count = _queueProcess_makeloc(ctx, uS, &loclist);
+
+#if LOCAL_DEBUG
+	_queueProcess_checkbusy(ctx, uS, &loclist); /* The performance of this sucks */
+#endif
 
 	pthread_mutex_unlock(&ctx->listMutex);
 
@@ -350,7 +365,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 	/* Process the local list.
 	 * Call the callback with any scheduled packets
 	 */
-	e = NULL, next = NULL;
+	struct smoother_pcr_item_s *e = NULL, *next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &loclist, list) {
 		if (ctx->outputCb) {
 
@@ -422,23 +437,51 @@ static void * smoother_pcr_threadFunc(void *p)
 	ctx->threadTerminated = 0;
 	ctx->threadRunning = 1;
 
+	int tocount = 0, rocount = 0, okcount = 0;
+	int q1count = 0, q2count = 0;
+	int ret;
+
+	struct timespec abstime = { 0, 50 * 1000 };
+
 	while (!ctx->threadTerminate) {
+
 		pthread_mutex_lock(&ctx->listMutex);
+
 		if (xorg_list_is_empty(&ctx->itemsBusy)) {
-			pthread_mutex_unlock(&ctx->listMutex);
-			usleep(1 * 1000);
-			continue;
+			ret = pthread_cond_timedwait(&ctx->item_add, &ctx->listMutex, &abstime);
+		} else {
+			ret = 0;
 		}
 
-		int64_t uS = makeTimestampFromNow();
+		if (ret == ETIMEDOUT) {
+			pthread_mutex_unlock(&ctx->listMutex);
+			tocount++;
+			continue;
+		} else
+		if (ret == 0) {
+			okcount++;
 
-		/* Service the output schedule queue, output any UDP packets when they're due.
-		 * Important to remember that we're calling this func while we're holding the mutex.
-		 */
-		if (_queueProcess(ctx, uS) < 0)
-			usleep(1 * 1000);
+			int64_t uS = makeTimestampFromNow();
 
+			/* Service the output schedule queue, output any UDP packets when they're due.
+			 * Important to remember that we're calling this func while we're holding the mutex.
+			 */
+			if (_queueProcess(ctx, uS) < 0) {
+				q1count++;
+				usleep(1 * 1000);
+			} else {
+				q2count++;
+			}
+		} else {
+			rocount++;
+		}
+		pthread_mutex_unlock(&ctx->listMutex);
 	}
+#if LOCAL_DEBUG
+	/* Show code path counts */
+	printf("to %d ro %d ok %d\n", tocount, rocount, okcount);
+	printf("q1 %d q2 %d\n", q1count, q2count);
+#endif
 	ctx->threadRunning = 1;
 	ctx->threadTerminated = 1;
 
@@ -453,6 +496,7 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	if (!ctx)
 		return -1;
 
+	pthread_cond_init(&ctx->item_add, NULL);
 	xorg_list_init(&ctx->itemsFree);
 	xorg_list_init(&ctx->itemsBusy);
 	pthread_mutex_init(&ctx->listMutex, NULL);
@@ -579,6 +623,7 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 
 	/* Queue this for scheduled output */
 	xorg_list_append(&item->list, &ctx->itemsBusy);
+	pthread_cond_signal(&ctx->item_add);
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	return 0;
