@@ -250,6 +250,16 @@ static void *udp_receiver_threadfunc(void *p)
 		 * packets via the tool_realign_callback callback, which are
 		 * then pushed directly into the core.
 		 */
+#if 0
+		struct msghdr mh;
+		mh.msg_iovlen = 0;
+		size_t rxbytes = recvmsg(ctx->skt, &mh, MSG_DONTWAIT);
+		if (rxbytes && ctx->cb && !ctx->stripRTPHeader) {
+			for (int j = 0; j < mh.msg_iovlen; j++) {
+				ctx->cb(ctx->userContext, mh.msg_iov[j].iov_base, mh.msg_iov[j].iov_len);
+			}
+		}
+#else
 		size_t rxbytes = recv(ctx->skt, ctx->rxbuffer, ctx->rxbuffer_size, 0);
 		if (rxbytes && ctx->cb && !ctx->stripRTPHeader) {
 			ctx->cb(ctx->userContext, ctx->rxbuffer, rxbytes);
@@ -262,6 +272,7 @@ static void *udp_receiver_threadfunc(void *p)
 			int bytes = ((rxbytes - 12) / 188) * 188;
 			ctx->cb(ctx->userContext, ctx->rxbuffer + 12, bytes);
 		}
+#endif
 
 	}
 	ctx->thread_complete = 1;
