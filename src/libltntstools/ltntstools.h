@@ -57,3 +57,4 @@
 #include <libltntstools/reframer.h>
 #include <libltntstools/igmp.h>
 #include <libltntstools/rtp-analyzer.h>
+#include <libltntstools/ac3.h>

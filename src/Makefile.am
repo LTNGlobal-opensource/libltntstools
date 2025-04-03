@@ -74,6 +74,8 @@ libltntstools_la_SOURCES += reframer.c
 libltntstools_la_SOURCES += igmp.c
 libltntstools_la_SOURCES += rtp-analyzer.c
 libltntstools_la_SOURCES += libltntstools/rtp-analyzer.h
+libltntstools_la_SOURCES += ac3.c
+libltntstools_la_SOURCES += libltntstools/ac3.h
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_DEFAULT_SOURCE -I$(top_srcdir)/include
@@ -127,3 +129,4 @@ libltntstools_include_HEADERS += libltntstools/source-rcts.h
 libltntstools_include_HEADERS += libltntstools/reframer.h
 libltntstools_include_HEADERS += libltntstools/igmp.h
 libltntstools_include_HEADERS += libltntstools/rtp-analyzer.h
+libltntstools_include_HEADERS += libltntstools/ac3.h
