@@ -20,6 +20,9 @@ AC_PROG_CXX
 
 AC_C_INLINE
 
+AM_CONDITIONAL(LINUX, test `uname -s` = "Linux")
+AM_CONDITIONAL(APPLE, test `uname -s` = "Darwin")
+
 # We always build with -fPIC in case our static libraries end up
 # being linked into a consumer's shared library
 AC_MSG_CHECKING(whether fPIC compiler option is accepted)
