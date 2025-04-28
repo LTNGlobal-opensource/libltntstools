@@ -5,15 +5,21 @@
 #include <libltntstools/ltntstools.h>
 #include "klringbuffer.h"
 #include "klbitstream_readwriter.h"
-#include "memmem.h"
 
 #define LOCAL_DEBUG 0
 #define ORDERED_LIST_DEPTH 10
+#define SIMULATE_TS_PACKET_LOSS 0
 
 struct pes_extractor_s
 {
 	uint16_t pid;
 	KLRingBuffer *rb;
+
+	/* Valid states are:
+	 * 0. Not appending packload from TS packets into a ring buffer.
+	 * 1. when state == 0 and payload unit start indiactor arrives, go to state 1. Append bytes to ring buffer
+	 * 2. when state == 1 and additional payload unit start indiactor arrives, append, processing ring and goto state 1.
+	 */
 	int appending;
 	uint8_t streamId;
 	int skipDataExtraction;
@@ -31,6 +37,10 @@ struct pes_extractor_s
 	pthread_mutex_t listOrderedMutex;
 	int64_t orderedBaseTime;
 	int64_t lastDeliveredPTS;
+
+	int computedRingSize; /* Amount of bytes we've written to the ring buffer */
+	int largestRingFrame; /* Largest ever PES we've pulled from the ring buffer - useful for sizing */
+	uint8_t lastCC;       /* Track CC loss for the pid and help prevent partial / mangles PES construction. */
 };
 
 struct item_s
@@ -57,6 +67,9 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->skipDataExtraction = 0;
 	ctx->orderedOutput = 0;
 	ctx->orderedBaseTime = 0;
+	ctx->computedRingSize = 0;
+	ctx->lastCC = 0xea;
+	ctx->largestRingFrame = 0;
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
 
@@ -113,9 +126,9 @@ static struct item_s * _list_find_oldest(struct pes_extractor_s *ctx)
 	struct item_s *e = NULL;
 	struct item_s *oldest = NULL;
 
-	int cnt = 0;
+	//int cnt = 0;
 	xorg_list_for_each_entry(e, &ctx->listOrdered, list) {
-		cnt++;
+		//cnt++;
 		if (oldest == NULL) {
 			oldest = e;
 		} else {
@@ -143,6 +156,7 @@ void ltntstools_pes_extractor_free(void *hdl)
 		free(item);
 	}
 
+	printf("%s() ctx->largestRingFrame largest size of a pes was %d bytes\n", __func__, ctx->largestRingFrame);
 	free(ctx);
 }
 
@@ -160,202 +174,69 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
 	return 0; /* Success */
 }
 
-/* Remove any bytes leading up to a 00 00 01 pattern, align the ring.  */
-static void _trimRing(struct pes_extractor_s *ctx)
-{
-	unsigned char pattern[4] = {0x00, 0x00, 0x01, ctx->streamId};
-	int rlen = rb_used(ctx->rb);
-	if (rlen < 4)
-		return;
-	size_t trimmed = 0;
-	uint8_t buf[1024];	// Buffer for peeking data
-	size_t overlap = 3; // Overlap to handle pattern spanning chunks
-	while (rlen >= 4)
-	{
-		// Determine how much to read in this iteration
-		size_t toRead = (rlen > sizeof(buf)) ? sizeof(buf) : rlen;
-		size_t len = rb_peek(ctx->rb, (char *)buf, toRead);
-		if (len < 4)
-			break;
-		// Search for the pattern in the current buffer using memmem
-		const void *pos = ltn_memmem(buf, len, pattern, sizeof(pattern));
-		if (pos)
-		{
-			// Pattern found, calculate offset and discard up to pattern
-			size_t index = (const uint8_t *)pos - buf;
-			rb_discard(ctx->rb, index);
-			trimmed += index;
-			break;
-		}
-		// If pattern not found, discard up to overlap size to preserve possible pattern start
-		size_t toDiscard = (len > overlap) ? (len - overlap) : len;
-		rb_discard(ctx->rb, toDiscard);
-		trimmed += toDiscard;
-		rlen = rb_used(ctx->rb); // Update remaining data size
-	}
-}
-
-static inline uint32_t read_u32_le(const uint8_t *p)
-{
-    return (uint32_t)(p[0]) 
-         | ((uint32_t)(p[1]) << 8)
-         | ((uint32_t)(p[2]) << 16)
-         | ((uint32_t)(p[3]) << 24);
-}
-
-static int searchReverse(const unsigned char *buf, int lengthBytes, uint8_t streamId)
-{
-    /* Construct the 32-bit pattern [00 00 01 streamId] in memory order. 
-     * For little-endian, that's (streamId << 24) + 0x010000.
-     */
-    uint32_t pattern = ((uint32_t)streamId << 24) | ((uint32_t)0x01 << 16);
-
-    for (int i = lengthBytes - 4; i >= 0; i--)
-    {
-        /* Load 4 bytes from buf[i..i+3] as one 32-bit little-endian value. */
-        uint32_t val = read_u32_le(&buf[i]);
-        if (val == pattern) {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
 static int _processRing(struct pes_extractor_s *ctx)
 {
 	int rlen = rb_used(ctx->rb);
-	if (rlen < 16)
-		return -1;
+	if (rlen == 0) {
+		return -1; /* Nothing to do */
+	}
+
+	if (ctx->computedRingSize != rlen) {
+		printf("%s() %d vs %d, should never happen, aborting\n", __func__, ctx->computedRingSize, rlen);
+		abort();
+	}
+	if (rlen < 16) {
+		/* While technically possible, a PES is rarely less than
+		 * 16 bytes so lets put some safely in place here.
+		 */
+		printf("%s() pes len %d < 16 bytes - should probably never happen, aborting\n", __func__, rlen);
+		abort();
+	}
+
 	int overrun = 0;
 
 #if LOCAL_DEBUG
-	printf("%s() ring size %d\n", __func__, rb_used(ctx->rb));
+	printf("%s() ring size %ld, computed size %d\n", __func__, rb_used(ctx->rb), ctx->computedRingSize);
 #endif
-
-	//fprintf(stderr, "_processRing (%s:%s:%d) rlen %d\n", __FILE__, __func__, __LINE__, rlen);
 
 	unsigned char *buf = malloc(rlen);
 	if (buf) {
 		int plen = rb_peek(ctx->rb, (char *)buf, rlen);
 		if (plen == rlen) {
-			/* Search backwards for the start of the next mpeg signature.
-			 * result is the position of the signature as an offset from the beginning of the buffer.
-			 * If the value is zero, we only havea  single porbably incomplete PES in the buffer, which is
-			 * meaningless, becasue the buffer is expected to contain and ENTIRE PES followed by the header from
-			 * a subsequence PES.
-			 */
-			int offset = searchReverse(buf, rlen, ctx->streamId);
-			if (offset < 16) {
-				/* We'll come back again in the future */
-				free(buf);
-				return -1;
+
+#if 0
+			printf("A, plen %d -- first ", plen);
+			for (int k = 0; k < 32; k++) {
+				printf("%02x ", buf[k]);
 			}
-
-			/*
-			 * If this is private_stream_1 (0xbd) and the declared PES length is bigger
-			 * than the available bytes in the ring, then override the declared length
-			 * to zero so the parser won't read beyond the buffer (avoiding overrun).
-			 */
-			if ((ctx->streamId == 0xBD || (ctx->streamId >= 0xC0 && ctx->streamId <= 0xDF)) && (offset + 6 <= rlen))
-			{
-				uint16_t declaredLen = (buf[offset + 4] << 8) | buf[offset + 5];
-				size_t have = (rlen - offset);
-				size_t needed = declaredLen + 6;
-
-				if (needed > have)
-				{
-					// Start after PES header
-					int last_complete_frame = offset + 6;
-					int found_frame = 0;
-
-					// For PES private stream 1 (0xBD) - typically AC3
-					if (ctx->streamId == 0xBD)
-					{
-						// Search for AC3 sync words (0x0B77)
-						for (int i = offset + 6; i < rlen - 2; i++)
-						{
-							if (buf[i] == 0x0B && buf[i + 1] == 0x77)
-							{
-								last_complete_frame = i;
-								found_frame = 1;
-							}
-						}
-					}
-					// For MPEG audio streams (0xC0-0xDF) - MP2/AAC
-					else if (ctx->streamId >= 0xC0 && ctx->streamId <= 0xDF)
-					{
-						// Search for MPEG audio sync words (0xFFF* for AAC, 0xFFF* or 0xFFE* for MP2)
-						for (int i = offset + 6; i < rlen - 2; i++)
-						{
-							if (buf[i] == 0xFF && ((buf[i + 1] & 0xF0) == 0xF0 || (buf[i + 1] & 0xF0) == 0xE0))
-							{
-								last_complete_frame = i;
-								found_frame = 1;
-							}
-						}
-					}
-
-					if (found_frame)
-					{
-						// Adjust length to include only complete frames
-						uint16_t adjustedLen = last_complete_frame - (offset + 6);
-						if (adjustedLen > 0)
-						{
-							buf[offset + 4] = (adjustedLen >> 8) & 0xFF;
-							buf[offset + 5] = adjustedLen & 0xFF;
-						}
-					}
-					else
-					{
-						// If we can't find any frames, just process header
-						buf[offset + 4] = 0x00;
-						buf[offset + 5] = 0x00;
-					}
-				}
-			}
-#if LOCAL_DEBUG
-			if (offset == 423)
-			{
-				ltntstools_hexdump(buf, rlen, 32);
-			}
-			printf("%s() offset %d, rlen %d\n", __func__, offset, rlen);
+			printf("\n");
 #endif
+
+			/* Track a useful stat */
+			if (plen > ctx->largestRingFrame) {
+				ctx->largestRingFrame = plen;
+			}
+
 			struct klbs_context_s bs;
 			klbs_init(&bs);
-			klbs_read_set_buffer(&bs, buf, rlen - (rlen - offset)); /* This ensures the entire PES payload is collected */
-#if LOCAL_DEBUG
-			printf("%s() set bs length to %d bytes\n", __func__, rlen - (rlen - offset));
-#endif
+			klbs_read_set_buffer(&bs, buf, rlen);
+
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
-			//ssize_t xlen =
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
 
 			/* check for buffer overrun */
 			if (bs.overrun) {
-#if KLBITSTREAM_DEBUG
-				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Process Ring Buffer bs.overrun %d bs.buflen %d bs.buflen_used %d rlen %d offset %d\n",
-						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen, offset);
-#endif
-#if KTBITSTREAM_DUMP_ON_OVERRUN
+				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Process Ring Buffer bs.overrun %d bs.buflen %d bs.buflen_used %d rlen %d\n",
+						__FILE__, __func__, __LINE__, bs.overrun, bs.buflen, bs.buflen_used, rlen);
 				ltn_pes_packet_dump(pes, "\t");
-#endif
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-				ltn_pes_packet_free(pes);
-				free(buf);
-				return -2;
-#else
 				overrun = 1;
-#endif
 			} else if (bs.truncated) {
-#if KTBITSTREAM_DUMP_ON_OVERRUN
 				ltn_pes_packet_dump(pes, "\t");
-#endif
 			}
 
 			if (!overrun && bitsProcessed && ctx->cb) {
 				
-				pes->rawBufferLengthBytes = rlen - (rlen - offset);
+				pes->rawBufferLengthBytes = rlen;
 				pes->rawBuffer = malloc(pes->rawBufferLengthBytes);
 				memcpy(pes->rawBuffer, buf, pes->rawBufferLengthBytes);
 
@@ -406,16 +287,6 @@ static int _processRing(struct pes_extractor_s *ctx)
 		free(buf);
 	}
 
-	uint8_t tbuf[16];
-	size_t l = rb_read(ctx->rb, (char *)&tbuf[0], sizeof(tbuf));
-	if (l == 16) {
-		//ltntstools_hexdump(buf, sizeof(tbuf), 16);
-	}
-
-#if LOCAL_DEBUG
-	printf("%s() ring processing complete, size now %d\n", __func__, rb_used(ctx->rb));
-#endif
-
 	if (overrun) {
 		return -2;
 	}
@@ -428,72 +299,98 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
 	int didOverflow;
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-	int overrun = 0;
-#endif
+
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
 		if (ltntstools_pid(pkt) != ctx->pid)
 			continue;
 
-		int offset = 4;
+#if SIMULATE_TS_PACKET_LOSS
+		static uint64_t pidcount = 0;
+		if (pidcount++ % 256 == 0) {
+			/* Simulate packet loss on a pid */
+			continue;
+		}
+#endif
+
+		/* If we see a CC error on the pid we're extracting, restart the statemachine.
+		 * Out rule is, we won't pass malformed PES's downstream to the caller.
+		 */
+		if (ctx->lastCC != 0xea && ltntstools_isCCInError(pkt, ctx->lastCC)) {
+			printf("%s() detected pkt loss on pid 0x%04x had 0x%02x got 0x%02x\n", __func__,
+				ctx->pid, ctx->lastCC, ltntstools_continuity_counter(pkt));
+
+			/* Comment out this reset of you want to eventually send short
+			 * malformed PES packets to the callbacks.
+			 */
+			ctx->appending = 0;
+			rb_empty(ctx->rb);
+			ctx->computedRingSize = 0;
+
+		}
+		ctx->lastCC = ltntstools_continuity_counter(pkt);
+
+		/* We don't append packets to the ring until we've seen our first payload start indicator.
+		 * even after a CC error on this pid.
+		 */
+		if (ltntstools_payload_unit_start_indicator(pkt) == 0 && ctx->appending == 0) {
+			continue;
+		}
+
+		/* start indicator received, but we're not appending - yet */
+		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 0) {
+			/* Reset the state machine */
+			ctx->appending = 1;
+			rb_empty(ctx->rb);
+			ctx->computedRingSize = 0;
+		}
+
 		/* Skip any adaption stuffing */
+		int offset = 4;
 		if (ltntstools_has_adaption((uint8_t *)pkt)) {
 			offset++;
 			offset += ltntstools_adaption_field_length(pkt);
 		}
 
-		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 1) {
-			ctx->appending = 2;
-		}
-		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 0) {
-			ctx->appending = 1;
-		}
+		if (ltntstools_payload_unit_start_indicator(pkt) == 0 && ctx->appending == 1) {
+			/* Continue appending the current packet into the pes, we're mid pes */
 
-		if (ctx->appending) {
-			rb_write_with_state(ctx->rb, (const char *)pkt + offset, 188 - offset, &didOverflow);
-		}
+			int wsize = 188 - offset;
+			ctx->computedRingSize += wsize;
+			rb_write_with_state(ctx->rb, (const char *)pkt + offset, wsize, &didOverflow);
 
-		if (ltntstools_payload_unit_start_indicator(pkt) && ctx->appending == 2) {
-			/* Process any existing data in the ring. */
-			//_trimRing(ctx);
+		} else
+		if (ltntstools_payload_unit_start_indicator(pkt) == 1 && ctx->appending == 1) {
+
+			/* See ISO13818-1 2000(E) - section 2.4.3.3.
+			 * When the payload of the Transport Stream packet contains PES packet data,
+			 * the payload_unit_start_indicator has the following significance: a '1' indicates that the
+			 * payload of this Transport Stream packet will commence with the first byte
+			 * of a PES packet and a '0' indicates no PES packet shall start in this
+			 * Transport Stream packet. If the payload_unit_start_indicator is set to '1',
+			 * then one and only one PES packet starts in this Transport Stream packet.
+			 * This also applies to private streams of stream_type 6 (refer to Table 2-29).
+			 */
+
+			/* Process the ring, might be empty */
 			int pr_ret = _processRing(ctx);
-			if (pr_ret == -2) { /* buffer overrun */
-#if KLBITSTREAM_DEBUG
-				fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Pes Extractor Write buffer overrun in _processRing() for pid 0x%04x pkt size %d offset %d didOverflow %d\n",
-						__FILE__, __func__, __LINE__, ctx->pid, 188, offset, didOverflow);
-#endif
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-				overrun = 1;
-#endif
-#if KLBITSTREAM_RESET_ON_OVERRUN
-				ctx->appending = 0;
-				_trimRing(ctx);
-				rb_empty(ctx->rb);
-				break;
-#endif
-			}
-			else if (pr_ret == -1)
-			{
-				/* need more data */
-				ctx->appending = 1;
-				continue;
-			}
-			ctx->appending = 1;
 
-			/* Now flush the buffer up to the next pes header marker */
-			if (pr_ret == 0) {
-				_trimRing(ctx);
+			/* Clean the ring */
+			rb_empty(ctx->rb);
+			ctx->computedRingSize = 0;
+
+			/* Write new leading pes data into ring */
+			int wsize = 188 - offset;
+			ctx->computedRingSize += wsize;
+			rb_write_with_state(ctx->rb, (const char *)pkt + offset, wsize, &didOverflow);
+			if (didOverflow) {
+#if 1
+				printf("%s() overflow of ring, aborting\n", __func__);
+				abort();
+#endif
 			}
 		}
-
 	}
-
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-	if (overrun) {
-		return -1;
-	}
-#endif
 
 	return packetCount;
 }
