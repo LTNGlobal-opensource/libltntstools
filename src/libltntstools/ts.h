@@ -343,10 +343,13 @@ int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid
 
 
 /**
- * @brief       One of two functions that are used by tools to generate and validate transport packet content,
+ * @brief       One of three functions that are used by tools to generate and validate transport packet content,
  *              as being bit-for-bit perfect after move the packets through a transport medium.
  *              The ltntstools_generatePacketWith64bCounter() function will generate a new packet
  *              with correct CC counter information to pass any TR101290 test.
+ *              The ltntstools_updatePacketWith64bCounter() function will modify a previously generated new packet
+ *              with correct CC counter information to pass any TR101290 test, its significantly more cpu efficient for
+ *              second and subsequent packet updates.
  *              The ltntstools_verifyPacketWith64bCounter() function is the downstream verification function
  *              used to check that no bits have been flipped or data lost.
  *              This is generally used by test tools that want to downstream inspect PCRs.
@@ -359,6 +362,8 @@ int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid
  * @return      0 on success else < 0.
  */
 int ltntstools_generatePacketWith64bCounter(uint8_t *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter);
+
+int ltntstools_updatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter);
 
 /**
  * @brief       One of two functions that are used by tools to generate and validate transport packet content,

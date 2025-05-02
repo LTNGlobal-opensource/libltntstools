@@ -292,6 +292,27 @@ int ltntstools_verifyPacketWith64bCounter(unsigned char *pkt, int lengthBytes, u
 	return 0;
 }
 
+int ltntstools_updatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter)
+{
+	if (lengthBytes < 188 || !pkt || !cc)
+		return -1;
+
+	*(pkt +  0) = 0x47;
+	*(pkt +  1) = (pid & 0x1fff) >> 8;
+	*(pkt +  2) = pid;
+	*(pkt +  3) = 0x10 | ((*cc)++ & 0x0f);
+	*(pkt +  8) = counter >> 56LL;
+	*(pkt +  9) = counter >> 48LL;
+	*(pkt + 10) = counter >> 40LL;
+	*(pkt + 11) = counter >> 32LL;
+	*(pkt + 12) = counter >> 24LL;
+	*(pkt + 13) = counter >> 16LL;
+	*(pkt + 14) = counter >>  8LL;
+	*(pkt + 15) = counter;
+
+	return 0;
+}
+
 int ltntstools_generatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, uint16_t pid, uint8_t *cc, uint64_t counter)
 {
 	if (lengthBytes < 188 || !pkt || !cc)
