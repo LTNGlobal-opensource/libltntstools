@@ -115,6 +115,17 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent);
 
 /**
+ * @brief       Helper function. Dump the packet content to console in readable format.
+ *              opt 0x01, full packet headers (without hex payload)
+ *              opt 0x02, partial packet data payload, first few bytes only
+ *              opt 0x04, full packet data payload, very large output to console.
+ * @param[in]   struct ltn_pes_packet_s *pkt - object
+ * @param[in]   const char *indent - Optional indent string to prefix the printfs with.
+ * @param[in]   unsigned int opts - Control how the dump/print to console occurs. See above.
+ */
+void ltn_pes_packet_dump_with_options(struct ltn_pes_packet_s *pkt, const char *indent, unsigned int opts);
+
+/**
  * @brief       Duplicate the PES packet and any attached payload.
  * @param[in]   struct ltn_pes_packet_s *dst - object
  * @param[in]   struct ltn_pes_packet_s *src - object
