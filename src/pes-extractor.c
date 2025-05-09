@@ -156,7 +156,7 @@ void ltntstools_pes_extractor_free(void *hdl)
 		free(item);
 	}
 
-	printf("%s() ctx->largestRingFrame largest size of a pes was %d bytes\n", __func__, ctx->largestRingFrame);
+	//printf("%s() ctx->largestRingFrame largest size of a pes was %d bytes\n", __func__, ctx->largestRingFrame);
 	free(ctx);
 }
 
