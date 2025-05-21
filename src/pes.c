@@ -520,58 +520,77 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	return bits;
 }
 
-void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent)
+static void ltn_pes_packet_dump_internal(struct ltn_pes_packet_s *pkt, const char *indent, unsigned int opts)
 {
 	char i[32];
 	sprintf(i, "%s    ", indent);
 
-	DISPLAY_U32(indent, pkt->packet_start_code_prefix);
-	DISPLAY_U32_SUFFIX(i, pkt->stream_id,
-		ltn_pes_packet_is_video(pkt) ? "[VIDEO]" :
-		ltn_pes_packet_is_audio(pkt) ? "[AUDIO]" : "[OTHER]");
+	if (opts & 0x01) {
+		DISPLAY_U32(indent, pkt->packet_start_code_prefix);
+		DISPLAY_U32_SUFFIX(i, pkt->stream_id,
+			ltn_pes_packet_is_video(pkt) ? "[VIDEO]" :
+			ltn_pes_packet_is_audio(pkt) ? "[AUDIO]" : "[OTHER]");
 
-	DISPLAY_U32(i, pkt->PES_packet_length);
-	DISPLAY_U32(i, pkt->PES_scrambling_control);
-	DISPLAY_U32(i, pkt->PES_priority);
-	DISPLAY_U32(i, pkt->data_alignment_indicator);
-	DISPLAY_U32(i, pkt->copyright);
-	DISPLAY_U32(i, pkt->original_or_copy);
-	DISPLAY_U32(i, pkt->PTS_DTS_flags);
-	DISPLAY_U32(i, pkt->ESCR_flag);
-	DISPLAY_U32(i, pkt->ES_rate_flag);
-	DISPLAY_U32(i, pkt->DSM_trick_mode_flag);
-	DISPLAY_U32(i, pkt->additional_copy_info_flag);
-	DISPLAY_U32(i, pkt->PES_CRC_flag);
-	DISPLAY_U32(i, pkt->PES_extension_flag);
-	DISPLAY_U32(i, pkt->PES_header_data_length);
-	if (pkt->PTS_DTS_flags == 2) {
-		DISPLAY_U64(i, pkt->PTS);
-	} else
-	if (pkt->PTS_DTS_flags == 3) {
-		DISPLAY_U64(i, pkt->PTS);
-		DISPLAY_U64(i, pkt->DTS);
+		DISPLAY_U32(i, pkt->PES_packet_length);
+		DISPLAY_U32(i, pkt->PES_scrambling_control);
+		DISPLAY_U32(i, pkt->PES_priority);
+		DISPLAY_U32(i, pkt->data_alignment_indicator);
+		DISPLAY_U32(i, pkt->copyright);
+		DISPLAY_U32(i, pkt->original_or_copy);
+		DISPLAY_U32(i, pkt->PTS_DTS_flags);
+		DISPLAY_U32(i, pkt->ESCR_flag);
+		DISPLAY_U32(i, pkt->ES_rate_flag);
+		DISPLAY_U32(i, pkt->DSM_trick_mode_flag);
+		DISPLAY_U32(i, pkt->additional_copy_info_flag);
+		DISPLAY_U32(i, pkt->PES_CRC_flag);
+		DISPLAY_U32(i, pkt->PES_extension_flag);
+		DISPLAY_U32(i, pkt->PES_header_data_length);
+		if (pkt->PTS_DTS_flags == 2) {
+			DISPLAY_U64(i, pkt->PTS);
+		} else
+		if (pkt->PTS_DTS_flags == 3) {
+			DISPLAY_U64(i, pkt->PTS);
+			DISPLAY_U64(i, pkt->DTS);
+		}
+
+		if (pkt->ES_rate_flag) {
+			DISPLAY_U32(i, pkt->ES_rate);
+		}
+		if (pkt->additional_copy_info) {
+			DISPLAY_U32(i, pkt->additional_copy_info);
+		}
+
+		if (pkt->PES_CRC_flag) {
+			DISPLAY_U32(i, pkt->previous_PES_packet_CRC);
+		}
+
+		if (pkt->skipPayloadParsing) {
+			DISPLAY_U32_NOCR(i, pkt->dataLengthBytes);
+			printf(" (operator opted out of parsing ~%d payload bytes)\n", pkt->PES_packet_length - pkt->PES_header_data_length);
+		} else {
+			DISPLAY_U32(i, pkt->dataLengthBytes);
+		}
 	}
 
-	if (pkt->ES_rate_flag) {
-		DISPLAY_U32(i, pkt->ES_rate);
-	}
-	if (pkt->additional_copy_info) {
-		DISPLAY_U32(i, pkt->additional_copy_info);
-	}
-
-	if (pkt->PES_CRC_flag) {
-		DISPLAY_U32(i, pkt->previous_PES_packet_CRC);
-	}
-
-	if (pkt->skipPayloadParsing) {
-		DISPLAY_U32_NOCR(i, pkt->dataLengthBytes);
-		printf(" (operator opted out of parsing ~%d payload bytes)\n", pkt->PES_packet_length - pkt->PES_header_data_length);
-	} else {
-		DISPLAY_U32(i, pkt->dataLengthBytes);
-	}
-	if (pkt->dataLengthBytes) {
+	if (opts & 0x04 && pkt->dataLengthBytes) {
 		ltntstools_hexdump(pkt->data, pkt->dataLengthBytes, 16);
+	} else
+	if (opts & 0x02 && pkt->dataLengthBytes) {
+		int l = pkt->dataLengthBytes;
+		if (l > 8)
+			l = 8;
+		ltntstools_hexdump(pkt->data, l, l);
 	}
+}
+
+void ltn_pes_packet_dump_with_options(struct ltn_pes_packet_s *pkt, const char *indent, unsigned int opts)
+{
+	ltn_pes_packet_dump_internal(pkt, indent, opts);
+}
+
+void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent)
+{
+	ltn_pes_packet_dump_internal(pkt, indent, 0xffffffff);
 }
 
 void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *src)

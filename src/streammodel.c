@@ -66,7 +66,11 @@ static void _rom_initialize(struct streammodel_ctx_s *ctx, struct streammodel_ro
 		if (ps->pidType == PT_PAT && ps->parser[0].p_dvbpsi) {
 			dvbpsi_pat_detach(ps->parser[0].p_dvbpsi);
 		}
-		if (ps->pidType == PT_SDT && ps->parser[0].p_dvbpsi) {
+
+		/* Bugfix: Work around an issue where the SDT and an ES shared the same PID, and
+		 * libdvbpsi raised an assert
+		 */
+		if (ps->pid == 0x011 && (ps->pidType == PT_SDT || ps->pidType == PT_ES) && ps->parser[0].p_dvbpsi) {
 			dvbpsi_DetachDemux(ps->parser[0].p_dvbpsi);
 		}
 
@@ -639,12 +643,12 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 			ps->parser[0].p_dvbpsi = dvbpsi_new(&message, DVBPSI_REPORTING);
 
 			if (!dvbpsi_AttachDemux(ps->parser[0].p_dvbpsi, NewSubtable, ps)) {
-				printf("Failed, Attaching a SDT - failed atatched demux\n");
+				printf("Failed, Attaching a SDT - failed attached demux\n");
 			}
 			ps->packetCount++;
 		}
 
-		if (pid == 0x11) {
+		if (ps->parser[0].p_dvbpsi && pid == 0x11) {
 			dvbpsi_packet_push(ps->parser[0].p_dvbpsi, (unsigned char *)&pkt[i * 188]);
 		}
 	}

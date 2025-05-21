@@ -7,7 +7,10 @@
  * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
  * @brief       Parse and demux MPEG transport streams and produce fully formed PES
  *              structures for analysis other work. Capable of parsing fixed length PES
- *              packets or variable length packets (larger than 65536 bytes)
+ *              packets or variable length packets (larger than 65536 bytes). Operationally,
+ *              this framework will never produce a callback with a mangled PES. Inorder to
+ *              accomplish this, any packet loss (CC errors) on the chosen pid are tracked
+ *              and partially corrupted streams discarded.
  * 
  * Usage example, demuxing and parsing Video frames on pid 0x31:
  * 
