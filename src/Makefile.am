@@ -1,6 +1,10 @@
 
 AUTOMAKE_OPTIONS = foreign
 
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = libltntstools.pc
+libltntstools_la_LDFLAGS  = -Wl,--no-as-needed -ldvbpsi
+
 lib_LTLIBRARIES = libltntstools.la
 
 libltntstools_la_SOURCES  = klbitstream_readwriter.h
@@ -14,8 +18,6 @@ libltntstools_la_SOURCES += libltntstools/udp_receiver.h
 libltntstools_la_SOURCES += ts.c
 libltntstools_la_SOURCES += libltntstools/pat.h
 libltntstools_la_SOURCES += pat.c
-libltntstools_la_SOURCES += nal_h264.c
-libltntstools_la_SOURCES += nal_h265.c
 libltntstools_la_SOURCES += libltntstools/ts.h
 libltntstools_la_SOURCES += stats.c
 libltntstools_la_SOURCES += libltntstools/stats.h
@@ -58,16 +60,6 @@ libltntstools_la_SOURCES += pes-extractor.c
 libltntstools_la_SOURCES += smoother-pcr.c
 libltntstools_la_SOURCES += smoother-rtp.c
 libltntstools_la_SOURCES += proc-net-udp.c
-libltntstools_la_SOURCES += audioanalyzer.c
-libltntstools_la_SOURCES += nielsen-bindings.cpp
-libltntstools_la_SOURCES += nielsen-bindings.h
-libltntstools_la_SOURCES += h264_codec_metadata.h
-libltntstools_la_SOURCES += h264_codec_metadata.c
-libltntstools_la_SOURCES += h265_codec_metadata.h
-libltntstools_la_SOURCES += h265_codec_metadata.c
-if LINUX
-libltntstools_la_SOURCES += kafka-platform.c
-endif
 libltntstools_la_SOURCES += source-pcap.c
 libltntstools_la_SOURCES += source-rcts.c
 libltntstools_la_SOURCES += utils.h
@@ -96,8 +88,6 @@ libltntstools_includedir = $(includedir)/libltntstools
 libltntstools_include_HEADERS  = libltntstools/ltntstools.h
 libltntstools_include_HEADERS += libltntstools/ts.h
 libltntstools_include_HEADERS += libltntstools/timeval.h
-libltntstools_include_HEADERS += libltntstools/nal_h264.h
-libltntstools_include_HEADERS += libltntstools/nal_h265.h
 libltntstools_include_HEADERS += libltntstools/ts_packetizer.h
 libltntstools_include_HEADERS += libltntstools/stats.h
 libltntstools_include_HEADERS += libltntstools/pes.h
@@ -122,10 +112,6 @@ libltntstools_include_HEADERS += libltntstools/pes-extractor.h
 libltntstools_include_HEADERS += libltntstools/smoother-pcr.h
 libltntstools_include_HEADERS += libltntstools/smoother-rtp.h
 libltntstools_include_HEADERS += libltntstools/proc-net-udp.h
-libltntstools_include_HEADERS += libltntstools/audioanalyzer.h
-libltntstools_include_HEADERS += libltntstools/h264_codec_metadata.h
-libltntstools_include_HEADERS += libltntstools/h265_codec_metadata.h
-libltntstools_include_HEADERS += libltntstools/kafka-platform.h
 libltntstools_include_HEADERS += libltntstools/source-pcap.h
 libltntstools_include_HEADERS += libltntstools/source-rcts.h
 libltntstools_include_HEADERS += libltntstools/reframer.h

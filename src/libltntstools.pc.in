@@ -1,0 +1,13 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libltntstools
+Description: LTN Library handling all things ISO13818-1
+Version: @VERSION@
+Libs: -L${libdir} -lltntstools
+Libs.private:  -lpthread -lstdc++ -lm -lc
+Requires.private: libdvbpsi
+Cflags: -I${includedir} -I${includedir}/libltntstools
+URL: https://github.com/LTNGlobal-opensource/libltntstools

@@ -19,5 +19,6 @@ m4
 missing
 src/.deps/
 src/.libs/
+src/libltntstools.pc
 /Cargo.lock
 /target/
