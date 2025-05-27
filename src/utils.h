@@ -26,4 +26,6 @@ int network_addr_compare(
 
 char *network_stream_ascii(struct iphdr *iphdr, struct udphdr *udphdr);
 
+extern int ltnpthread_setname_np(pthread_t thread, const char *name);
+
 #endif  /* LTNTOOLS_UTILS_H */

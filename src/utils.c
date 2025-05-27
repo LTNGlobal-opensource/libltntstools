@@ -183,3 +183,4 @@ char *network_stream_ascii(struct iphdr *iphdr, struct udphdr *udphdr)
 
 	return str;
 }
+#endif
