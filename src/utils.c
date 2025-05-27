@@ -9,6 +9,19 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+int ltnpthread_setname_np(pthread_t thread, const char *name)
+{
+#if defined(__linux__)
+extern int pthread_setname_np(pthread_t thread, const char *name);
+	return pthread_setname_np(thread, name);
+#endif
+#if defined(__APPLE__)
+	/* We don't support thread naming on OSX, yet. */
+	return 0;
+#endif
+}
+
+#if 0
 /* In string 'str', find occurences of character src and replace with character dst. */
 /* return the number of substituions occured. */
 int character_replace(char *str, char src, char dst)
