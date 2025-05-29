@@ -33,6 +33,10 @@ void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *s
 	time(&now);
 
 	stream->packetCount++;
+	if (lengthBytes != (7 * 188)) {
+		stream->notMultipleOfSevenError++;
+		stream->last_notMultipleOfSeven_error = now;
+	}
 
 	/* Update / maintain bitrate */
 	if (now != stream->Bps_last_update) {
@@ -50,6 +54,11 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 {
 	time_t now;
 	time(&now);
+
+	if (lengthBytes != (7 * 188)) {
+		stream->notMultipleOfSevenError++;
+		stream->last_notMultipleOfSeven_error = now;
+	}
 
 	/* Pull the CC out of the frame and check for CC loss. */
 	uint16_t sequence_number = *(buf + 2) << 8 | *(buf + 3);
@@ -84,6 +93,11 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 {
 	time_t now;
 	time(&now);
+
+	if (packetCount != 7) {
+		stream->notMultipleOfSevenError++;
+		stream->last_notMultipleOfSeven_error = now;
+	}
 
 	for (int i = 0; i < packetCount; i++) {
 		int offset = i * 188;
@@ -227,6 +241,8 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->last_cc_error = 0;
 	stream->mbps = 0;
 	stream->reorderErrors = 0;
+	stream->notMultipleOfSevenError = 0;
+	stream->last_notMultipleOfSeven_error = 0;
 
 	for (int i = 0; i < MAX_PID; i++) {
 		if (!stream->pids[i].enabled)
@@ -574,4 +590,14 @@ void ltntstools_cc_reorder_table_print(struct ltntstools_cc_reorder_table_s *t)
         for (int i = 0; i < LTNTSTOOLS_CC_REORDER_LIST_SIZE; i++) {
                 printf("reordertable: arr[%2d] 0x%02x %02d, error %d\n", i, t->arr[i], t->arr[i], t->ccerror[i]);
         }
+}
+
+uint64_t ltntstools_pid_stats_stream_get_notmultipleofseven_errors(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->notMultipleOfSevenError;
+}
+
+time_t ltntstools_pid_stats_stream_get_notmultipleofseven_time(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->last_notMultipleOfSeven_error;
 }

@@ -113,6 +113,9 @@ struct ltntstools_stream_statistics_s
 	double a324_bps;               /**< Updated once per second. */
 
 	time_t last_cc_error;          /**< For any CC error on any pid */
+
+	uint64_t notMultipleOfSevenError; /**< number of times ltntstools_pid_stats_update() was called with a packetCount !- 7 */
+	time_t last_notMultipleOfSeven_error;    /**< last time notMultipleOfSevenError was incremented */
 };
 
 /**
@@ -235,6 +238,20 @@ uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_stat
  * @return      time_t - datetime, zero if no cc errors detected
  */
 time_t ltntstools_pid_stats_stream_get_cc_error_time(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - Number of times ltntstools_pid_stats_update() was called with packetCount != 7. 
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - count
+ */
+uint64_t ltntstools_pid_stats_stream_get_notmultipleofseven_errors(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - Time of last NotAMultipleofSeven error.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      time_t - datetime, zero if no cc errors detected
+ */
+time_t ltntstools_pid_stats_stream_get_notmultipleofseven_time(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Transport error indicator count since last ltntstools_pid_stats_reset()
