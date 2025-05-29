@@ -47,7 +47,6 @@
 #include <libltntstools/smoother-rtp.h>
 #include <libltntstools/proc-net-udp.h>
 #include <libltntstools/source-pcap.h>
-#include <libltntstools/source-rcts.h>
 #include <libltntstools/reframer.h>
 #include <libltntstools/igmp.h>
 #include <libltntstools/rtp-analyzer.h>
