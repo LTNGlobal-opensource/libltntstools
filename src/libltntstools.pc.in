@@ -9,5 +9,5 @@ Version: @VERSION@
 Libs: -L${libdir} -lltntstools -lpcap -lrt
 Libs.private:  -lpthread -lstdc++ -lm -lc
 Requires.private: libdvbpsi
-Cflags: -I${includedir} -I${includedir}/libltntstools
+Cflags: -I${includedir}
 URL: https://github.com/LTNGlobal-opensource/libltntstools
