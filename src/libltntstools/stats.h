@@ -111,6 +111,8 @@ struct ltntstools_stream_statistics_s
 	uint32_t Bps_window;           /**< Helper var for computing bitrate */
 	double a324_mbps;              /**< Updated once per second. */
 	double a324_bps;               /**< Updated once per second. */
+
+	time_t last_cc_error;          /**< For any CC error on any pid */
 };
 
 /**
@@ -226,6 +228,13 @@ uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_sta
  * @return      uint64_t - count
  */
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - time of last cc error.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      time_t - datetime, zero if no cc errors detected
+ */
+time_t ltntstools_pid_stats_stream_get_cc_error_time(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Transport error indicator count since last ltntstools_pid_stats_reset()

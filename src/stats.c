@@ -57,6 +57,7 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		/* No CC error for the first packet. */
 		if (stream->packetCount) {
 			stream->ccErrors++;
+			stream->last_cc_error = now;
 		}
 	}
 	stream->a324_sequence_number = sequence_number;
@@ -88,8 +89,10 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		int offset = i * 188;
 		if (*(pkts + offset) == 0x47)
 			stream->packetCount++;
-		else
+		else {
 			stream->ccErrors++;
+			stream->last_cc_error = now;
+		}
 	}
 
 	if (now != stream->pps_last_update) {
@@ -132,6 +135,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			if (pid->packetCount > 1 && pidnr != 0x1fff) {
 				pid->ccErrors++;
 				stream->ccErrors++;
+				stream->last_cc_error = now;
 			}
 		}
 
@@ -220,6 +224,7 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->packetCount = 0;
 	stream->teiErrors = 0;
 	stream->ccErrors = 0;
+	stream->last_cc_error = 0;
 	stream->mbps = 0;
 	stream->reorderErrors = 0;
 
@@ -439,6 +444,11 @@ int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream)
 {
 	return stream->ccErrors;
+}
+
+time_t ltntstools_pid_stats_stream_get_cc_error_time(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->last_cc_error;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream)
