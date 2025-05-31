@@ -20,11 +20,11 @@ KLRingBuffer *rb_new(size_t size, size_t size_max)
 	if ((size == 0) || (size > size_max))
 		return 0;
 
-	KLRingBuffer *buf = malloc(sizeof(*buf));
+	KLRingBuffer *buf = (KLRingBuffer *)malloc(sizeof(*buf));
 	if (!buf)
 		return 0;
 
-	buf->data = malloc(size);
+	buf->data = (unsigned char *)malloc(size);
 	if (!buf->data) {
 		free(buf);
 		return 0;
@@ -134,7 +134,7 @@ static int _rb_grow(KLRingBuffer *buf, size_t increment)
 		return -2;
 	}
 
-	buf->data = realloc(buf->data, buf->size + increment);
+	buf->data = (unsigned char *)realloc(buf->data, buf->size + increment);
 	buf->size += increment;
 
 	return 0;
@@ -142,7 +142,7 @@ static int _rb_grow(KLRingBuffer *buf, size_t increment)
 
 static void _rb_shrink_reset(KLRingBuffer *buf)
 {
-	buf->data = realloc(buf->data, buf->size_initial);
+	buf->data = (unsigned char *)realloc(buf->data, buf->size_initial);
 	buf->size = buf->size_initial;
 	buf->head = buf->fill = 0;
 }
@@ -290,7 +290,7 @@ size_t rb_read(KLRingBuffer *buf, char *to, size_t bytes)
 
 size_t rb_read_alloc(KLRingBuffer *buf, char **to, size_t bytes)
 {
-	*to = malloc(bytes);
+	*to = (char *)malloc(bytes);
 	if (!*to)
 		return 0;
 
