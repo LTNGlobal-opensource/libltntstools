@@ -384,12 +384,12 @@ void rb_fwrite(KLRingBuffer *buf, FILE *fh)
 	fwrite(&head[0], 1, sizeof(head), fh);
 
 	unsigned int rb_len = rb_used(buf);
-	unsigned char hdrlen[4] = {
-		(rb_len >> 24) & 0xff,
-		(rb_len >> 16) & 0xff,
-		(rb_len >>  8) & 0xff,
-		(rb_len >>  0) & 0xff
-	};
+	unsigned char hdrlen[4];
+	hdrlen[0] = rb_len >> 24;
+	hdrlen[1] = rb_len >> 16;
+	hdrlen[2] = rb_len >>  8;
+	hdrlen[3] = rb_len;
+
 	fwrite(&hdrlen[0], 1, sizeof(hdrlen), fh);
 
 	unsigned char b[8192];
