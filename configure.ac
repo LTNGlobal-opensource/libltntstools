@@ -64,15 +64,6 @@ AM_COND_IF(DEBUG,
     AC_DEFINE(DEBUG, 1, [Define to 0 if this is a release build]),
     AC_DEFINE(DEBUG, 0, [Define to 1 or higher if this is a debug build]))
 
-# Check for Nielsen decoder SDK, optional.
-AC_LANG_PUSH([C++])
-AC_CHECK_HEADERS([IMonitorSdkProcessor.h], HEADER_NIELSENSDK="yes")
-if test "x$HEADER_NIELSENSDK" == "xyes" ; then
-    LDFLAGS+=" -lMonitorSdk -lNaes2HybridDecoder -lNaes2HFDecoder -lNaes6Decoder -lCBETDecoder -lNielsenAudioCore "
-fi
-AM_CONDITIONAL(NIELSENSDK, test x"$HEADER_NIELSENSDK" == x"yes")
-AC_LANG_POP([C++])
-
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
 
