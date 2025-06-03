@@ -116,6 +116,16 @@ struct ltntstools_stream_statistics_s
 
 	uint64_t notMultipleOfSevenError; /**< number of times ltntstools_pid_stats_update() was called with a packetCount !- 7 */
 	time_t last_notMultipleOfSeven_error;    /**< last time notMultipleOfSevenError was incremented */
+
+	int iat_lwm_us; /**< IAT low watermark (us), measurement of UDP receive interval */
+	int iat_hwm_us; /**< IAT high watermark (us), measurement of UDP receive interval */
+	int iat_cur_us; /**< IAT current measurement (us) */
+	int iat_hwm_us_last_nsecond; /**< IAT high watermark (us), for the last Nsecond, measurement of UDP receive interval */
+	int iat_hwm_us_last_nsecond_accumulator; /**< IAT high watermark (us), for the last Nsecond, measurement of UDP receive interval */
+	time_t iat_hwm_us_last_nsecond_time; /**< time the per-second IAT measurement reports to. */
+	struct timeval iat_last_frame; /**< Timestamp of last UDP frame for this entity. */
+
+	struct ltn_histogram_s *packetIntervals;
 };
 
 /**
@@ -380,6 +390,13 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
  * @param[in]   uint32_t lengthBytes - length of CTP buffer in bytes
  */
 void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
+
+/**
+ * @brief       Get the IAT high watermark measured in 'us', of all update calls in the last 5 seconds.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint64_t lengthBytes - length of CTP buffer in bytes
+ */
+uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_statistics_s *stream);
 
 #ifdef __cplusplus
 };

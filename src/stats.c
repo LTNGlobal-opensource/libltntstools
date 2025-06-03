@@ -91,6 +91,9 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount)
 {
+	struct timeval ts;
+	gettimeofday(&ts, NULL);
+
 	time_t now;
 	time(&now);
 
@@ -118,6 +121,26 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		stream->pps_last_update = now;
 	}
 	stream->pps_window += packetCount;
+
+	if (stream->iat_last_frame.tv_sec) {
+		stream->iat_cur_us = ltn_timeval_subtract_us(&ts, &stream->iat_last_frame);
+		if (stream->iat_cur_us <= stream->iat_lwm_us)
+			stream->iat_lwm_us = stream->iat_cur_us;
+		if (stream->iat_cur_us >= stream->iat_hwm_us)
+			stream->iat_hwm_us = stream->iat_cur_us;
+
+		/* Track max IAT for the last N seconds, it's reported in the summary/detailed logs. */
+		if (stream->iat_cur_us > stream->iat_hwm_us_last_nsecond_accumulator) {
+			stream->iat_hwm_us_last_nsecond_accumulator = stream->iat_cur_us;
+		}
+		if ((stream->iat_hwm_us_last_nsecond_time + 5 /* seconds */) <= now) {
+			stream->iat_hwm_us_last_nsecond_time = now;
+			stream->iat_hwm_us_last_nsecond = stream->iat_hwm_us_last_nsecond_accumulator;
+			stream->iat_hwm_us_last_nsecond_accumulator = 0;
+		}
+
+		ltn_histogram_interval_update_with_value(stream->packetIntervals, stream->iat_cur_us / 1000);
+	}
 
 	for (int i = 0; i < packetCount; i++) {
 		int offset = i * 188;
@@ -229,8 +252,8 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			}
 		}
 
-	}
-
+	} /* for each ts packet */
+	stream->iat_last_frame = ts;
 }
 
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
@@ -243,6 +266,11 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->reorderErrors = 0;
 	stream->notMultipleOfSevenError = 0;
 	stream->last_notMultipleOfSeven_error = 0;
+	stream->iat_lwm_us = 50000000;
+	stream->iat_hwm_us = -1;
+	stream->iat_cur_us = 0;
+
+	ltn_histogram_reset(stream->packetIntervals);
 
 	for (int i = 0; i < MAX_PID; i++) {
 		if (!stream->pids[i].enabled)
@@ -277,6 +305,7 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 	if (!stream)
 		return -1;
 
+	ltn_histogram_alloc_video_defaults(&stream->packetIntervals, "IAT Intervals");
 	ltntstools_pid_stats_reset(stream);
 
 	*ctx = stream;
@@ -287,6 +316,11 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 {
 	if (!stream || !stream->pids)
 		return;
+
+	if (stream->packetIntervals) {
+		ltn_histogram_free(stream->packetIntervals);
+		stream->packetIntervals = NULL;
+	}
 
 	for (int i = 0; i < MAX_PID; i++) {
 		if (!stream->pids[i].enabled)
@@ -600,4 +634,9 @@ uint64_t ltntstools_pid_stats_stream_get_notmultipleofseven_errors(struct ltntst
 time_t ltntstools_pid_stats_stream_get_notmultipleofseven_time(struct ltntstools_stream_statistics_s *stream)
 {
 	return stream->last_notMultipleOfSeven_error;
+}
+
+uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->iat_hwm_us_last_nsecond;
 }
