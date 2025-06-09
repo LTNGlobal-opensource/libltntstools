@@ -475,8 +475,8 @@ static void * smoother_pcr_threadFunc(void *p)
 			}
 		} else {
 			rocount++;
+			pthread_mutex_unlock(&ctx->listMutex);
 		}
-		pthread_mutex_unlock(&ctx->listMutex);
 	}
 #if LOCAL_DEBUG
 	/* Show code path counts */
