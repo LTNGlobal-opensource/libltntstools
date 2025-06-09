@@ -465,6 +465,7 @@ static void * smoother_pcr_threadFunc(void *p)
 
 			/* Service the output schedule queue, output any UDP packets when they're due.
 			 * Important to remember that we're calling this func while we're holding the mutex.
+			 * The function eventually unlocks the mutex.
 			 */
 			if (_queueProcess(ctx, uS) < 0) {
 				q1count++;
