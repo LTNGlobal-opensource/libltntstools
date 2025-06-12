@@ -704,3 +704,29 @@ int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *p, uint16_t pid, ui
 
 	return 0; /* Success */
 }
+
+const struct ltntstools_pmt_entry_s **ltntstools_pmt_enum_services_audio(const struct ltntstools_pmt_s *pmt, int *pid_count)
+{
+	*pid_count = 0;
+
+	/* Allocate memory for PIDs array */
+	const struct ltntstools_pmt_entry_s **streams = malloc(pmt->stream_count * sizeof(struct ltntstools_pmt_entry_s*));
+	if (!streams)
+		return NULL; /* Memory allocation failure */
+
+	/* Find all audio PIDs */
+	for (int j = 0; j < pmt->stream_count; j++) {
+		const struct ltntstools_pmt_entry_s *stream = &pmt->streams[j];
+		if (ltntstools_pmt_entry_is_audio(stream)) {
+			streams[(*pid_count)++] = stream;
+		}
+	}	
+
+	if (*pid_count <= 0) {
+		/* Free the allocated memory if no PIDs were found */
+		free(streams);
+		streams = NULL;
+	}
+
+	return streams;
+}
