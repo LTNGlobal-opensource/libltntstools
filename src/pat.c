@@ -414,6 +414,34 @@ int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, 
 	return -1; /* Failed */
 }
 
+int ltntstools_pmt_entry_is_audio(const struct ltntstools_pmt_entry_s *pmt)
+{
+	if (ltntstools_is_ESPayloadType_Audio(pmt->stream_type)) {
+		return 1;
+	}
+	if (pmt->stream_type != 0x06) { /* 13818-1 PES private data */
+		return 0;
+	}
+
+	for (uint32_t i = 0; i < pmt->descr_list.count; ++i) {
+		switch (pmt->descr_list.array[i].tag) {
+			/* MPEG descriptors */
+			case 0x03: /* Audio stream descriptor */
+			case 0x1c: /* MPEG-4 audio descriptor */
+			case 0x2b: /* MPEG-2 AAC audio descriptor */
+
+			/* DVB descriptors */
+			case 0x6a: /* AC-3 descriptor */
+			case 0x7a: /* Enhanced AC-3 descriptor */
+			case 0x7c: /* AAC descriptor */
+
+			return pmt->descr_list.array[i].tag;;
+		}
+	}
+
+	return 0;
+}
+
 int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr)
 {
 	if (!pmtptr || !e)
@@ -501,9 +529,10 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 		/* Find all audio PIDs */
 		int found = 0;
 		for (int j = 0; j < pmt->stream_count; j++) {
-			if (ltntstools_is_ESPayloadType_Audio(pmt->streams[j].stream_type)) {
-				(*pid_array)[*pid_count] = pmt->streams[j].elementary_PID;
-				(*stream_type_array)[*pid_count] = pmt->streams[j].stream_type;
+			struct ltntstools_pmt_entry_s *stream = &pmt->streams[j];
+			if (ltntstools_pmt_entry_is_audio(stream)) {
+				(*pid_array)[*pid_count] = stream->elementary_PID;
+				(*stream_type_array)[*pid_count] = stream->stream_type;
 				(*pid_count)++;
 				found += 1;
 			}

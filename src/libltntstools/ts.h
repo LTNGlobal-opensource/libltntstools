@@ -258,6 +258,7 @@ int ltntstools_is_ESPayloadType_Video(uint8_t esPayloadType);
  * @brief       For a PMT streamType field, if the payload is deemed audio, return 1 true else 0 false.
  * @param[in]   uint8_t esPayloadType - pmt elementary stream type.
  * @return      Boolean.
+ * @see ltntstools_pmt_entry_is_audio()
  */
 int ltntstools_is_ESPayloadType_Audio(uint8_t esPayloadType);
 
