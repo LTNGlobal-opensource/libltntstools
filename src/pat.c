@@ -661,7 +661,105 @@ static void writePSI(uint8_t *p_packet, dvbpsi_psi_section_t *p_section)
   }
 }
 
-int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *p, uint16_t pid, uint8_t cc, uint8_t *packet, int packetLength)
+int ltntstools_pat_create_packet_ts(struct ltntstools_pat_s *pat, uint8_t cc, uint8_t *packet, int packetLength)
+{
+	if ((!pat) || (packetLength != 188) || (packet == NULL))
+		return -1;
+
+	uint8_t *p = packet;
+	int i = 0;
+
+	memset(p, 0xFF, packetLength);
+
+	p[i++] = 0x47;
+	p[i++] = 0x40;
+	p[i++] = 0x00;
+	p[i++] = 0x10 | (cc & 0x0f);
+	p[i++] = 0x00;
+
+	p[i++] = 0x00; /* PAT Table */
+	p[i++] = 0xB0;
+
+	p[i++] = 9 + (pat->program_count * 4);
+
+	p[i++] = pat->transport_stream_id >> 8;
+	p[i++] = pat->transport_stream_id;
+
+	p[i++] = 0xC0 | pat->current_next_indicator;
+	p[i++] = 0x00; /* Section */
+	p[i++] = 0x00; /* last section */
+
+	for (int j = 0; j < pat->program_count; j++) {
+		p[i++] = pat->programs[j].pmt.program_number >> 8;
+		p[i++] = pat->programs[j].pmt.program_number;
+		p[i++] = 0xE0 | ((pat->programs[j].program_map_PID >> 8) & 0x1F);
+		p[i++] = pat->programs[j].program_map_PID & 0xFF;
+	}
+
+	uint32_t crc;
+	ltntstools_getCRC32(&p[5], i - 5, &crc);
+
+	p[i++] = (crc >> 24) & 0xFF;
+	p[i++] = (crc >> 16) & 0xFF;
+	p[i++] = (crc >> 8) & 0xFF;
+	p[i++] = crc & 0xFF;
+
+	return 0; /* Success */
+}
+
+int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *pmt, uint16_t pid, uint8_t cc, uint8_t *packet, int packetLength)
+{
+	if ((!pmt) || (packetLength != 188) || (packet == NULL))
+		return -1;
+
+	uint8_t *p = packet;
+	int i = 0;
+
+	memset(p, 0xFF, packetLength);
+
+	p[i++] = 0x47;
+	p[i++] = 0x40 | ((pid & 0x1fff) >> 8);
+	p[i++] = pid & 0xff;
+	p[i++] = 0x10 | (cc & 0x0f);
+	p[i++] = 0x00;
+
+	p[i++] = 0x02; /* PMT Table */
+	p[i++] = 0xB0;
+
+	p[i++] = 9 + 4 + (pmt->stream_count * 5); /* Length */
+
+	p[i++] = pmt->program_number >> 8;
+	p[i++] = pmt->program_number;
+	p[i++] = 0xc3;
+	p[i++] = 0x00; /* section */
+	p[i++] = 0x00; /* last section */
+
+	p[i++] = pmt->PCR_PID >> 8;
+	p[i++] = pmt->PCR_PID;
+
+	p[i++] = 0xf0; 
+	p[i++] = 0x00;
+
+	for (int j = 0; j < pmt->stream_count; j++) {
+		p[i++] = pmt->streams[j].stream_type;
+		p[i++] = pmt->streams[j].elementary_PID >> 8;
+		p[i++] = pmt->streams[j].elementary_PID;
+		p[i++] = 0xf0; 
+		p[i++] = 0x00;
+	}
+
+	uint32_t crc;
+	ltntstools_getCRC32(&p[5], i - 5, &crc);
+
+	p[i++] = (crc >> 24) & 0xFF;
+	p[i++] = (crc >> 16) & 0xFF;
+	p[i++] = (crc >> 8) & 0xFF;
+	p[i++] = crc & 0xFF;
+
+	return 0; /* Success */
+}
+
+int ltntstools_pmt_create_packet_ts2(struct ltntstools_pmt_s *p, uint16_t pid, uint8_t cc, uint8_t *packet, int packetLength)
 {
 	if ((!p) || (packetLength != 188) || (packet == NULL))
 		return -1;

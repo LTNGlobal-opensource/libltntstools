@@ -126,6 +126,16 @@ typedef struct dvbpsi_pmt_s dvbpsi_pmt_t;
 void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t *pmt);
 
 /**
+ * @brief       Convert a pat object into a fully formed transport packet (EXACTLY ONE packet, not longer). TODO. Support longer PATs.
+ * @param[in]   struct ltntstools_pat_s *pat - object
+ * @param[in]   uint8_t cc - desired initial continuity counter value
+ * @param[in]   uint8_t *packet - Buffer where packet will be created
+ * @param[in]   int packetLengthBytes - Buffer length, must be exactly 188 bytes.
+ * @return      0 - Success or, < 0 on error.
+ */
+int ltntstools_pat_create_packet_ts(struct ltntstools_pat_s *pat, uint8_t cc, uint8_t *packet, int packetLengthBytes);
+
+/**
  * @brief       Enumerate all services in the PAT object, find any SCTE35 pids and return the associated PMT (and pid).
  * @param[in]   struct ltntstools_pat_s *pat - object
  * @param[in]   int *e - used internally to enumerate objects. Pass 0 value int on first call then don't modify afterwards
