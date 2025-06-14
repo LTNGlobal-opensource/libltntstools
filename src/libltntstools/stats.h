@@ -49,12 +49,37 @@ struct ltntstools_cc_reorder_table_s
         uint32_t ccerror[LTNTSTOOLS_CC_REORDER_LIST_SIZE];
 };
 
+enum ltntstools_notification_event_e {
+	EVENT_UNDEFINED = 0,
+
+	/* PIDS */
+	EVENT_UPDATE_PID_PUSI_DELIVERY_TIME, /**< pid.pusi_time_ms value changed. */
+	EVENT_UPDATE_PID_PCR_EXCEEDS_40MS,   /**< pid.pcrExceeds40ms value changed. */
+	EVENT_UPDATE_PID_PCR_WALLTIME,       /**< pid.lastPCRWalltimeDriftMs value changed. */
+
+	/* STREAMS */
+	EVENT_UPDATE_STREAM_CC_COUNT,        /**< stream.ccErrors changed. */
+	EVENT_UPDATE_STREAM_TEI_COUNT,       /**< stream.teiErrors changed. */
+	EVENT_UPDATE_STREAM_SCRAMBLED_COUNT, /**< stream.scrambledCount changed. */
+	EVENT_UPDATE_STREAM_MBPS,            /**< stream.mbps changed. */
+	EVENT_UPDATE_STREAM_IAT_HWM,         /**< stream.iat_hwm_us changed. */
+};
+
+/**
+ * @brief       Callback function definition, where important events are passed to the called
+ *              in realtime.
+ */
+typedef void (*ltntstools_notification_callback)(void *userContext, enum ltntstools_notification_event_e event,
+	const struct ltntstools_stream_statistics_s *stats,
+	const struct ltntstools_pid_statistics_s *pid);
+
 /**
  * @brief A pid specific statistics container, contained within struct ltntstools_stream_statistics_s
  */
 struct ltntstools_pid_statistics_s
 {
 	int      enabled;              /**< Boolean. is the pid available in the multiplex. */
+	uint16_t pidNr;                /**< ISO13818 Pid Number */
 	uint64_t packetCount;          /**< Number of packets processed. */
 	uint64_t ccErrors;             /**< Number of continuity counter issues processed */
 	uint64_t teiErrors;            /**< Number of transport error indicator issues processed */

@@ -273,6 +273,7 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	ltn_histogram_reset(stream->packetIntervals);
 
 	for (int i = 0; i < MAX_PID; i++) {
+		stream->pids[i].pidNr = i;
 		if (!stream->pids[i].enabled)
 			continue;
 		stream->pids[i].packetCount = 0;
