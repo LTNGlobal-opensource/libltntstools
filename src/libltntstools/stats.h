@@ -40,6 +40,9 @@ extern "C" {
 #define LTNTSTOOLS_CC_REORDER_LIST_SIZE 32
 #define LTNTSTOOLS_CC_REORDER_TRACKING_COUNT 16
 
+struct ltntstools_pid_statistics_s;
+struct ltntstools_stream_statistics_s;
+
 struct ltntstools_cc_reorder_table_s
 {
         uint16_t pid;                           /* We don't need this */
@@ -106,6 +109,11 @@ struct ltntstools_pid_statistics_s
 	int64_t lastPCRWalltimeDriftMs;       /** amount of drift in ms, positive or minus, from walltime. */
 
 	struct ltntstools_cc_reorder_table_s *reorderTable; /** Detect UDP packet reordering */
+
+	/* Track PES or section delivery time - how long the item spent getting here */
+	struct timeval pusi_time_first;   /**< walltime of last payload_unit_start_indicator=1(PUSI) event */
+	struct timeval pusi_time_current; /**< walltime of last packet on this pid */
+	int pusi_time_ms;                 /**< milliseconds between last time we saw a packet on this pid, and a PUSI=1 event. Typically updated every 10-30 ms. */
 };
 
 /**
@@ -151,6 +159,9 @@ struct ltntstools_stream_statistics_s
 	struct timeval iat_last_frame; /**< Timestamp of last UDP frame for this entity. */
 
 	struct ltn_histogram_s *packetIntervals;
+
+	ltntstools_notification_callback  cb_notification;
+	void                             *cb_notificationUserContext;
 };
 
 /**
@@ -422,6 +433,32 @@ void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *s
  * @param[in]   uint64_t lengthBytes - length of CTP buffer in bytes
  */
 uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Register a user event notification callback, to fire when important events trigger within the state framework.
+ *              Applications callbacks should not meaningfully block, linger or otherwise delay a return.
+ *              Its valid to register a callback, and then register a NULL callback to disable callbacks.
+ *              Don't attempt to unregister during a callback.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   void * - User specific application context (optional)
+ * @param[in]   ltntstools_notification_callback cb - User specific application callback.
+ * @return      0 - Success, else < 0 on error.
+ */
+int ltntstools_notification_register_callback(struct ltntstools_stream_statistics_s *stream, void *userContext, ltntstools_notification_callback cb);
+
+/**
+ * @brief       Unregister a user callback to fire when important events trigger within the state framework.
+ *              Don't attempt to unregister during a callback.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ */
+void ltntstools_notification_unregister_callback(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Convert an event name into a human readable string.
+ * @param[in]   enum ltntstools_notification_event_e - eventId
+ * @return      The event name. A string is guaranteed to be returned from the stack, in all cases.
+ */
+const char *ltntstools_notification_event_name(enum ltntstools_notification_event_e eventId);
 
 #ifdef __cplusplus
 };

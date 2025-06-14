@@ -9,6 +9,42 @@ void     ltntstools_cc_reorder_table_sum(struct ltntstools_cc_reorder_table_s *t
 void     ltntstools_cc_reorder_table_print(struct ltntstools_cc_reorder_table_s *t);
 int      ltntstools_cc_reorder_table_corelate(struct ltntstools_cc_reorder_table_s *t);
 void     ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s *t);
+static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *stream, struct timeval *ts);
+
+const char *ltntstools_notification_event_name(enum ltntstools_notification_event_e e)
+{
+	switch(e) {
+	case EVENT_UNDEFINED:                     return "EVENT_UNDEFINED";
+	case EVENT_UPDATE_PID_PUSI_DELIVERY_TIME: return "EVENT_UPDATE_PID_PUSI_DELIVERY_TIME";
+	case EVENT_UPDATE_PID_PCR_EXCEEDS_40MS:   return "EVENT_UPDATE_PID_PCR_EXCEEDS_40MS";
+	case EVENT_UPDATE_PID_PCR_WALLTIME:       return "EVENT_UPDATE_PID_PCR_WALLTIME";
+	case EVENT_UPDATE_STREAM_CC_COUNT:        return "EVENT_UPDATE_STREAM_CC_COUNT";
+	case EVENT_UPDATE_STREAM_TEI_COUNT:       return "EVENT_UPDATE_STREAM_TEI_COUNT";
+	case EVENT_UPDATE_STREAM_SCRAMBLED_COUNT: return "EVENT_UPDATE_STREAM_SCRAMBLED_COUNT";
+	case EVENT_UPDATE_STREAM_MBPS:            return "EVENT_UPDATE_STREAM_MBPS";
+	case EVENT_UPDATE_STREAM_IAT_HWM:         return "EVENT_UPDATE_STREAM_IAT_HWM";
+	default:                                  return "EVENT_UNKNOWN";
+	}
+}
+
+int ltntstools_notification_register_callback(struct ltntstools_stream_statistics_s *stream, void *userContext, ltntstools_notification_callback cb)
+{
+	if (cb == NULL) {
+		return -1;
+	}
+
+	/* Null user contexts are allowable */
+
+	stream->cb_notification = cb;
+	stream->cb_notificationUserContext = userContext;
+	return 0; /* Success */
+}
+
+void ltntstools_notification_unregister_callback(struct ltntstools_stream_statistics_s *stream)
+{
+	stream->cb_notification = NULL;
+	stream->cb_notificationUserContext = NULL;
+}
 
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC)
 {
@@ -65,8 +101,7 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 	if (((stream->a324_sequence_number + 1) & 0xffff) != sequence_number) {
 		/* No CC error for the first packet. */
 		if (stream->packetCount) {
-			stream->ccErrors++;
-			stream->last_cc_error = now;
+			_stream_increment_cc_errors(stream, NULL);
 		}
 	}
 	stream->a324_sequence_number = sequence_number;
@@ -89,6 +124,23 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 	stream->Bps_window += lengthBytes;
 }
 
+static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *stream, struct timeval *ts)
+{
+	struct timeval now;
+	if (ts) {
+		now = *ts;
+	} else {
+		gettimeofday(&now, NULL);
+	}
+
+	stream->ccErrors++;
+	stream->last_cc_error = now.tv_sec;
+
+	if (stream->cb_notification) {
+		stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_CC_COUNT, stream, NULL);
+	}
+}
+
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount)
 {
 	struct timeval ts;
@@ -107,8 +159,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		if (*(pkts + offset) == 0x47)
 			stream->packetCount++;
 		else {
-			stream->ccErrors++;
-			stream->last_cc_error = now;
+			_stream_increment_cc_errors(stream, &ts);
 		}
 	}
 
@@ -119,6 +170,10 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		stream->mbps *= (188 * 8);
 		stream->mbps /= 1e6;
 		stream->pps_last_update = now;
+
+		if (stream->cb_notification) {
+			stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_MBPS, stream, NULL);
+		}
 	}
 	stream->pps_window += packetCount;
 
@@ -126,8 +181,12 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		stream->iat_cur_us = ltn_timeval_subtract_us(&ts, &stream->iat_last_frame);
 		if (stream->iat_cur_us <= stream->iat_lwm_us)
 			stream->iat_lwm_us = stream->iat_cur_us;
-		if (stream->iat_cur_us >= stream->iat_hwm_us)
+		if (stream->iat_cur_us >= stream->iat_hwm_us) {
 			stream->iat_hwm_us = stream->iat_cur_us;
+			if (stream->cb_notification) {
+				stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_IAT_HWM, stream, NULL);
+			}
+		}
 
 		/* Track max IAT for the last N seconds, it's reported in the summary/detailed logs. */
 		if (stream->iat_cur_us > stream->iat_hwm_us_last_nsecond_accumulator) {
@@ -151,6 +210,27 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		pid->enabled = 1;
 		pid->packetCount++;
 
+		/* Per pid, of PUSI is being used, track the time we see the header
+		 * and the time we see the last write on this pid (pusi_time_current).
+		 * When a PUSI arrives, calculate the difference and make it available.
+		 */
+		if (ltntstools_payload_unit_start_indicator(pkts + offset)) {
+
+			if (pid->pusi_time_first.tv_sec && pid->pusi_time_current.tv_sec) {
+				/* don't push a stat to the suer that's only partial incorrect because time isn't fully esatblished.
+				 * They'll end up with a massive irrelvant ms delivery time.
+				 */
+				pid->pusi_time_ms = ltn_timeval_subtract_ms(&pid->pusi_time_current, &pid->pusi_time_first);
+
+				if (stream->cb_notification) {
+					stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_PID_PUSI_DELIVERY_TIME, stream, pid);
+				}
+			}
+
+			pid->pusi_time_first = ts; /* And the process resets collection again */
+		}
+		pid->pusi_time_current = ts;
+
 		if (0 && pid->packetCount == 1) { /* DISABLED */
 			/* Initialize the packet re-order table for the discovered pid */
 			pid->reorderTable = calloc(1, sizeof(struct ltntstools_cc_reorder_table_s));			
@@ -171,8 +251,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		if (isCCError) {
 			if (pid->packetCount > 1 && pidnr != 0x1fff) {
 				pid->ccErrors++;
-				stream->ccErrors++;
-				stream->last_cc_error = now;
+				_stream_increment_cc_errors(stream, &ts);
 			}
 		}
 
@@ -185,6 +264,11 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		if (sc != 0) {
 			pid->scrambledCount++;
 			stream->scrambledCount++;
+
+			if (stream->cb_notification) {
+				stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_SCRAMBLED_COUNT, stream, pid);
+			}
+
 		}
 
 		pid->lastCC = cc;
@@ -192,6 +276,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		if (ltntstools_tei_set(pkts + offset)) {
 			pid->teiErrors++;
 			stream->teiErrors++;
+			if (stream->cb_notification) {
+				stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_TEI_COUNT, stream, pid);
+			}
 		}
 
 		/* If the buffer contains a packet with a potential PCR, and the user has asked
@@ -249,6 +336,12 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 				//printf("us %" PRIi64 "\n", v);
 				ltn_histogram_interval_update_with_value(pid->pcrWallDrift, v);
 
+				if (stream->cb_notification) {
+					stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_PID_PCR_WALLTIME, stream, pid);
+					if (delta > (27000 * 40)) {
+						stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_PID_PCR_EXCEEDS_40MS, stream, pid);
+					}
+				}
 			}
 		}
 
