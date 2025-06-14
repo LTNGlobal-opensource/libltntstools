@@ -373,7 +373,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			 */
 
 			/* Process the ring, might be empty */
-			int pr_ret = _processRing(ctx);
+			_processRing(ctx);
 
 			/* Clean the ring */
 			rb_empty(ctx->rb);
