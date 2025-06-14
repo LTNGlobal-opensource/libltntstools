@@ -49,6 +49,24 @@ extern "C" {
 int ltntstools_ts_packetizer(const uint8_t *buf, unsigned int byteCount,
 	uint8_t **pkts, uint32_t *packetCount, int packetSize, uint8_t *cc, uint16_t pid);
 
+/**
+ * @brief       Convert input buffer into multiple output transport packets.
+ *              The caller owns the lifepan of the output pkts array, be sure to free it.
+ * @param[in]   const uint8_t *buf - buffer of bytes to packetize
+ * @param[in]   unsigned int byteCount - length of buffer in bytes
+ * @param[out]  uint8_t **pkts - output array
+ * @param[out]  uint32_t *packetCount - number of elements in the output array
+ * @param[in]   int packetSize - Typically 188
+ * @param[in]   uint8_t *cc - user allocate storage where the CC counter will be maintained.
+ * @param[in]   uint16_t pid - transport packet identifier for the output packets.
+ * @param[in]   int64_t pcr - PCR value, may be larger than allowable PCR value, wrapping will truncate properly.
+ *                            A valid of -1 indicates NOT to insert a PCR.
+ * @return      0 on success, else < 0.
+ */
+int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount,
+	uint8_t **pkts, uint32_t *packetCount,
+	int packetSize, uint8_t *cc, uint16_t pid, int64_t pcr);
+
 #ifdef __cplusplus
 };
 #endif
