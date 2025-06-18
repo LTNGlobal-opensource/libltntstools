@@ -14,8 +14,8 @@ struct smoother_pcr_item_s
 	uint64_t       seqno; /* Unique number per item, so we can check for loss/corruption in the lists. */
 
 	unsigned char *buf;
-	int            lengthBytes;
-	int            maxLengthBytes;
+	unsigned int   lengthBytes;
+	unsigned int   maxLengthBytes;
 
 	int            pcrComputed; /* Boolean. Was the PCR in this item computed from a base offset, or read from stream? */
 	int64_t        pcrIntervalPerPacketTicks;
@@ -41,11 +41,11 @@ void itemPrint(struct smoother_pcr_item_s *item)
 struct byte_array_s
 {
 	uint8_t *buf;
-	int maxLengthBytes;
-	int lengthBytes;
+	unsigned int maxLengthBytes;
+	unsigned int lengthBytes;
 };
 
-int byte_array_init(struct byte_array_s *ba, int lengthBytes)
+int byte_array_init(struct byte_array_s *ba, unsigned int lengthBytes)
 {
 	ba->buf = malloc(lengthBytes);
 	if (!ba->buf)
@@ -64,7 +64,7 @@ void byte_array_free(struct byte_array_s *ba)
 	ba->maxLengthBytes = 0;
 }
 
-int byte_array_append(struct byte_array_s *ba, const uint8_t *buf, int lengthBytes)
+int byte_array_append(struct byte_array_s *ba, const uint8_t *buf, unsigned int lengthBytes)
 {
 	int newLengthBytes = ba->lengthBytes + lengthBytes;
 
@@ -79,7 +79,7 @@ int byte_array_append(struct byte_array_s *ba, const uint8_t *buf, int lengthByt
 	return newLengthBytes;
 }
 
-void byte_array_trim(struct byte_array_s *ba, int lengthBytes)
+void byte_array_trim(struct byte_array_s *ba, unsigned int lengthBytes)
 {
 	if (lengthBytes > ba->lengthBytes)
 		return;
