@@ -145,6 +145,15 @@ struct smoother_pcr_context_s
 
 	struct ltn_histogram_s *histReceive;
 	struct ltn_histogram_s *histTransmit;
+
+	/* Sum total of all items and their realloc() / alloc sizes.
+	 */
+	uint64_t totalAllocFootprintBytes;
+
+	/* Number of items the free list was empty, and we grew it by 1 item. none zero values here
+	 * suggests the entire context was improperly sized by the caller during smoother_pcr_alloc()
+	 */
+	uint64_t totalItemGrowth;
 };
 
 /* based on first received pcr, and first received walltime, compute a new walltime
@@ -571,6 +580,7 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 				continue;
 			}
 			xorg_list_append(&item->list, &ctx->itemsFree);
+			ctx->totalItemGrowth++;
 		}
 	}
 
@@ -590,6 +600,7 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 	if (item->maxLengthBytes < lengthBytes) {
 		item->buf = realloc(item->buf, lengthBytes);
 		item->maxLengthBytes = lengthBytes;
+		ctx->totalAllocFootprintBytes += lengthBytes;
 	}
 
 	memcpy(item->buf, buf, lengthBytes);
