@@ -47,6 +47,14 @@ void ltntstools_notification_unregister_callback(struct ltntstools_stream_statis
 	stream->notifications[e].userContext = NULL;
 }
 
+void ltntstools_notification_unregister_callbacks(struct ltntstools_stream_statistics_s *stream)
+{
+	for (int i = 0; i < EVENT_NOTIFICATION_MAX; i++) {
+		stream->notifications[i].cb = NULL;
+		stream->notifications[i].userContext = NULL;
+	}	
+}
+
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC)
 {
 	unsigned int adap = ltntstools_adaption_field_control(pkt);

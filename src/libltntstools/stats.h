@@ -446,7 +446,7 @@ uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_sta
  *              Don't attempt to unregister during a callback.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @param[in]   void * - User specific application context (optional)
- * @param[in]   enum ltntstools_notification_event_e - event id for registration
+ * @param[in]   enum ltntstools_notification_event_e - event id for callbacks
  * @param[in]   ltntstools_notification_callback cb - User specific application callback.
  * @return      0 - Success, else < 0 on error.
  */
@@ -454,11 +454,20 @@ int ltntstools_notification_register_callback(struct ltntstools_stream_statistic
 	void *userContext, ltntstools_notification_callback cb);
 
 /**
- * @brief       Unregister a user callback to fire when important events trigger within the state framework.
+ * @brief       Unregister a specific user callback.
  *              Don't attempt to unregister during a callback.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   enum ltntstools_notification_event_e - event id to unregister
  */
 void ltntstools_notification_unregister_callback(struct ltntstools_stream_statistics_s *stream, enum ltntstools_notification_event_e e);
+
+/**
+ * @brief       Unregister all user callbacks.
+ *              Don't attempt to unregister during a callback.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   enum ltntstools_notification_event_e - event id to unregister
+ */
+void ltntstools_notification_unregister_callbacks(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Convert an event name into a human readable string.
