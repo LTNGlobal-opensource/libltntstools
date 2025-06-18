@@ -39,7 +39,7 @@ void timer_thread_handler(union sigval sv)
 	case E101290_P1_3__PAT_ERROR:
 	//case E101290_P1_3a__PAT_ERROR_2: /* Disabled, because its a duplicate of PAT_ERROR and creates duplicate triggers */
 	{
-		uint64_t count = ltntstools_pid_stats_pid_get_packet_count(&s->streamStatistics, 0);
+		uint64_t count = ltntstools_pid_stats_pid_get_packet_count(s->streamStatistics, 0);
 		if (s->PATCountLastTimer == count) {
 			/* PAT Activity has stopped. */
 			//ltntstools_tr101290_alarm_raise(s, ev->id);

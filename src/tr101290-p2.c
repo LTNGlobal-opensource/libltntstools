@@ -23,7 +23,7 @@ void p2_process_pat_model(struct ltntstools_tr101290_s *s, struct ltntstools_pat
 {
 	for (int i = 0; i < pat->program_count; i++) {
 		if (pat->programs[i].pmt.PCR_PID) {
-			ltntstools_pid_stats_pid_set_contains_pcr(&s->streamStatistics, pat->programs[i].pmt.PCR_PID);
+			ltntstools_pid_stats_pid_set_contains_pcr(s->streamStatistics, pat->programs[i].pmt.PCR_PID);
 		}
 	}
 }
@@ -113,11 +113,11 @@ static void p2_process_p2_3(struct ltntstools_tr101290_s *s, const uint8_t *buf,
 		const uint8_t *pkt = &buf[i * 188];
 
 		uint16_t pid = ltntstools_pid(pkt);
-		if (!ltntstools_pid_stats_pid_get_contains_pcr(&s->streamStatistics, pid))
+		if (!ltntstools_pid_stats_pid_get_contains_pcr(s->streamStatistics, pid))
 			continue;
 
 		/* Check the stats */
-		if (ltntstools_pid_stats_pid_did_violate_pcr_timing(&s->streamStatistics, pid)) {
+		if (ltntstools_pid_stats_pid_did_violate_pcr_timing(s->streamStatistics, pid)) {
 
 			/* Pretty common to have 7 video packets in a single buffer, avoid raising the
 			 * alarm multiple times for the same pid.
@@ -230,7 +230,7 @@ ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 	s->now = *time_now;
 
 	/* P2.1 - Transport_Error TEI bit set. */
-	if (s->preTEIErrors != ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics)) {
+	if (s->preTEIErrors != ltntstools_pid_stats_stream_get_tei_errors(s->streamStatistics)) {
 		ltntstools_tr101290_alarm_raise(s, E101290_P2_1__TRANSPORT_ERROR, time_now);
 	} else {
 		ltntstools_tr101290_alarm_clear(s, E101290_P2_1__TRANSPORT_ERROR, time_now);
@@ -242,7 +242,7 @@ ssize_t p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t pac
 	 */
 	if (raise_alarm_p2_table(s, &s->p2.lastCAT)) {
 		/* We haven't seen a CAT table in a while. */
-		if (s->preScrambledCount != ltntstools_pid_stats_stream_get_scrambled_count(&s->streamStatistics)) {
+		if (s->preScrambledCount != ltntstools_pid_stats_stream_get_scrambled_count(s->streamStatistics)) {
 			/* New scrambled packets have arrived */
 			ltntstools_tr101290_alarm_raise(s, E101290_P2_6__CAT_ERROR, time_now);
 		} else {

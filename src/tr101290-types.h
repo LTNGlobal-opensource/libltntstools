@@ -87,7 +87,7 @@ struct ltntstools_tr101290_s
 	struct timeval now; /* Updated when a _write call arrives. */
 	struct timeval lastWriteCall;
 
-	struct ltntstools_stream_statistics_s streamStatistics;
+	struct ltntstools_stream_statistics_s *streamStatistics;
 	uint64_t PATCountLastTimer;
 	uint64_t CCCounterLastWrite;
 	uint64_t preTEIErrors;

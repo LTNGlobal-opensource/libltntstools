@@ -19,7 +19,7 @@
  */
 static int isPIDActive(struct ltntstools_tr101290_s *s, uint16_t pidNr, time_t now)
 {
-	time_t ptv = ltntstools_pid_stats_pid_get_last_update(&s->streamStatistics, pidNr);
+	time_t ptv = ltntstools_pid_stats_pid_get_last_update(s->streamStatistics, pidNr);
 	if (ptv <= (now - 5)) {
 		//printf("0x%04x ptv %d\n", pidNr, ptv);
 		return 0;
@@ -124,7 +124,7 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 /* P1_4: Incorrect packet order */
 static ssize_t p1_process_p1_4(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
-	uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(&s->streamStatistics);
+	uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(s->streamStatistics);
 
 #if ENABLE_TESTING
 	FILE *fh = fopen("/tmp/mangleccbyte", "rb");

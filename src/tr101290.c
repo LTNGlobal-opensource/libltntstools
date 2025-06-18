@@ -236,7 +236,8 @@ int ltntstools_tr101290_alloc(void **hdl, ltntstools_tr101290_notification cb_no
 
 	ltn_histogram_alloc_video_defaults(&s->h1, "write arrival latency");
 
-	ltntstools_pid_stats_reset(&s->streamStatistics);
+	ltntstools_pid_stats_alloc(&s->streamStatistics);
+	ltntstools_pid_stats_reset(s->streamStatistics);
 
 	ltntstools_streammodel_alloc(&s->smHandle, s);
 	ltntstools_streammodel_enable_tr101290_section_checks(s->smHandle, (ltntstools_streammodel_callback)p2_streammodel_callback);
@@ -297,8 +298,8 @@ void ltntstools_tr101290_free(void *hdl)
 
 	fprintf(stderr, "TR101290: Freeing Event Table\n");
 	ltn_histogram_free(s->h1);
-	ltntstools_pid_stats_reset(&s->streamStatistics);
-	ltntstools_pid_stats_free(&s->streamStatistics);
+	ltntstools_pid_stats_reset(s->streamStatistics);
+	ltntstools_pid_stats_free(s->streamStatistics);
 
 	if (s->alarm_tbl)
 		free(s->alarm_tbl);
@@ -340,11 +341,11 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	/* The thread needs to understand how frequently we're getting write calls. */
 	s->lastWriteCall = s->now;
 
-	s->preTEIErrors = ltntstools_pid_stats_stream_get_tei_errors(&s->streamStatistics);
-	s->preScrambledCount = ltntstools_pid_stats_stream_get_scrambled_count(&s->streamStatistics);
+	s->preTEIErrors = ltntstools_pid_stats_stream_get_tei_errors(s->streamStatistics);
+	s->preScrambledCount = ltntstools_pid_stats_stream_get_scrambled_count(s->streamStatistics);
 
 	/* Update general stream statistics, packet loss, CC's, birates etc. */
-	ltntstools_pid_stats_update(&s->streamStatistics, buf, packetCount);
+	ltntstools_pid_stats_update(s->streamStatistics, buf, packetCount);
 
 	/* Pass all of the packets to the P1 analysis layer. */
 	p1_write(s, buf, packetCount, &s->now);
