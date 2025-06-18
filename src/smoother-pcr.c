@@ -18,10 +18,14 @@ struct smoother_pcr_item_s
 	unsigned int   maxLengthBytes;
 
 	int            pcrComputed; /* Boolean. Was the PCR in this item computed from a base offset, or read from stream? */
-	int64_t        pcrIntervalPerPacketTicks;
+	int64_t        pcrIntervalPerPacketTicks; /* 27MHz */
 
 	struct ltntstools_pcr_position_s pcrdata; /* PCR value from pid N in the buffer, first PCR only. */
+
+	/* Under no circumstances should received_TSuS be smaller than (now - (4 * ctx->latencyuS)) */
 	uint64_t       received_TSuS;  /* Item received timestamp Via makeTimestampFromNow */
+
+	/* Under no circumstances should scheduled_TSuS be larger than (now + (4 * ctx->latencyuS)) */
 	uint64_t       scheduled_TSuS; /* Time this item is schedule for push via thread for smoothing output. */
 
 	int            pcrDidReset; /* Boolean */
@@ -48,8 +52,9 @@ struct byte_array_s
 int byte_array_init(struct byte_array_s *ba, unsigned int lengthBytes)
 {
 	ba->buf = malloc(lengthBytes);
-	if (!ba->buf)
+	if (!ba->buf) {
 		return -1;
+	}
 
 	ba->maxLengthBytes = lengthBytes;
 	ba->lengthBytes = 0;
@@ -81,8 +86,9 @@ int byte_array_append(struct byte_array_s *ba, const uint8_t *buf, unsigned int 
 
 void byte_array_trim(struct byte_array_s *ba, unsigned int lengthBytes)
 {
-	if (lengthBytes > ba->lengthBytes)
+	if (lengthBytes > ba->lengthBytes) {
 		return;
+	}
 
 	memmove(ba->buf, ba->buf + lengthBytes, ba->lengthBytes - lengthBytes);
 	ba->lengthBytes -= lengthBytes;
@@ -133,8 +139,8 @@ struct smoother_pcr_context_s
 	 */
 	int didPcrReset;
 	time_t lastPcrResetTime;
-	int64_t pcrIntervalPerPacketTicksLast;
-	int64_t pcrIntervalTicksLast;
+	int64_t pcrIntervalPerPacketTicksLast; /* 27MHz */
+	int64_t pcrIntervalTicksLast; /* 27MHz */
 
 	int64_t measuredLatencyMs; /* based on first and last PCRs in the list, how much latency do we have? */
 
@@ -220,8 +226,9 @@ static void itemReset(struct smoother_pcr_item_s *item)
 static struct smoother_pcr_item_s *itemAlloc(int lengthBytes)
 {
 	struct smoother_pcr_item_s *item = calloc(1, sizeof(*item));
-	if (!item)
+	if (!item) {
 		return NULL;
+	}
 
 	item->buf = calloc(1, lengthBytes);
 	if (!item->buf) {
@@ -494,8 +501,9 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	int itemsPerSecond, int itemLengthBytes, uint16_t pcrPID, int latencyMS)
 {
 	struct smoother_pcr_context_s *ctx = calloc(1, sizeof(*ctx));
-	if (!ctx)
+	if (!ctx) {
 		return -1;
+	}
 
 	pthread_cond_init(&ctx->item_add, NULL);
 	xorg_list_init(&ctx->itemsFree);
@@ -523,8 +531,9 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	pthread_mutex_lock(&ctx->listMutex);
 	for (int i = 0; i < itemsPerSecond; i++) {
 		struct smoother_pcr_item_s *item = itemAlloc(itemLengthBytes);
-		if (!item)
+		if (!item) {
 			continue;
+		}
 		xorg_list_append(&item->list, &ctx->itemsFree);
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
@@ -547,8 +556,9 @@ int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, in
 		/* Grow the free queue */
 		for (int i = 0; i < 64; i++) {
 			struct smoother_pcr_item_s *item = itemAlloc(ctx->itemLengthBytes);
-			if (!item)
+			if (!item) {
 				continue;
+			}
 			xorg_list_append(&item->list, &ctx->itemsFree);
 		}
 	}
@@ -654,8 +664,9 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		struct ltntstools_pcr_position_s *array = NULL;
 		int arrayLength = 0;
 		int r = ltntstools_queryPCRs(ctx->ba.buf, ctx->ba.lengthBytes, 0, &array, &arrayLength);
-		if (r < 0)
+		if (r < 0) {
 			return 0;
+		}
 
 		/* Find the first two PCRs for the user preferred PID, skip any other pids/pcrs */
 		struct ltntstools_pcr_position_s *pcr[2] = { 0 };
@@ -671,8 +682,9 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 					pcr[1] = e;
 			}
 			/* Count up to a third PCR, in case we need to handle multiple intervals */
-			if (pcrCount == 3)
+			if (pcrCount == 3) {
 				break;
+			}
 		}
 
 		/* We need atleast two PCRs for interval and timing calculations */
@@ -686,6 +698,8 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		int byteCount = (pcr[1]->offset - pcr[0]->offset);
 
 		int pktCount = byteCount / 188;
+
+		/* 27MHz clock units */
 		int64_t pcrIntervalTicks = ltntstools_scr_diff(pcr[0]->pcr, pcr[1]->pcr);
 		int64_t pcrIntervalPerPacketTicks = pcrIntervalTicks / pktCount;
 
@@ -736,8 +750,9 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		int rem = byteCount;
 		while (rem > 0) {
 			int cplen = 7 * 188;
-			if (cplen > rem)
+			if (cplen > rem) {
 				cplen = rem;
+			}
 
 			smoother_pcr_write2(ctx, &ctx->ba.buf[ pcr[0]->offset + idx ], cplen, pcrValue,
 				pcrIntervalPerPacketTicks, pcrIntervalTicks);
@@ -799,8 +814,9 @@ int64_t smoother_pcr_get_size(void *hdl)
 	int64_t sizeBytes = 0;
 
 	pthread_mutex_lock(&ctx->listMutex);
-	if (ctx->totalSizeBytes > 0)
+	if (ctx->totalSizeBytes > 0) {
 		sizeBytes = ctx->totalSizeBytes;
+	}
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	return sizeBytes;
