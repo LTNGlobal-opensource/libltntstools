@@ -105,14 +105,17 @@ struct smoother_pcr_context_s
 	struct xorg_list itemsFree;
 	struct xorg_list itemsBusy;
 	pthread_mutex_t listMutex;
+	int64_t totalSizeBytes;       /**< total number of bytes held on the busy queue, for scheduled output. */
+	int itemLengthBytes;          /**< Typically 7 * 188, is the allocation size for each queue item. Be skeptical when this is a different value. */
+	pthread_cond_t item_add;      /**< signalling on queue addition */
 
 	void *userContext;
 	smoother_pcr_output_callback outputCb;
 
-	uint64_t walltimeFirstPCRuS; /* Reset this when the clock significantly leaps backwards */
-	int64_t pcrFirst; /* Reset this when the clock significantly leaps backwards */
-	int64_t pcrTail; /* PCR on the first list item */
-	int64_t pcrHead; /* PCR on the last list item */
+	uint64_t walltimeFirstPCRuS; /**< Reset this when the clock significantly leaps backwards */
+	int64_t pcrFirst; /**< Reset this when the clock significantly leaps backwards */
+	int64_t pcrTail; /**< PCR on the first list item */
+	int64_t pcrHead; /**< PCR on the last list item */
 	uint16_t pcrPID;
 
 	int latencyuS;
@@ -121,12 +124,8 @@ struct smoother_pcr_context_s
 	uint64_t seqno;
 	uint64_t last_seqno;
 
-	int itemLengthBytes;
 	pthread_t threadId;
 	int threadRunning, threadTerminate, threadTerminated;
-
-	int64_t totalSizeBytes;
-	pthread_cond_t item_add;      /**< signalling on queue addition */
 
 	/* A contigious chunk of ram containing transport packets, in order.
 	 * starting with a transport packet containing a PCR on pid ctx->pcrPid
@@ -289,6 +288,13 @@ void smoother_pcr_free(void *hdl)
 	free(ctx);
 }
 
+/* Take any node on the Busy list up to and including items with a timestamp of uS.
+ * Put them on a local list so we can free the holding mutex as fast as possible.
+ * We're being called with a thread holding the listmutex, don't linger.
+ * 
+ * The list is expected to have items with e->scheduled_TSuS <= uS
+ * and items where e->scheduled_TSuS > uS
+ */
 static int _queueProcess_makeloc(struct smoother_pcr_context_s *ctx, int64_t uS, struct xorg_list *loclist)
 {
 	int count = 0, totalItems = 0, redundantItems = 0;
@@ -546,6 +552,9 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	return 0;
 }
 
+/* Ideally:
+ * cplen is 7 * 188, or a multiple of 188 less. Never greater than 7 * 188.
+ */
 int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, int64_t pcrValue,
 	int64_t pcrIntervalPerPacketTicks, int64_t pcrIntervalTicks)
 {
