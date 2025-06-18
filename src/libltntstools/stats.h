@@ -15,14 +15,14 @@
  * 
  * Usage example, demuxing and parsing Video frames on pid 0x31:
  * 
- *    struct ltntstools_stream_statistics_s myStats;
- *    ltntstools_pid_stats_reset(&myStats);
+ *    struct ltntstools_stream_statistics_s *myStats;
+ *    ltntstools_pid_stats_alloc(&myStats);
  * 
  *    while (1) {
- *      ltntstools_pid_stats_update(&myStats, pkts, 7);
+ *      ltntstools_pid_stats_update(myStats, pkts, 7);
  * 
  *      // Query CC issues on an ongoing basis.
- *      uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(&myStats);
+ *      uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(myStats);
  *    }
  * 
  */
