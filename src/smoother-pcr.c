@@ -553,9 +553,11 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 }
 
 /* Ideally:
- * cplen is 7 * 188, or a multiple of 188 less. Never greater than 7 * 188.
+ * cplen: is 7 * 188, or a multiple of 188 less. Never greater than 7 * 188.
+ * pcrIntervalPerPacketTicks: Number of ticks (27MHz) a single TS packet is worth
+ * pcrIntervalTicks: Number of ticks (27MHz) between the last two PCRs detected.
  */
-int smoother_pcr_write2(void *hdl, const unsigned char *buf, int lengthBytes, int64_t pcrValue,
+static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int lengthBytes, int64_t pcrValue,
 	int64_t pcrIntervalPerPacketTicks, int64_t pcrIntervalTicks)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
