@@ -22,6 +22,8 @@
 #define MAX_SCR_VALUE 2576980377600
 #define MAX_PTS_VALUE 8589934591
 
+#define PCR_CLOCK_HZ 27000000
+
 /** Conventions:
  * 
  * All clocks are expressed as int64_t

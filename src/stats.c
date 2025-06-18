@@ -27,7 +27,8 @@ const char *ltntstools_notification_event_name(enum ltntstools_notification_even
 	}
 }
 
-int ltntstools_notification_register_callback(struct ltntstools_stream_statistics_s *stream, void *userContext, ltntstools_notification_callback cb)
+int ltntstools_notification_register_callback(struct ltntstools_stream_statistics_s *stream, enum ltntstools_notification_event_e e,
+	void *userContext, ltntstools_notification_callback cb)
 {
 	if (cb == NULL) {
 		return -1;
@@ -35,15 +36,15 @@ int ltntstools_notification_register_callback(struct ltntstools_stream_statistic
 
 	/* Null user contexts are allowable */
 
-	stream->cb_notification = cb;
-	stream->cb_notificationUserContext = userContext;
+	stream->notifications[e].cb = cb;
+	stream->notifications[e].userContext = userContext;
 	return 0; /* Success */
 }
 
-void ltntstools_notification_unregister_callback(struct ltntstools_stream_statistics_s *stream)
+void ltntstools_notification_unregister_callback(struct ltntstools_stream_statistics_s *stream, enum ltntstools_notification_event_e e)
 {
-	stream->cb_notification = NULL;
-	stream->cb_notificationUserContext = NULL;
+	stream->notifications[e].cb = NULL;
+	stream->notifications[e].userContext = NULL;
 }
 
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC)
@@ -136,8 +137,9 @@ static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *s
 	stream->ccErrors++;
 	stream->last_cc_error = now.tv_sec;
 
-	if (stream->cb_notification) {
-		stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_CC_COUNT, stream, NULL);
+	if (stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb) {
+		stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb(stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].userContext, 
+			EVENT_UPDATE_STREAM_CC_COUNT, stream, NULL);
 	}
 }
 
@@ -171,8 +173,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		stream->mbps /= 1e6;
 		stream->pps_last_update = now;
 
-		if (stream->cb_notification) {
-			stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_MBPS, stream, NULL);
+		if (stream->notifications[EVENT_UPDATE_STREAM_MBPS].cb) {
+			stream->notifications[EVENT_UPDATE_STREAM_MBPS].cb(stream->notifications[EVENT_UPDATE_STREAM_MBPS].userContext, 
+				EVENT_UPDATE_STREAM_MBPS, stream, NULL);
 		}
 	}
 	stream->pps_window += packetCount;
@@ -183,8 +186,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			stream->iat_lwm_us = stream->iat_cur_us;
 		if (stream->iat_cur_us >= stream->iat_hwm_us) {
 			stream->iat_hwm_us = stream->iat_cur_us;
-			if (stream->cb_notification) {
-				stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_IAT_HWM, stream, NULL);
+			if (stream->notifications[EVENT_UPDATE_STREAM_IAT_HWM].cb) {
+				stream->notifications[EVENT_UPDATE_STREAM_IAT_HWM].cb(stream->notifications[EVENT_UPDATE_STREAM_IAT_HWM].userContext, 
+					EVENT_UPDATE_STREAM_IAT_HWM, stream, NULL);
 			}
 		}
 
@@ -222,9 +226,11 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 				 */
 				pid->pusi_time_ms = ltn_timeval_subtract_ms(&pid->pusi_time_current, &pid->pusi_time_first);
 
-				if (stream->cb_notification) {
-					stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_PID_PUSI_DELIVERY_TIME, stream, pid);
+				if (stream->notifications[EVENT_UPDATE_PID_PUSI_DELIVERY_TIME].cb) {
+					stream->notifications[EVENT_UPDATE_PID_PUSI_DELIVERY_TIME].cb(stream->notifications[EVENT_UPDATE_PID_PUSI_DELIVERY_TIME].userContext, 
+						EVENT_UPDATE_PID_PUSI_DELIVERY_TIME, stream, pid);
 				}
+
 			}
 
 			pid->pusi_time_first = ts; /* And the process resets collection again */
@@ -265,8 +271,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			pid->scrambledCount++;
 			stream->scrambledCount++;
 
-			if (stream->cb_notification) {
-				stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_SCRAMBLED_COUNT, stream, pid);
+			if (stream->notifications[EVENT_UPDATE_STREAM_SCRAMBLED_COUNT].cb) {
+				stream->notifications[EVENT_UPDATE_STREAM_SCRAMBLED_COUNT].cb(stream->notifications[EVENT_UPDATE_STREAM_SCRAMBLED_COUNT].userContext, 
+					EVENT_UPDATE_STREAM_SCRAMBLED_COUNT, stream, pid);
 			}
 
 		}
@@ -276,8 +283,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		if (ltntstools_tei_set(pkts + offset)) {
 			pid->teiErrors++;
 			stream->teiErrors++;
-			if (stream->cb_notification) {
-				stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_STREAM_TEI_COUNT, stream, pid);
+			if (stream->notifications[EVENT_UPDATE_STREAM_TEI_COUNT].cb) {
+				stream->notifications[EVENT_UPDATE_STREAM_TEI_COUNT].cb(stream->notifications[EVENT_UPDATE_STREAM_TEI_COUNT].userContext, 
+					EVENT_UPDATE_STREAM_TEI_COUNT, stream, pid);
 			}
 		}
 
@@ -336,12 +344,15 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 				//printf("us %" PRIi64 "\n", v);
 				ltn_histogram_interval_update_with_value(pid->pcrWallDrift, v);
 
-				if (stream->cb_notification) {
-					stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_PID_PCR_WALLTIME, stream, pid);
-					if (delta > (27000 * 40)) {
-						stream->cb_notification(stream->cb_notificationUserContext, EVENT_UPDATE_PID_PCR_EXCEEDS_40MS, stream, pid);
-					}
+				if (stream->notifications[EVENT_UPDATE_PID_PCR_WALLTIME].cb) {
+					stream->notifications[EVENT_UPDATE_PID_PCR_WALLTIME].cb(stream->notifications[EVENT_UPDATE_PID_PCR_WALLTIME].userContext, 
+						EVENT_UPDATE_PID_PCR_WALLTIME, stream, pid);
 				}
+				if (stream->notifications[EVENT_UPDATE_PID_PCR_EXCEEDS_40MS].cb && delta > (27000 * 40)) {
+					stream->notifications[EVENT_UPDATE_PID_PCR_EXCEEDS_40MS].cb(stream->notifications[EVENT_UPDATE_PID_PCR_EXCEEDS_40MS].userContext, 
+						EVENT_UPDATE_PID_PCR_EXCEEDS_40MS, stream, pid);
+				}
+
 			}
 		}
 
