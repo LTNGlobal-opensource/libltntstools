@@ -192,7 +192,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream, int fd);
 
 /**
- * @brief       Reset all statistics.
+ * @brief       Reset all statistics. Its mandatory that this is called on a handle returned by ltntstools_pid_stats_alloc().
+ *              Putting struct ltntstools_stream_statistics_s in some random context as an allocation and not a pointer
+ *              will result in a segfault during reset(). Always use _alloc() to allocate this structure.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  */
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream);
