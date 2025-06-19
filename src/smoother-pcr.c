@@ -160,7 +160,10 @@ struct smoother_pcr_context_s
 int smoother_pcr_get_statistics(void *hdl, struct smoother_pcr_statistics *s)
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
-
+	if (!ctx || !s) {
+		return -1;
+	}
+	
 	s->measuredLatencyMs = ctx->measuredLatencyMs;
 	s->totalAllocFootprintBytes = ctx->totalAllocFootprintBytes;
 	s->totalItemGrowth = ctx->totalItemGrowth;
