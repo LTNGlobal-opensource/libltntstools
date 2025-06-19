@@ -110,6 +110,23 @@ struct smoother_pcr_statistics
  */
 int smoother_pcr_get_statistics(void *hdl, struct smoother_pcr_statistics *s);
 
+/**
+ * @brief       Enable blocking on write calls to avoid overallocating ram with faster than realtime streams.
+ * 				Set to True when feeding from files and unregulated sources.
+ * @param[in]   void *hdl - Handle / context.
+ * @param[in]   unsigned int - boolean. True or false. Default is false. 
+ * @return      0 on success, else < 0 on error
+ */
+int smoother_pcr_set_blocking_writes(void *hdl, unsigned int boolean);
+
+/**
+ * @brief       Set level of verbosity. Statisics and other runtime behaviour will be reported to console.
+ * @param[in]   void *hdl - Handle / context.
+ * @param[in]   unsigned int - zero is disabled, else raise level accordingly.
+ * @return      0 on success, else < 0 on error
+ */
+int smoother_pcr_set_verbose(void *hdl, unsigned int verbose);
+
 #ifdef __cplusplus
 };
 #endif

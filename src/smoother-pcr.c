@@ -33,12 +33,18 @@ struct smoother_pcr_item_s
 
 void itemPrint(struct smoother_pcr_item_s *item)
 {
+static struct smoother_pcr_item_s olditem;
+
+int64_t gap = item->scheduled_TSuS - olditem.scheduled_TSuS;
+
 	printf("seqno %" PRIu64, item->seqno);
 	printf(" lengthBytes %5d", item->lengthBytes);
 	printf(" received_TSuS %" PRIu64, item->received_TSuS);
 	printf(" scheduled_TSuS %" PRIu64, item->scheduled_TSuS);
 	printf(" pcrComputed %d", item->pcrComputed);
-	printf(" pcr %" PRIi64 "  pcrDidReset %d\n", item->pcrdata.pcr, item->pcrDidReset);
+	printf(" pcr %" PRIi64 "  pcrDidReset %d  schgap %" PRIi64 "\n", item->pcrdata.pcr, item->pcrDidReset, gap);
+
+olditem = *item;
 }
 
 /* byte_array.... ---------- */
@@ -108,7 +114,7 @@ struct smoother_pcr_context_s
 	uint64_t qBusyCount;
 	pthread_mutex_t listMutex;
 	int64_t totalUserBytes;       /**< total number of bytes held on the busy queue, for scheduled output. */
-	int itemLengthBytes;          /**< Typically 7 * 188, is the allocation size for each queue item. Be skeptical when this is a different value. */
+	int itemLengthBytes;          /**< Typically 7 * 188, is the allocation size for each queue item. Be skeptical when a different value. */
 	pthread_cond_t item_add;      /**< signalling on queue addition */
 
 	void *userContext;
@@ -120,6 +126,8 @@ struct smoother_pcr_context_s
 	int64_t pcrHead; /**< PCR on the last list item */
 	uint16_t pcrPID;
 
+	unsigned int blockingWrites; /**< default no. No writes are blocked */
+	unsigned int verbose;        /**< Dump developer/runtime stats */
 	int latencyuS;
 	uint64_t bitsReceivedSinceLastPCR;
 
@@ -560,6 +568,7 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	ctx->pcrPID = pcrPID;
 	ctx->latencyuS = latencyMS * 1000;
 	ctx->lastPcrResetTime = time(NULL);
+	ctx->blockingWrites = 0;
 	byte_array_init(&ctx->ba, 8000 * 188); /* Initial size of 300mbps with 40ms PCR intervals */
 
 	ltn_histogram_alloc_video_defaults(&ctx->histReceive, "receive arrival times");
@@ -600,18 +609,56 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 {
 	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
 
-	pthread_mutex_lock(&ctx->listMutex);
-	if (xorg_list_is_empty(&ctx->itemsFree)) {
-		/* Grow the free queue */
-		for (int i = 0; i < 64; i++) {
-			struct smoother_pcr_item_s *item = itemAlloc(ctx->itemLengthBytes);
-			if (!item) {
-				continue;
+	if (ctx->blockingWrites) {
+		/* Blocking writes - Prevent faster than realitime filling of our queues, which will extend
+		 * indefintely until all platform memory is consumed (worst cast).
+		 */
+		while (1) {
+			pthread_mutex_lock(&ctx->listMutex);
+			if (!xorg_list_is_empty(&ctx->itemsFree)) {
+				break;
 			}
-			xorg_list_append(&item->list, &ctx->itemsFree);
-			ctx->qFreeCount++;
-			ctx->totalItemGrowth++;
-			ctx->totalItems++;
+			pthread_mutex_unlock(&ctx->listMutex);
+
+			if (ctx->verbose) {
+				char ts[256];
+				time_t now = time(0);
+				sprintf(ts, "%s", ctime(&now));
+				ts[ strlen(ts) - 1] = 0;
+
+				struct smoother_pcr_statistics s;
+				smoother_pcr_get_statistics(ctx, &s);
+
+				printf("%s: Dev Statistics - max observed latency %6" PRIi64 "(ms) alloc %8" PRIi64  
+					"(B) used %8" PRIu64 "(B) items %5" PRIu64" free %5" PRIu64 " busy %5" PRIu64 " growth %5" PRIu64 " \n",
+					ts,
+					s.measuredLatencyMs_hwm,
+					s.totalAllocFootprintBytes,
+					s.totalUserBytes,
+					s.totalItems,
+					s.qFreeCount,
+					s.qBusyCount,
+					s.totalItemGrowth);
+			}
+
+			usleep(100 * 1000);
+		}
+	} else {
+		/* None-blocking */
+		/* Consume as much platform ram to hold faster than realtime writes (from S3). */
+		pthread_mutex_lock(&ctx->listMutex);
+		if (xorg_list_is_empty(&ctx->itemsFree)) {
+			/* Grow the free queue */
+			for (int i = 0; i < 64; i++) {
+				struct smoother_pcr_item_s *item = itemAlloc(ctx->itemLengthBytes);
+				if (!item) {
+					continue;
+				}
+				xorg_list_append(&item->list, &ctx->itemsFree);
+				ctx->qFreeCount++;
+				ctx->totalItemGrowth++;
+				ctx->totalItems++;
+			}
 		}
 	}
 
@@ -682,7 +729,16 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 		struct smoother_pcr_item_s *last = xorg_list_last_entry(&ctx->itemsBusy, struct smoother_pcr_item_s, list);
 		//struct smoother_pcr_item_s *last = ctx->itemsBusy.prev;
 		if (last->scheduled_TSuS > item->scheduled_TSuS) {
-			item->scheduled_TSuS = last->scheduled_TSuS + 1;
+			/* Previous versions of this design added 1 tick to the scheduled_TSuS.
+			 * This works well when the input jitter of the stream is fairly low, such
+			 * as from a udp network, with IATs in the 10's of ms range.
+			 * It doesn't work very well when input jitter is seconds, such as when
+			 * a S3 to smoother project is being developed.
+			 * The right answer seems to be, calculate the length of the item we're planning
+			 * to transmit in packetTicks, and convert to uS.
+			 */
+			int64_t t_uS = (ctx->pcrIntervalPerPacketTicksLast * (item->lengthBytes / 188)) / 27;
+			item->scheduled_TSuS = last->scheduled_TSuS + t_uS;
 		}
 	}
 
@@ -833,7 +889,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		 * drive scheduled packet output time goes back in time.
 		 */
 		time_t now = time(NULL);
-		if (now >= ctx->lastPcrResetTime + 60) {
+		if (now >= ctx->lastPcrResetTime + 10) {
 			ctx->lastPcrResetTime = now;
 #if LOCAL_DEBUG
 			printf("Triggering PCR timebase recalculation\n");
@@ -877,6 +933,28 @@ int64_t smoother_pcr_get_size(void *hdl)
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	return sizeBytes;
+}
+
+int smoother_pcr_set_blocking_writes(void *hdl, unsigned int tf)
+{
+	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
+	if (!ctx) {
+		return -1;
+	}
+	ctx->blockingWrites = tf;
+
+	return 0; /* Success */
+}
+
+int smoother_pcr_set_verbose(void *hdl, unsigned int verbose)
+{
+	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
+	if (!ctx) {
+		return -1;
+	}
+	ctx->verbose = verbose;
+
+	return 0; /* Success */
 }
 
 void smoother_pcr_reset(void *hdl)
