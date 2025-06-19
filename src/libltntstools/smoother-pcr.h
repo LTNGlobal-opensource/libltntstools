@@ -50,10 +50,10 @@ typedef int (*smoother_pcr_output_callback)(void *userContext, unsigned char *bu
  * @param[in]   void **hdl - Handle / context for further use.
  * @param[in]   void *userContext - user private context, passed back to caller during callback.
  * @param[in]   smoother_pcr_output_callback cb - user supplied callback for output delivery
- * @param[in]   int itemsPerSecond - Approximate number of write calls you intend to make per second.
+ * @param[in]   int itemsPerSecond - Approximate number of write calls you intend to make per second. Eg. 5000
  * @param[in]   int itemLengthBytes - Eg. 7*188
- * @param[in]   uint64_t pcrPID - transport packet identifier that will be used to pace the output.
- * @param[in]   int latencyMS - The expected latency you want to project for jitter.
+ * @param[in]   uint64_t pcrPID - transport packet identifier that will be used to pace the output. Mandatory, none zero.
+ * @param[in]   int latencyMS - The expected latency you want to project for jitter. Mandatory, Eg. 100
  * @return      0 on success, else < 0.
  */
 int  smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callback cb,
