@@ -79,6 +79,7 @@ int  smoother_pcr_write(void *hdl, const uint8_t *pkts, int lengthBytes, struct 
 
 /**
  * @brief       Return the number of bytes held in the smoother queue.
+ *              For more comprehensive statistics consider smoother_pcr_get_statistics();
  * @param[in]   void *hdl - Handle / context.
  * @return      >= 0 on success, else < 0 on error
  */
@@ -90,12 +91,22 @@ int64_t smoother_pcr_get_size(void *hdl);
  */
 void smoother_pcr_reset(void *hdl);
 
-//int  smoother_pcr_expire(void *hdl, struct timeval *ts);
+struct smoother_pcr_statistics
+{
+	int64_t  measuredLatencyMs;        /**< Amount of latency in the transport cache. SNhoulod never be more than 4 * requested alloc() latencyms */
+	uint64_t totalAllocFootprintBytes; /**< Number of bytes we've allocated across all buffers for caching transport packets. Ideally this is close to alloc() itemsPerSecond * itemLengthBytes */
+	uint64_t totalItemGrowth;          /**< Number of list items added during runtime due to insufficent available resources  */
+	uint64_t totalItems;               /**< Number of list items created during initialization. Seeing growth here suggests undersized queues or unwanted caching / growth problems. */
+	uint64_t totalUserBytes;           /**< Number of user bytes stores (vs what was allocated totalAllocFootprintBytes) */
+};
 
-/* From is null then from default to 1 second ago.
- *  end is null then end details to now.
+/**
+ * @brief       Return runtime statistics
+ * @param[in]   void *hdl - Handle / context.
+ * @param[in]   struct smoother_pcr_statistics - Framework exposes various stats
+ * @return      0 on success, else < 0 on error
  */
-//int64_t smoother_pcr_sumtotal_i64(void *hdl, uint32_t channel, struct timeval *from, struct timeval *to);
+int smoother_pcr_get_statistics(void *hdl, struct smoother_pcr_statistics *s);
 
 #ifdef __cplusplus
 };

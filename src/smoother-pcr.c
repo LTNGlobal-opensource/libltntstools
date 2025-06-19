@@ -105,7 +105,7 @@ struct smoother_pcr_context_s
 	struct xorg_list itemsFree;
 	struct xorg_list itemsBusy;
 	pthread_mutex_t listMutex;
-	int64_t totalSizeBytes;       /**< total number of bytes held on the busy queue, for scheduled output. */
+	int64_t totalUserBytes;       /**< total number of bytes held on the busy queue, for scheduled output. */
 	int itemLengthBytes;          /**< Typically 7 * 188, is the allocation size for each queue item. Be skeptical when this is a different value. */
 	pthread_cond_t item_add;      /**< signalling on queue addition */
 
@@ -154,7 +154,21 @@ struct smoother_pcr_context_s
 	 * suggests the entire context was improperly sized by the caller during smoother_pcr_alloc()
 	 */
 	uint64_t totalItemGrowth;
+	uint64_t totalItems;
 };
+
+int smoother_pcr_get_statistics(void *hdl, struct smoother_pcr_statistics *s)
+{
+	struct smoother_pcr_context_s *ctx = (struct smoother_pcr_context_s *)hdl;
+
+	s->measuredLatencyMs = ctx->measuredLatencyMs;
+	s->totalAllocFootprintBytes = ctx->totalAllocFootprintBytes;
+	s->totalItemGrowth = ctx->totalItemGrowth;
+	s->totalItems = ctx->totalItems;
+	s->totalUserBytes = ctx->totalUserBytes;
+
+	return 0; /* Success */
+}
 
 /* based on first received pcr, and first received walltime, compute a new walltime
  * for this new input pcr.
@@ -420,7 +434,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 			}
 
 			pthread_mutex_lock(&ctx->listMutex);			
-			ctx->totalSizeBytes -= e->lengthBytes;
+			ctx->totalUserBytes -= e->lengthBytes;
 			pthread_mutex_unlock(&ctx->listMutex);
 
 			free(array);
@@ -550,6 +564,7 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 			continue;
 		}
 		xorg_list_append(&item->list, &ctx->itemsFree);
+		ctx->totalItems++;
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
 
@@ -581,6 +596,7 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 			}
 			xorg_list_append(&item->list, &ctx->itemsFree);
 			ctx->totalItemGrowth++;
+			ctx->totalItems++;
 		}
 	}
 
@@ -634,7 +650,7 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 
 	pthread_mutex_lock(&ctx->listMutex);
 	item->seqno = ctx->seqno++;
-	ctx->totalSizeBytes += item->lengthBytes;
+	ctx->totalUserBytes += item->lengthBytes;
 	if (item->lengthBytes <= 0) {
 		fprintf(stderr, "%s() bug, adding item with negative bytes %d\n", __func__, item->lengthBytes);
 	}
@@ -759,8 +775,8 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 			printf("b.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[0]->pcr, pcr[0]->offset, pcr[0]->pid);
 			printf("e.pcr = %14" PRIi64 ", %8" PRIu64 ", %04x\n", pcr[1]->pcr, pcr[1]->offset, pcr[1]->pid);
 			//printf("pcrHead %" PRIi64 " pcrTail %" PRIi64 "\n", ctx->pcrHead, ctx->pcrTail);
-			printf("pcrIntervalPerPacketTicks = %" PRIi64 ", pktCount %d byteCount %d pcrDidReset %d totalSizeBytes %" PRIi64 ", latency %" PRIi64 " ms\n",
-				pcrIntervalPerPacketTicks, pktCount, byteCount, ctx->didPcrReset, ctx->totalSizeBytes,
+			printf("pcrIntervalPerPacketTicks = %" PRIi64 ", pktCount %d byteCount %d pcrDidReset %d totalUserBytes %" PRIi64 ", latency %" PRIi64 " ms\n",
+				pcrIntervalPerPacketTicks, pktCount, byteCount, ctx->didPcrReset, ctx->totalUserBytes,
 				ctx->measuredLatencyMs);
 		}
 #endif
@@ -836,8 +852,8 @@ int64_t smoother_pcr_get_size(void *hdl)
 	int64_t sizeBytes = 0;
 
 	pthread_mutex_lock(&ctx->listMutex);
-	if (ctx->totalSizeBytes > 0) {
-		sizeBytes = ctx->totalSizeBytes;
+	if (ctx->totalUserBytes > 0) {
+		sizeBytes = ctx->totalUserBytes;
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
 
@@ -853,7 +869,7 @@ void smoother_pcr_reset(void *hdl)
 	ctx->pcrFirst = -1;
 	ctx->pcrHead = -1;
 	ctx->pcrTail = -1;
-	ctx->totalSizeBytes = 0;
+	ctx->totalUserBytes = 0;
 
 	while (!xorg_list_is_empty(&ctx->itemsBusy)) {
 		struct smoother_pcr_item_s *item = xorg_list_first_entry(&ctx->itemsBusy, struct smoother_pcr_item_s, list);
