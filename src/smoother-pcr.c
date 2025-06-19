@@ -103,7 +103,9 @@ const uint8_t *byte_array_addr(struct byte_array_s *ba)
 struct smoother_pcr_context_s
 {
 	struct xorg_list itemsFree;
+	uint64_t qFreeCount;
 	struct xorg_list itemsBusy;
+	uint64_t qBusyCount;
 	pthread_mutex_t listMutex;
 	int64_t totalUserBytes;       /**< total number of bytes held on the busy queue, for scheduled output. */
 	int itemLengthBytes;          /**< Typically 7 * 188, is the allocation size for each queue item. Be skeptical when this is a different value. */
@@ -163,12 +165,14 @@ int smoother_pcr_get_statistics(void *hdl, struct smoother_pcr_statistics *s)
 	if (!ctx || !s) {
 		return -1;
 	}
-	
+
 	s->measuredLatencyMs = ctx->measuredLatencyMs;
 	s->totalAllocFootprintBytes = ctx->totalAllocFootprintBytes;
 	s->totalItemGrowth = ctx->totalItemGrowth;
 	s->totalItems = ctx->totalItems;
 	s->totalUserBytes = ctx->totalUserBytes;
+	s->qBusyCount = ctx->qBusyCount;
+	s->qFreeCount = ctx->qFreeCount;
 
 	return 0; /* Success */
 }
@@ -297,11 +301,13 @@ void smoother_pcr_free(void *hdl)
 	while (!xorg_list_is_empty(&ctx->itemsFree)) {
 		struct smoother_pcr_item_s *item = xorg_list_first_entry(&ctx->itemsFree, struct smoother_pcr_item_s, list);
 		xorg_list_del(&item->list);
+		ctx->qFreeCount--;
 		itemFree(item);
 	}
 	while (!xorg_list_is_empty(&ctx->itemsBusy)) {
 		struct smoother_pcr_item_s *item = xorg_list_first_entry(&ctx->itemsBusy, struct smoother_pcr_item_s, list);
 		xorg_list_del(&item->list);
+		ctx->qBusyCount--;
 		itemFree(item);
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
@@ -334,6 +340,7 @@ static int _queueProcess_makeloc(struct smoother_pcr_context_s *ctx, int64_t uS,
 
 		if (e->scheduled_TSuS <= uS) {
 			xorg_list_del(&e->list);
+			ctx->qBusyCount--;
 			xorg_list_append(&e->list, loclist);
 			count++;
 		} else {
@@ -458,6 +465,7 @@ static int _queueProcess(struct smoother_pcr_context_s *ctx, int64_t uS)
 		itemReset(e);
 		xorg_list_del(&e->list);
 		xorg_list_append(&e->list, &ctx->itemsFree);
+		ctx->qFreeCount++;
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
 
@@ -567,7 +575,9 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 			continue;
 		}
 		xorg_list_append(&item->list, &ctx->itemsFree);
+		ctx->qFreeCount++;
 		ctx->totalItems++;
+		ctx->totalAllocFootprintBytes += itemLengthBytes;
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
 
@@ -598,6 +608,7 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 				continue;
 			}
 			xorg_list_append(&item->list, &ctx->itemsFree);
+			ctx->qFreeCount++;
 			ctx->totalItemGrowth++;
 			ctx->totalItems++;
 		}
@@ -610,6 +621,7 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 	}
 
 	xorg_list_del(&item->list);
+	ctx->qFreeCount--;
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	item->received_TSuS = makeTimestampFromNow();
@@ -675,6 +687,8 @@ static int smoother_pcr_write2(void *hdl, const unsigned char *buf, unsigned int
 
 	/* Queue this for scheduled output */
 	xorg_list_append(&item->list, &ctx->itemsBusy);
+	ctx->qBusyCount++;
+
 	pthread_cond_signal(&ctx->item_add);
 	pthread_mutex_unlock(&ctx->listMutex);
 
@@ -878,7 +892,10 @@ void smoother_pcr_reset(void *hdl)
 		struct smoother_pcr_item_s *item = xorg_list_first_entry(&ctx->itemsBusy, struct smoother_pcr_item_s, list);
 		itemReset(item);
 		xorg_list_del(&item->list);
+		ctx->qBusyCount--;
+
 		xorg_list_append(&item->list, &ctx->itemsFree);
+		ctx->qFreeCount++;
 	}
 
 	pthread_mutex_unlock(&ctx->listMutex);

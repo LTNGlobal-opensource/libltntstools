@@ -98,6 +98,8 @@ struct smoother_pcr_statistics
 	uint64_t totalItemGrowth;          /**< Number of list items added during runtime due to insufficent available resources  */
 	uint64_t totalItems;               /**< Number of list items created during initialization. Seeing growth here suggests undersized queues or unwanted caching / growth problems. */
 	uint64_t totalUserBytes;           /**< Number of user bytes stores (vs what was allocated totalAllocFootprintBytes) */
+	uint64_t qFreeCount;               /**< Number of items on the free list */
+	uint64_t qBusyCount;               /**< Number of items on the free list */
 };
 
 /**
