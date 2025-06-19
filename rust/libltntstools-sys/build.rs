@@ -202,29 +202,6 @@ fn main() -> Fallible<()> {
     })?;
     run_make(&libdvbpsi_builddir, "install")?;
 
-    let ffmpeg_srcdir = srcdir.join("ffmpeg");
-    let ffmpeg_builddir = builddir.join("ffmpeg");
-    run_configure(&ffmpeg_srcdir, &ffmpeg_builddir, |configure| {
-        let mut prefix_arg = OsString::new();
-        prefix_arg.push("--prefix=");
-        prefix_arg.push(&out_dir);
-
-        configure
-            .arg(prefix_arg)
-            .args(["--enable-static", "--disable-shared"])
-            .arg("--disable-programs")
-            .arg("--disable-iconv")
-            .args([
-                "--disable-audiotoolbox",
-                "--disable-videotoolbox",
-                "--disable-avfoundation",
-            ])
-            .args(["--disable-vaapi", "--disable-vdpau"])
-            .arg("--pkg-config-flags=--static");
-        Ok(())
-    })?;
-    run_make(&ffmpeg_builddir, "install")?;
-
     let libltntstools_srcdir = srcdir.join("../..");
     let libltntstools_builddir = builddir.join("libltntstools");
     run_autoreconf(&libltntstools_srcdir)?;
@@ -238,8 +215,6 @@ fn main() -> Fallible<()> {
                 .args(["--enable-static", "--disable-shared"])
                 .env("CFLAGS", {
                     let mut cflags = env::var_os("CFLAGS").unwrap_or_default();
-                    cflags.push(" -I");
-                    cflags.push(&ffmpeg_srcdir);
                     cflags
                 });
             Ok(())
@@ -291,7 +266,6 @@ fn main() -> Fallible<()> {
     println!("cargo:rustc-link-lib=ltntstools");
 
     prepend_pkg_config_path(&lib_dir.join("pkgconfig"))?;
-    pkg_config::probe_library("libavformat")?;
     pkg_config::probe_library("libdvbpsi")?;
 
     Ok(())
