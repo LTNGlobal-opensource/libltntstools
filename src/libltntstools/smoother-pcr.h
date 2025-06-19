@@ -93,7 +93,7 @@ void smoother_pcr_reset(void *hdl);
 
 struct smoother_pcr_statistics
 {
-	int64_t  measuredLatencyMs;        /**< Amount of latency in the transport cache. SNhoulod never be more than 4 * requested alloc() latencyms */
+	int64_t  measuredLatencyMs_hwm;    /**< Highest amount of latency (ever) in the transport cache. Should never be more than 4 * requested alloc() latencyms */
 	uint64_t totalAllocFootprintBytes; /**< Number of bytes we've allocated across all buffers for caching transport packets. Ideally this is close to alloc() itemsPerSecond * itemLengthBytes */
 	uint64_t totalItemGrowth;          /**< Number of list items added during runtime due to insufficent available resources  */
 	uint64_t totalItems;               /**< Number of list items created during initialization. Seeing growth here suggests undersized queues or unwanted caching / growth problems. */

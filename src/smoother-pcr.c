@@ -144,6 +144,7 @@ struct smoother_pcr_context_s
 	int64_t pcrIntervalTicksLast; /* 27MHz */
 
 	int64_t measuredLatencyMs; /* based on first and last PCRs in the list, how much latency do we have? */
+	int64_t measuredLatencyMs_hwm; /* based on first and last PCRs in the list, how much latency do we have - maximum */
 
 	struct ltn_histogram_s *histReceive;
 	struct ltn_histogram_s *histTransmit;
@@ -166,7 +167,7 @@ int smoother_pcr_get_statistics(void *hdl, struct smoother_pcr_statistics *s)
 		return -1;
 	}
 
-	s->measuredLatencyMs = ctx->measuredLatencyMs;
+	s->measuredLatencyMs_hwm = ctx->measuredLatencyMs_hwm;
 	s->totalAllocFootprintBytes = ctx->totalAllocFootprintBytes;
 	s->totalItemGrowth = ctx->totalItemGrowth;
 	s->totalItems = ctx->totalItems;
@@ -541,7 +542,7 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	int itemsPerSecond, int itemLengthBytes, uint16_t pcrPID, int latencyMS)
 {
 	struct smoother_pcr_context_s *ctx = calloc(1, sizeof(*ctx));
-	if (!ctx) {
+	if (!ctx || pcrPID <= 16 || pcrPID > 0x1ffe || latencyMS < 50 || itemLengthBytes != (7*188)) {
 		return -1;
 	}
 
@@ -786,6 +787,7 @@ int smoother_pcr_write(void *hdl, const unsigned char *buf, int lengthBytes, str
 		}
 
 		ctx->measuredLatencyMs = ltntstools_scr_diff(ctx->pcrHead, ctx->pcrTail) / 27000;
+		ctx->measuredLatencyMs_hwm = (ctx->measuredLatencyMs > ctx->measuredLatencyMs_hwm) ? ctx->measuredLatencyMs : ctx->measuredLatencyMs_hwm;
 #if LOCAL_DEBUG
 		{
 			/* Dump the first and second PCR we found. */
