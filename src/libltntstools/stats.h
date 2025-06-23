@@ -52,6 +52,18 @@ struct ltntstools_cc_reorder_table_s
         uint32_t ccerror[LTNTSTOOLS_CC_REORDER_LIST_SIZE];
 };
 
+struct ltntstools_bc_ctx_s
+{
+	int running;
+	uint16_t pcrpidnr;             /**< We'll track the PCR clock on one pid only */
+	int64_t pcrFirst;              /**< First PCR valud in 27MHz ticks since reset() or initialization */
+	int64_t pcrSecond;             /**< Second PCR valud in 27MHz ticks since reset() or initialization */
+	unsigned int packetsInbetween; /**< Count of total stream packet inbetween first and second */
+	double bitrate;                /**< bps */
+	int64_t ticksPerPCR;
+	int64_t ticksPerPacket;        /**< Per transport packet */
+};
+
 enum ltntstools_notification_event_e {
 	EVENT_UNDEFINED = 0,
 
@@ -65,6 +77,7 @@ enum ltntstools_notification_event_e {
 	EVENT_UPDATE_STREAM_TEI_COUNT,       /**< stream.teiErrors changed. */
 	EVENT_UPDATE_STREAM_SCRAMBLED_COUNT, /**< stream.scrambledCount changed. */
 	EVENT_UPDATE_STREAM_MBPS,            /**< stream.mbps changed. */
+	EVENT_UPDATE_PCR_MBPS,               /**< stream.bc_ctx.mbps changed, query with ltntstools_bitrate_calculator_query_bitrate(). */
 	EVENT_UPDATE_STREAM_IAT_HWM,         /**< stream.iat_hwm_us changed. */
 	EVENT_NOTIFICATION_MAX
 };
@@ -165,6 +178,8 @@ struct ltntstools_stream_statistics_s
 		ltntstools_notification_callback  cb;
 		void                             *userContext;
 	} notifications[EVENT_NOTIFICATION_MAX];
+
+	struct ltntstools_bc_ctx_s bc_ctx;
 };
 
 /**
@@ -482,6 +497,17 @@ void ltntstools_notification_unregister_callbacks(struct ltntstools_stream_stati
  * @return      The event name. A string is guaranteed to be returned from the stack, in all cases.
  */
 const char *ltntstools_notification_event_name(enum ltntstools_notification_event_e eventId);
+
+/**
+ * @brief       After the callback for event EVENT_UPDATE_PCR_MBPS has fired, you can query
+ *              the PCR calculated bitrate. This is a useful and fast way of calculating the bitrate
+ *              of a file, or stream, it runs substantially faster than realtime and you may
+ *              call ltntstools_pid_stats_update() as quickfile as you like, from a file source for example.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[out]  double * - bps
+ * @return      0 - Success, else < 0 on error.
+ */
+int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statistics_s *stream, double *bps);
 
 #ifdef __cplusplus
 };

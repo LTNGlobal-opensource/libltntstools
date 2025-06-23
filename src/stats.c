@@ -11,6 +11,11 @@ int      ltntstools_cc_reorder_table_corelate(struct ltntstools_cc_reorder_table
 void     ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s *t);
 static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *stream, struct timeval *ts);
 
+static int ltntstools_bitrate_calculator_init(struct ltntstools_stream_statistics_s *stream, uint16_t pcrpidnr);
+static void ltntstools_bitrate_calculator_reset(struct ltntstools_stream_statistics_s *stream);
+static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts,
+	unsigned int packetCount, int *complete);
+
 const char *ltntstools_notification_event_name(enum ltntstools_notification_event_e e)
 {
 	switch(e) {
@@ -22,6 +27,7 @@ const char *ltntstools_notification_event_name(enum ltntstools_notification_even
 	case EVENT_UPDATE_STREAM_TEI_COUNT:       return "EVENT_UPDATE_STREAM_TEI_COUNT";
 	case EVENT_UPDATE_STREAM_SCRAMBLED_COUNT: return "EVENT_UPDATE_STREAM_SCRAMBLED_COUNT";
 	case EVENT_UPDATE_STREAM_MBPS:            return "EVENT_UPDATE_STREAM_MBPS";
+	case EVENT_UPDATE_PCR_MBPS:               return "EVENT_UPDATE_PCR_MBPS";
 	case EVENT_UPDATE_STREAM_IAT_HWM:         return "EVENT_UPDATE_STREAM_IAT_HWM";
 	default:                                  return "EVENT_UNKNOWN";
 	}
@@ -162,6 +168,15 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 	if (packetCount != 7) {
 		stream->notMultipleOfSevenError++;
 		stream->last_notMultipleOfSeven_error = now;
+	}
+
+	if (stream->bc_ctx.pcrpidnr) {
+		int complete;
+		ltntstools_bitrate_calculator_write(stream, pkts, packetCount, &complete);
+		if (complete && stream->notifications[EVENT_UPDATE_PCR_MBPS].cb) {
+			stream->notifications[EVENT_UPDATE_PCR_MBPS].cb(stream->notifications[EVENT_UPDATE_PCR_MBPS].userContext, 
+				EVENT_UPDATE_PCR_MBPS, stream, NULL);
+		}
 	}
 
 	for (int i = 0; i < packetCount; i++) {
@@ -589,6 +604,7 @@ void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statisti
 {
 	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
 	pid->hasPCR = 1;
+	ltntstools_bitrate_calculator_init(stream, pidnr & 0x1fff);
 }
 
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
@@ -757,4 +773,112 @@ time_t ltntstools_pid_stats_stream_get_notmultipleofseven_time(struct ltntstools
 uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_statistics_s *stream)
 {
 	return stream->iat_hwm_us_last_nsecond;
+}
+
+static int ltntstools_bitrate_calculator_init(struct ltntstools_stream_statistics_s *stream, uint16_t pcrpidnr)
+{
+	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
+	bcctx->pcrpidnr = pcrpidnr;
+
+	ltntstools_bitrate_calculator_reset(stream);
+	return 0; /* Success */
+}
+
+static void ltntstools_bitrate_calculator_reset(struct ltntstools_stream_statistics_s *stream)
+{
+	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
+	bcctx->pcrFirst = -1;
+	bcctx->pcrSecond = -1;
+	bcctx->packetsInbetween = 0;
+	bcctx->running = 1;
+}
+
+static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, unsigned int packetCount, int *complete)
+{
+	if (complete) {
+		*complete = 0;
+	}
+
+	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
+	if (bcctx->running == 0) {
+		return 0; /* Success */
+	}
+
+	for (int i = 0; i < packetCount; i++) {
+		const uint8_t *pkt = pkts + (i * 188);
+
+		/* If we see a CC error anywhere, it effects the bitrate calculation, reset the state machine and try again. */
+		if (ltntstools_pid_stats_stream_get_ccerror_count(stream)) {
+			printf("%s() detected pkt loss on stream, restarting state machine\n", __func__);
+			ltntstools_bitrate_calculator_reset(stream);
+			return 0; /* We'll call it success and expeect to start again cleanly.*/
+		}
+
+		/* Found the first PCR, awaiting second, keep incrementing counter. */
+		if (bcctx->pcrFirst > -1 && bcctx->pcrSecond == -1) {
+			bcctx->packetsInbetween++;
+		}
+
+		if (ltntstools_pid(pkt) != bcctx->pcrpidnr && bcctx->pcrFirst == -1) {
+			continue;
+		}
+
+		/* Now we have our potential first PCR, try to extract */
+		uint64_t pcr = 0;
+		if (ltntstools_scr(pkt, &pcr) == 0) {
+			if (bcctx->pcrFirst == -1) {
+				bcctx->pcrFirst = pcr;
+				bcctx->packetsInbetween = 0;
+			} else {
+				bcctx->pcrSecond = pcr;
+			}
+		}
+
+		if (bcctx->pcrFirst > -1 && bcctx->pcrSecond > -1) {
+
+			double timeMsPerPCR = ltntstools_scr_diff(bcctx->pcrFirst, bcctx->pcrSecond) / 27000.0;
+			bcctx->bitrate = ((1000.0 / timeMsPerPCR) * bcctx->packetsInbetween) * 188 * 8;
+			bcctx->ticksPerPCR = ltntstools_scr_diff(bcctx->pcrFirst, bcctx->pcrSecond);
+			bcctx->ticksPerPacket = bcctx->ticksPerPCR / bcctx->packetsInbetween;
+
+#if 0
+
+			printf("%d packets inbetween PCRs %" PRIi64 " and %" PRIi64 ", bitrate(bps) %f\n",
+				bcctx->packetsInbetween, bcctx->pcrFirst, bcctx->pcrSecond, bcctx->bitrate);
+
+			printf("ticksPerPCR %" PRIi64 ", ticksPerPacket %" PRIi64 "\n", ticksPerPCR, ticksPerPacket);
+#endif
+			bcctx->running = 0;
+			if (complete) {
+				*complete = 1;
+			}
+			break;
+		}
+	}
+
+	return 0; /* Success */
+}
+
+int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statistics_s *stream, double *bps)
+{
+	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
+	if (bcctx->running == 1) {
+		return -1; /* Busy */
+	}
+
+	*bps = bcctx->bitrate;
+
+	return 0; /* Success */
+}
+
+int ltntstools_bitrate_calculator_query_ticks_per_packet(struct ltntstools_stream_statistics_s *stream, int64_t *ticks)
+{
+	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
+	if (bcctx->running == 1) {
+		return -1; /* Busy */
+	}
+
+	*ticks = bcctx->ticksPerPacket;
+
+	return 0; /* Success */
 }
