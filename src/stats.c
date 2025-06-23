@@ -501,6 +501,11 @@ double ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_
 	return stream->mbps;
 }
 
+uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->ccErrors;
+}
+
 uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream)
 {
 	return stream->reorderErrors;

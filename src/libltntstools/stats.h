@@ -312,6 +312,13 @@ time_t ltntstools_pid_stats_stream_get_notmultipleofseven_time(struct ltntstools
 uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
+ * @brief       Query TRANSPORT stream - Discontinuities detected since last ltntstools_pid_stats_reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - count
+ */
+uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_statistics_s *stream);
+
+/**
  * @brief       Query TRANSPORT stream - Scrambled packets detected since last ltntstools_pid_stats_reset()
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @return      uint64_t - count
