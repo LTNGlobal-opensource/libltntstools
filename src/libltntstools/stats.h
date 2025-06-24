@@ -62,6 +62,7 @@ struct ltntstools_bc_ctx_s
 	double bitrate;                /**< bps */
 	int64_t ticksPerPCR;
 	int64_t ticksPerPacket;        /**< Per transport packet */
+	int64_t stc;                   /**< System Target Clock. We establish this through PCRs then advance it it per packet. */
 };
 
 enum ltntstools_notification_event_e {
@@ -508,6 +509,24 @@ const char *ltntstools_notification_event_name(enum ltntstools_notification_even
  * @return      0 - Success, else < 0 on error.
  */
 int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statistics_s *stream, double *bps);
+
+/**
+ * @brief       After the callback for event EVENT_UPDATE_PCR_MBPS has fired, you can query
+ *              the PCR calculated ticks (27MHz) per transport packet.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[out]  int64_t * - ticks
+ * @return      0 - Success, else < 0 on error.
+ */
+int ltntstools_bitrate_calculator_query_ticks_per_packet(struct ltntstools_stream_statistics_s *stream, int64_t *ticks);
+
+/**
+ * @brief       After the callback for event EVENT_UPDATE_PCR_MBPS has fired, you can query
+ *              the PCR based STC clock ticks (27MHz) per transport packet.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[out]  int64_t * - ticks
+ * @return      0 - Success, else < 0 on error.
+ */
+int ltntstools_bitrate_calculator_query_stc(struct ltntstools_stream_statistics_s *stream, int64_t *stc);
 
 #ifdef __cplusplus
 };

@@ -791,16 +791,22 @@ static void ltntstools_bitrate_calculator_reset(struct ltntstools_stream_statist
 	bcctx->pcrSecond = -1;
 	bcctx->packetsInbetween = 0;
 	bcctx->running = 1;
+	/* Intensionally, don't reset bps or stc */
 }
 
 static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, unsigned int packetCount, int *complete)
 {
+	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
 	if (complete) {
 		*complete = 0;
 	}
 
-	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
+	bcctx->stc += (packetCount * bcctx->ticksPerPacket);
+
 	if (bcctx->running == 0) {
+		/* TODO: This will drift over time uf we're not rebaing the incoming PCR. */
+
+		/* We'll detect packet loss below and restrat the machine accordingly, else drift will get out of control.*/
 		return 0; /* Success */
 	}
 
@@ -831,6 +837,7 @@ static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statisti
 				bcctx->packetsInbetween = 0;
 			} else {
 				bcctx->pcrSecond = pcr;
+				bcctx->stc = pcr;
 			}
 		}
 
@@ -842,17 +849,19 @@ static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statisti
 			bcctx->ticksPerPacket = bcctx->ticksPerPCR / bcctx->packetsInbetween;
 
 #if 0
-
 			printf("%d packets inbetween PCRs %" PRIi64 " and %" PRIi64 ", bitrate(bps) %f\n",
 				bcctx->packetsInbetween, bcctx->pcrFirst, bcctx->pcrSecond, bcctx->bitrate);
 
-			printf("ticksPerPCR %" PRIi64 ", ticksPerPacket %" PRIi64 "\n", ticksPerPCR, ticksPerPacket);
+			printf("ticksPerPCR %" PRIi64 ", ticksPerPacket %" PRIi64 "\n", bcctx->ticksPerPCR, bcctx->ticksPerPacket);
 #endif
 			bcctx->running = 0;
 			if (complete) {
 				*complete = 1;
 			}
-			break;
+
+			/* How we have a measurement, start the process over. */
+			ltntstools_bitrate_calculator_reset(stream);
+			//break;
 		}
 	}
 
@@ -862,7 +871,8 @@ static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statisti
 int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statistics_s *stream, double *bps)
 {
 	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
-	if (bcctx->running == 1) {
+	if (0 && bcctx->running == 1) {
+		*bps = 0;
 		return -1; /* Busy */
 	}
 
@@ -874,11 +884,25 @@ int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statist
 int ltntstools_bitrate_calculator_query_ticks_per_packet(struct ltntstools_stream_statistics_s *stream, int64_t *ticks)
 {
 	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
-	if (bcctx->running == 1) {
+	if (0 && bcctx->running == 1) {
+		*ticks = 0;
 		return -1; /* Busy */
 	}
 
 	*ticks = bcctx->ticksPerPacket;
+
+	return 0; /* Success */
+}
+
+int ltntstools_bitrate_calculator_query_stc(struct ltntstools_stream_statistics_s *stream, int64_t *stc)
+{
+	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
+	if (0 && bcctx->running == 1) {
+		*stc = 0;
+		return -1; /* Busy */
+	}
+
+	*stc = bcctx->stc;
 
 	return 0; /* Success */
 }

@@ -313,6 +313,10 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		}
 #endif
 
+		/* If this pid has a scr */
+		/* Reset timebase to current pcr */
+		/* if it doesn't have a pcr, increment local stc by one packets worth of ticks. */
+
 		/* If we see a CC error on the pid we're extracting, restart the statemachine.
 		 * Out rule is, we won't pass malformed PES's downstream to the caller.
 		 */
