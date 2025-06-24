@@ -159,7 +159,7 @@ static inline int64_t ltntstools_scr_diff(int64_t from, int64_t to)
 {
 	int64_t diffTicks;
 
-	if (from > to) {
+	if ((from > to) && (to < (5 * 27000000))) {
 		/* Probably we wrapped, or the stream restarted. */
 		diffTicks = MAX_SCR_VALUE - from;
 		diffTicks += to;
