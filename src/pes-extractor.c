@@ -10,6 +10,15 @@
 #define ORDERED_LIST_DEPTH 10
 #define SIMULATE_TS_PACKET_LOSS 0
 
+struct pcr_item_s
+{
+	struct xorg_list list;
+	int64_t pcr;
+	uint32_t ringPos;
+	time_t updateTime;
+};
+#define MAX_PCR_ITEMS 12
+
 struct pes_extractor_s
 {
 	uint16_t pid;
@@ -43,6 +52,9 @@ struct pes_extractor_s
 	uint64_t lastCCCounter; /* Track CC loss for the pid and help prevent partial / mangles PES construction. */
 
 	struct ltntstools_stream_statistics_s *libstats;
+
+	/* PCR to ring position management */
+	struct xorg_list pcrList;
 };
 
 struct item_s
@@ -84,6 +96,16 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 			item->pes = NULL;
 			xorg_list_append(&item->list, &ctx->listOrdered);
 		} 
+	}
+
+	for (int i = 0; i < MAX_PCR_ITEMS; i++) {
+		struct pcr_item_s *e = malloc(sizeof(*e));
+		if (e) {
+			e->updateTime = time(0);
+			e->pcr = 0;
+			e->ringPos = 0;
+			xorg_list_append(&e->list, &ctx->pcrList);
+		}
 	}
 
 	*hdl = ctx;
@@ -143,6 +165,33 @@ static struct item_s * _list_find_oldest(struct pes_extractor_s *ctx)
 	return oldest;
 }
 
+static void updatePcrList(struct pes_extractor_s *ctx, int64_t pcr)
+{
+	/* Take the oldtest item, update and push to top of list. */
+	struct pcr_item_s *item = xorg_list_last_entry(&ctx->pcrList, struct pcr_item_s, list);
+	if (item) {
+		xorg_list_del(&item->list);
+		item->pcr = pcr;
+
+		/* Remember the next ring insert point (its tail) */
+		item->ringPos = ((ctx->rb->head + ctx->rb->fill) % ctx->rb->size);
+
+		item->updateTime = time(0);
+		xorg_list_add(&item->list, &ctx->pcrList);
+	}
+}
+
+void printPcrList(struct pes_extractor_s *ctx)
+{
+	int i = 0;
+	struct pcr_item_s *e = NULL, *next = NULL;
+	xorg_list_for_each_entry_safe(e, next, &ctx->pcrList, list) {
+		printf("%2d: ", i++);
+		printf("\n");
+//		itemPrint(e);
+	}
+}
+
 void ltntstools_pes_extractor_free(void *hdl)
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
@@ -155,6 +204,12 @@ void ltntstools_pes_extractor_free(void *hdl)
 			item->pes = NULL;
 			item->correctedPTS = 0;
 		}
+		xorg_list_del(&item->list);
+		free(item);
+	}
+
+	while (!xorg_list_is_empty(&ctx->pcrList)) {
+		struct pcr_item_s *item = xorg_list_first_entry(&ctx->pcrList, struct pcr_item_s, list);
 		xorg_list_del(&item->list);
 		free(item);
 	}
@@ -299,6 +354,14 @@ static int _processRing(struct pes_extractor_s *ctx)
 	return 0; /* Success */
 }
 
+int ltntstools_pes_extractor_set_pcr_pid(void *hdl, uint16_t pcrpidnr)
+{
+	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
+	ltntstools_pid_stats_pid_set_contains_pcr(ctx->libstats, pcrpidnr & 0x1fff);
+
+	return 0; /* Success */
+}
+
 ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packetCount)
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
@@ -394,6 +457,12 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			rb_empty(ctx->rb);
 			ctx->computedRingSize = 0;
 
+			if (1) {
+				int64_t pcr;
+				ltntstools_bitrate_calculator_query_stc(ctx->libstats, &pcr);
+				updatePcrList(ctx, pcr);
+			}
+	
 			/* Write new leading pes data into ring */
 			int wsize = 188 - offset;
 			ctx->computedRingSize += wsize;

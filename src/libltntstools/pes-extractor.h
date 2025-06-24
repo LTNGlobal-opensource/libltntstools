@@ -101,6 +101,8 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf);
  */
 int ltntstools_pes_extractor_set_ordered_output(void *hdl, int tf);
 
+int ltntstools_pes_extractor_set_pcr_pid(void *hdl, uint16_t pcrpidnr);
+
 #ifdef __cplusplus
 };
 #endif
