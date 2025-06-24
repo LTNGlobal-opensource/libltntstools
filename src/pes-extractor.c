@@ -40,7 +40,9 @@ struct pes_extractor_s
 
 	int computedRingSize; /* Amount of bytes we've written to the ring buffer */
 	int largestRingFrame; /* Largest ever PES we've pulled from the ring buffer - useful for sizing */
-	uint8_t lastCC;       /* Track CC loss for the pid and help prevent partial / mangles PES construction. */
+	uint64_t lastCCCounter; /* Track CC loss for the pid and help prevent partial / mangles PES construction. */
+
+	struct ltntstools_stream_statistics_s *libstats;
 };
 
 struct item_s
@@ -68,10 +70,11 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->orderedOutput = 0;
 	ctx->orderedBaseTime = 0;
 	ctx->computedRingSize = 0;
-	ctx->lastCC = 0xea;
+	ctx->lastCCCounter = 0;
 	ctx->largestRingFrame = 0;
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
+	ltntstools_pid_stats_alloc(&ctx->libstats);
 
 	/* initialize a 10 item deep list */
 	for (int i = 0; i < ORDERED_LIST_DEPTH; i++) {
@@ -155,6 +158,8 @@ void ltntstools_pes_extractor_free(void *hdl)
 		xorg_list_del(&item->list);
 		free(item);
 	}
+
+	ltntstools_pid_stats_free(ctx->libstats);
 
 	//printf("%s() ctx->largestRingFrame largest size of a pes was %d bytes\n", __func__, ctx->largestRingFrame);
 	free(ctx);
@@ -302,6 +307,10 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
+
+		/* Specifically fcall this per packet, not per buffer, for better STC generation.*/
+		ltntstools_pid_stats_update(ctx->libstats, pkt, 1);
+
 		if (ltntstools_pid(pkt) != ctx->pid)
 			continue;
 
@@ -320,9 +329,11 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		/* If we see a CC error on the pid we're extracting, restart the statemachine.
 		 * Out rule is, we won't pass malformed PES's downstream to the caller.
 		 */
-		if (ctx->lastCC != 0xea && ltntstools_isCCInError(pkt, ctx->lastCC)) {
-			printf("%s() detected pkt loss on pid 0x%04x had 0x%02x got 0x%02x\n", __func__,
-				ctx->pid, ctx->lastCC, ltntstools_continuity_counter(pkt));
+		uint64_t c = ltntstools_pid_stats_stream_get_cc_errors(ctx->libstats);
+		if (ctx->lastCCCounter != c) {
+			printf("%s() detected pkt loss on pid 0x%04x had %" PRIu64 " now %" PRIu64 "\n",
+				__func__,
+				ctx->pid, ctx->lastCCCounter, c);
 
 			/* Comment out this reset of you want to eventually send short
 			 * malformed PES packets to the callbacks.
@@ -332,7 +343,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			ctx->computedRingSize = 0;
 
 		}
-		ctx->lastCC = ltntstools_continuity_counter(pkt);
+		ctx->lastCCCounter = c;
 
 		/* We don't append packets to the ring until we've seen our first payload start indicator.
 		 * even after a CC error on this pid.
