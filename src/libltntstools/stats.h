@@ -24,6 +24,7 @@
  *      // Query CC issues on an ongoing basis.
  *      uint64_t count = ltntstools_pid_stats_stream_get_cc_errors(myStats);
  *    }
+ *    ltntstools_pid_stats_free(myStats);
  * 
  */
 #include <time.h>
