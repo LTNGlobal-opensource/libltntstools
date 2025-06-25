@@ -78,6 +78,10 @@ struct ltn_pes_packet_s
 	 */
 	unsigned char *rawBuffer;
 	uint32_t rawBufferLengthBytes;
+
+	/* Other metrics relevant to when or how this pes was parsed */
+	int64_t pcr;           /**< pcr clock when this first arrived (synthesized - accurate) */
+	int32_t arrivalMs;     /**< How long the entire PES took to arrive (ms) */
 };
 
 /**

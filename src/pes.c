@@ -7,6 +7,7 @@
 #define DISPLAY_U32(indent, fn) printf("%s%s = %d (0x%x)\n", indent, #fn, fn, fn);
 #define DISPLAY_U32_NOCR(indent, fn) printf("%s%s = %d (0x%x)", indent, #fn, fn, fn);
 #define DISPLAY_U64(indent, fn) printf("%s%s = %" PRIu64 " (0x%" PRIx64 ")\n", indent, #fn, fn, fn);
+#define DISPLAY_I64(indent, fn) printf("%s%s = %" PRIi64 " (0x%" PRIx64 ")\n", indent, #fn, fn, fn);
 #define DISPLAY_U32_SUFFIX(indent, fn, str) printf("%s%s = %d (0x%x) %s\n", indent, #fn, fn, fn, str);
 
 struct ltn_pes_packet_s *ltn_pes_packet_alloc()
@@ -564,6 +565,9 @@ static void ltn_pes_packet_dump_internal(struct ltn_pes_packet_s *pkt, const cha
 			DISPLAY_U32(i, pkt->previous_PES_packet_CRC);
 		}
 
+		DISPLAY_I64(i, pkt->pcr);
+		DISPLAY_U32(i, pkt->arrivalMs);
+		
 		if (pkt->skipPayloadParsing) {
 			DISPLAY_U32_NOCR(i, pkt->dataLengthBytes);
 			printf(" (operator opted out of parsing ~%d payload bytes)\n", pkt->PES_packet_length - pkt->PES_header_data_length);
