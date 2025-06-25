@@ -84,6 +84,7 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->computedRingSize = 0;
 	ctx->lastCCCounter = 0;
 	ctx->largestRingFrame = 0;
+	xorg_list_init(&ctx->pcrList);
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
 	ltntstools_pid_stats_alloc(&ctx->libstats);
