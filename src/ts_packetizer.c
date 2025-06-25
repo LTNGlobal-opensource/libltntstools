@@ -102,7 +102,7 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 		memset(p + 4, 0xff, 184);
 
 		if (pcr != -1 && cnt == 0) {
-			*(p + 3) = 0x20 | ((*cc) & 0x0f); /* Enable Adaption */
+			*(p + 3) = 0x30 | ((*cc) & 0x0f); /* Enable Adaption and payload */
 			*(p + 4) = 7; /* adaption_field_length */
 			*(p + 5) = 0x10; /* PCR_flag present */
 
