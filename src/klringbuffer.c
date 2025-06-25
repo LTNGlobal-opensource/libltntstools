@@ -152,6 +152,16 @@ static inline void _advance_tail(KLRingBuffer *buf, size_t bytes)
 	buf->fill += bytes;
 }
 
+unsigned int rb_get_write_pos(KLRingBuffer *buf)
+{
+	return (buf->head + buf->fill) % buf->size;
+}
+
+unsigned int rb_get_read_pos(KLRingBuffer *buf)
+{
+	return buf->head;
+}
+
 size_t rb_write_with_state(KLRingBuffer *buf, const char *from, size_t bytes, int *didOverflow)
 {
 	assert(buf);

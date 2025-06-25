@@ -170,4 +170,7 @@ void rb_free(KLRingBuffer *buf);
  */
 void rb_discard(KLRingBuffer *buf, size_t bytes);
 
+unsigned int rb_get_write_pos(KLRingBuffer *buf);
+unsigned int rb_get_read_pos(KLRingBuffer *buf);
+
 #endif /* KLRINGBUFFER_H */
