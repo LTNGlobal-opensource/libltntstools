@@ -26,6 +26,28 @@
  *    }
  *    ltntstools_pid_stats_free(myStats);
  * 
+ * Here's another use case, also monitoring CC errors:
+ * 
+ * static void *notification_callback(struct stream_s *stream,
+ *  enum ltntstools_notification_event_e event,
+ *	const struct ltntstools_stream_statistics_s *stats,
+ *	const struct ltntstools_pid_statistics_s *pid)
+ * {
+ *   if (event == EVENT_UPDATE_STREAM_CC_COUNT) { ... }
+ * }
+ * 
+ * main() {
+ *    struct ltntstools_stream_statistics_s *myStats;
+ *    ltntstools_pid_stats_alloc(&myStats);
+ *    ltntstools_notification_register_callback(stream->libstats, EVENT_UPDATE_STREAM_CC_COUNT, mycontext, (ltntstools_notification_callback)notification_callback);
+ *
+ *    while (1) {
+ *      ltntstools_pid_stats_update(myStats, pkts, 7);
+ *    }
+ *    ltntstools_notification_unregister_callback(myStats, EVENT_UPDATE_STREAM_CC_COUNT);
+ *    ltntstools_pid_stats_free(myStats);
+ * }
+ * 
  */
 #include <time.h>
 #include <inttypes.h>
