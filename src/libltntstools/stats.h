@@ -60,12 +60,14 @@ extern "C" {
 
 #define MAX_PID 8192
 
-#define LTNTSTOOLS_CC_REORDER_LIST_SIZE 32
-#define LTNTSTOOLS_CC_REORDER_TRACKING_COUNT 16
+#define EXPERIMENTAL_REORDERING 0
 
 struct ltntstools_pid_statistics_s;
 struct ltntstools_stream_statistics_s;
 
+#if EXPERIMENTAL_REORDERING
+#define LTNTSTOOLS_CC_REORDER_LIST_SIZE 32
+#define LTNTSTOOLS_CC_REORDER_TRACKING_COUNT 16
 struct ltntstools_cc_reorder_table_s
 {
         uint16_t pid;                           /* We don't need this */
@@ -74,6 +76,7 @@ struct ltntstools_cc_reorder_table_s
         uint8_t  arr[LTNTSTOOLS_CC_REORDER_LIST_SIZE];
         uint32_t ccerror[LTNTSTOOLS_CC_REORDER_LIST_SIZE];
 };
+#endif
 
 struct ltntstools_bc_ctx_s
 {
@@ -146,8 +149,9 @@ struct ltntstools_pid_statistics_s
 	struct ltn_histogram_s *pcrWallDrift; /** < Measure PCR vs Walltime and look for clock drift */
 	int64_t lastPCRWalltimeDriftMs;       /** amount of drift in ms, positive or minus, from walltime. */
 
+#if EXPERIMENTAL_REORDERING
 	struct ltntstools_cc_reorder_table_s *reorderTable; /** Detect UDP packet reordering */
-
+#endif
 	/* Track PES or section delivery time - how long the item spent getting here */
 	struct timeval pusi_time_first;   /**< walltime of last payload_unit_start_indicator=1(PUSI) event */
 	struct timeval pusi_time_current; /**< walltime of last packet on this pid */
@@ -168,8 +172,9 @@ struct ltntstools_stream_statistics_s
 	uint64_t scrambledCount;       /**< Total number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Total number of times the PCR interval has exceeded 40ms */
 	uint64_t prev_pcrExceeds40ms;  /**< Prior value of pcrExceeds40ms, updated every ltntstools_pid_stats_update() call */
+#if EXPERIMENTAL_REORDERING
 	uint64_t reorderErrors;        /**< Total number of times we've seen out of order packets create CC errors */
-
+#endif
 	time_t pps_last_update;        /**< Maintain a packets per second count, we can convert this into Mb/ps */
 	uint32_t pps;                  /**< Helper var for computing bitrate */
 	uint32_t pps_window;           /**< Helper var for computing bitrate */
@@ -280,12 +285,14 @@ double   ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_st
  */
 double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 
+#if EXPERIMENTAL_REORDERING
 /**
  * @brief       Query TRANSPORT stream, cumulative count of out of order UDP frame issues measured. (DISABLED)
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @return      double - bitrate
  */
 uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream);
+#endif
 
 /**
  * @brief       Query TRANSPORT stream - transport packets per second.

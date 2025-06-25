@@ -3,12 +3,14 @@
 #include "libltntstools/ltntstools.h"
 
 /* Forward defines */
+#if EXPERIMENTAL_REORDERING
 uint32_t ltntstools_cc_reorder_table_readpos(struct ltntstools_cc_reorder_table_s *t, int offset);
 void     ltntstools_cc_reorder_table_add(struct ltntstools_cc_reorder_table_s *t, uint16_t pid, uint8_t cc, int isCCError);
 void     ltntstools_cc_reorder_table_sum(struct ltntstools_cc_reorder_table_s *t, uint32_t *value, uint32_t *ccerrors);
 void     ltntstools_cc_reorder_table_print(struct ltntstools_cc_reorder_table_s *t);
 int      ltntstools_cc_reorder_table_corelate(struct ltntstools_cc_reorder_table_s *t);
 void     ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s *t);
+#endif
 static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *stream, struct timeval *ts);
 
 static int ltntstools_bitrate_calculator_init(struct ltntstools_stream_statistics_s *stream, uint16_t pcrpidnr);
@@ -260,10 +262,12 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		}
 		pid->pusi_time_current = ts;
 
+#if EXPERIMENTAL_REORDERING
 		if (0 && pid->packetCount == 1) { /* DISABLED */
 			/* Initialize the packet re-order table for the discovered pid */
 			pid->reorderTable = calloc(1, sizeof(struct ltntstools_cc_reorder_table_s));			
 		}
+#endif
 
 		if (now != pid->pps_last_update) {
 			pid->pps = pid->pps_window;
@@ -284,11 +288,12 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			}
 		}
 
+#if EXPERIMENTAL_REORDERING
 		if (pid->reorderTable) {
 			ltntstools_cc_reorder_table_add(pid->reorderTable, pidnr, cc, isCCError);
 			stream->reorderErrors += ltntstools_cc_reorder_table_corelate(pid->reorderTable);
 		}
-
+#endif
 		uint8_t sc = ltntstools_transport_scrambling_control(pkts + offset);
 		if (sc != 0) {
 			pid->scrambledCount++;
@@ -390,7 +395,9 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->ccErrors = 0;
 	stream->last_cc_error = 0;
 	stream->mbps = 0;
+#if EXPERIMENTAL_REORDERING
 	stream->reorderErrors = 0;
+#endif
 	stream->notMultipleOfSevenError = 0;
 	stream->last_notMultipleOfSeven_error = 0;
 	stream->iat_lwm_us = 50000000;
@@ -419,9 +426,11 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 		if (stream->pids[i].pcrWallDrift) {
 			ltn_histogram_reset(stream->pids[i].pcrWallDrift);
 		}
+#if EXPERIMENTAL_REORDERING
 		if (stream->pids[i].reorderTable) {
 			ltntstools_cc_reorder_table_reset(stream->pids[i].reorderTable);
 		}
+#endif
 	}
 }
 
@@ -461,10 +470,12 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 			ltn_histogram_free(stream->pids[i].pcrWallDrift);
 			stream->pids[i].pcrWallDrift = NULL;
 		}
+#if EXPERIMENTAL_REORDERING
 		if (stream->pids[i].reorderTable) {
 			free(stream->pids[i].reorderTable);
 			stream->pids[i].reorderTable = NULL;
 		}
+#endif
 	}
 
 	free(stream);
@@ -521,10 +532,12 @@ uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_
 	return stream->ccErrors;
 }
 
+#if EXPERIMENTAL_REORDERING
 uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream)
 {
 	return stream->reorderErrors;
 }
+#endif
 
 uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream)
 {
@@ -694,6 +707,7 @@ void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream,
 	}
 }
 
+#if EXPERIMENTAL_REORDERING
 uint32_t ltntstools_cc_reorder_table_readpos(struct ltntstools_cc_reorder_table_s *t, int offset)
 {
         return ((t->writeIdx + 12) + offset) % LTNTSTOOLS_CC_REORDER_LIST_SIZE;
@@ -759,6 +773,7 @@ void ltntstools_cc_reorder_table_print(struct ltntstools_cc_reorder_table_s *t)
                 printf("reordertable: arr[%2d] 0x%02x %02d, error %d\n", i, t->arr[i], t->arr[i], t->ccerror[i]);
         }
 }
+#endif
 
 uint64_t ltntstools_pid_stats_stream_get_notmultipleofseven_errors(struct ltntstools_stream_statistics_s *stream)
 {
