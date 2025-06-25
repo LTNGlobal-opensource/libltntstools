@@ -55,6 +55,7 @@ struct pes_extractor_s
 
 	/* PCR to ring position management */
 	struct xorg_list pcrList;
+	uint32_t pusi_time_ms; /* Arrival duration of the entire pes */
 };
 
 struct item_s
@@ -63,6 +64,17 @@ struct item_s
 	int64_t correctedPTS; /* true 64bit number where when the PTS wrapper we don't truncate, always increasing value. */
 	struct ltn_pes_packet_s *pes;
 };
+
+static void *notification_callback(struct pes_extractor_s *ctx, enum ltntstools_notification_event_e event,
+	const struct ltntstools_stream_statistics_s *stats,
+	const struct ltntstools_pid_statistics_s *pid)
+{
+	if (event == EVENT_UPDATE_PID_PUSI_DELIVERY_TIME) {
+		ctx->pusi_time_ms = pid->pusi_time_ms;
+	}
+
+	return NULL;
+}
 
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
@@ -88,6 +100,8 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
 	ltntstools_pid_stats_alloc(&ctx->libstats);
+	ltntstools_notification_register_callback(ctx->libstats, EVENT_UPDATE_PID_PUSI_DELIVERY_TIME,
+		ctx, (ltntstools_notification_callback)notification_callback);
 
 	/* initialize a 10 item deep list */
 	for (int i = 0; i < ORDERED_LIST_DEPTH; i++) {
@@ -166,7 +180,7 @@ static struct item_s * _list_find_oldest(struct pes_extractor_s *ctx)
 	return oldest;
 }
 
-static void updatePcrList(struct pes_extractor_s *ctx, int64_t pcr)
+static void updatePcrList(struct pes_extractor_s *ctx, int64_t pcr, unsigned int ringPos)
 {
 	/* Take the oldtest item, update and push to top of list. */
 	struct pcr_item_s *item = xorg_list_last_entry(&ctx->pcrList, struct pcr_item_s, list);
@@ -175,11 +189,20 @@ static void updatePcrList(struct pes_extractor_s *ctx, int64_t pcr)
 		item->pcr = pcr;
 
 		/* Remember the next ring insert point (its tail) */
-		item->ringPos = ((ctx->rb->head + ctx->rb->fill) % ctx->rb->size);
+		item->ringPos = ringPos;
 
 		item->updateTime = time(0);
 		xorg_list_add(&item->list, &ctx->pcrList);
 	}
+#if LOCAL_DEBUG
+	printPcrList(ctx);
+#endif
+}
+
+#if LOCAL_DEBUG
+void printPcrItem(struct pes_extractor_s *ctx, int nr, struct pcr_item_s *e)
+{
+	printf("%2d: pcr %14" PRIi64 " pos %8d time %12d\n", nr, e->pcr, e->ringPos, (int)e->updateTime);
 }
 
 void printPcrList(struct pes_extractor_s *ctx)
@@ -187,10 +210,22 @@ void printPcrList(struct pes_extractor_s *ctx)
 	int i = 0;
 	struct pcr_item_s *e = NULL, *next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &ctx->pcrList, list) {
-		printf("%2d: ", i++);
-		printf("\n");
-//		itemPrint(e);
+		printPcrItem(ctx, i++, e);
 	}
+}
+#endif
+
+/* For a given position in the ring buffer, find it's actual or synthesized PCR */
+int64_t findPcrFromPosition(struct pes_extractor_s *ctx, unsigned int ringPos)
+{
+	struct pcr_item_s *e = NULL, *next = NULL;
+	xorg_list_for_each_entry_safe(e, next, &ctx->pcrList, list) {
+		if (e->ringPos == ringPos) {
+			return e->pcr;
+		}
+	}
+
+	return -1;
 }
 
 void ltntstools_pes_extractor_free(void *hdl)
@@ -215,6 +250,7 @@ void ltntstools_pes_extractor_free(void *hdl)
 		free(item);
 	}
 
+	ltntstools_notification_unregister_callbacks(ctx->libstats);
 	ltntstools_pid_stats_free(ctx->libstats);
 
 	//printf("%s() ctx->largestRingFrame largest size of a pes was %d bytes\n", __func__, ctx->largestRingFrame);
@@ -284,6 +320,12 @@ static int _processRing(struct pes_extractor_s *ctx)
 
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
+
+			pes->pcr = findPcrFromPosition(ctx, rb_get_read_pos(ctx->rb));
+			if (pes->pcr == -1) {
+				fprintf(stderr, "%s() this should never happen, pcr was negative\n", __func__);
+			}
+			pes->arrivalMs = ctx->pusi_time_ms;
 
 			/* check for buffer overrun */
 			if (bs.overrun) {
@@ -461,9 +503,15 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			if (1) {
 				int64_t pcr;
 				ltntstools_bitrate_calculator_query_stc(ctx->libstats, &pcr);
-				updatePcrList(ctx, pcr);
+
+				/* The need to put rongpos and pcr on a list might be redundant, during
+				 * testing the ring pos was always zero for any pcr.
+				 * However, when the PCR isn't on the PES then we'll need this mechanism,
+				 * so, keep it for now - future improvement.
+				 */
+				updatePcrList(ctx, pcr, rb_get_write_pos(ctx->rb));
 			}
-	
+
 			/* Write new leading pes data into ring */
 			int wsize = 188 - offset;
 			ctx->computedRingSize += wsize;
