@@ -116,7 +116,7 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 			*(p + 11) = ext & 0xff;
 
 			payload_offset += 8;
-			cpy -= payload_offset;
+			cpy -= 8;
 		}
 		memcpy(p + payload_offset, buf + pos, cpy);
 		pos += cpy;
