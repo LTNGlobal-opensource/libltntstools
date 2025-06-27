@@ -32,7 +32,9 @@
 extern "C" {
 #endif
 
-#define VBV_CODEC_H264 1
+#define VBV_CODEC_H264  1
+#define VBV_CODEC_H265  2 /**< Not yet supported */
+#define VBV_CODEC_MPEG2 3 /**< Not yet supported */
 
 enum ltntstools_vbv_event_e {
 	EVENT_VBV_UNDEFINED = 0,
@@ -53,6 +55,14 @@ struct vbv_decoder_profile_s
     uint32_t vbv_buffer_size; /**< Optional (Bytes). 0 will assume the default 819200 buffer. See ISO14496-10 Annex A */
     double framerate;         /**< Mandatory: 23.98, 24, 25, 29.97, 30, 50, 59.94, or 60. */
 };
+
+/**
+ * @brief       For a given codec, Eg. VBV_CODEC_H264, IDC and framrate, configure the VBV buffer profile.
+ *              Do this before calling ltntstools_vbv_alloc(). Don't forget to validate the profile
+ *              using ltntstools_vbv_profile_validate().
+ * @param[in]   struct vbv_decoder_profile_s - VBV decoder profile
+ * @return      True on value, else false,
+ */
 int ltntstools_vbv_profile_validate(struct vbv_decoder_profile_s *dp);
 
 /**
@@ -87,8 +97,22 @@ int ltntstools_vbv_write(void *hdl, const struct ltn_pes_packet_s *pkt);
  */
 const char *ltntstools_vbv_event_name(enum ltntstools_vbv_event_e e);
 
+/**
+ * @brief       For a given codec, Eg. VBV_CODEC_H264, lookup the VBV buffersize for a given IDC (level)
+ * @param[in]   int codec - VBV_CODEC_H264
+ * @param[in]   int levelX10 - The level, or ODC, Eg. for 3.1 use 31
+ * @return      0 on success, else < 0.
+ */
 int ltntstools_vbv_bitrate_lookup(int codec, int levelX10);
 
+/**
+ * @brief       For a given codec, Eg. VBV_CODEC_H264, IDC and framrate, configure the VBV buffer profile.
+ *              Do this before calling ltntstools_vbv_alloc(). Don't forget to validate the profile
+ *              using ltntstools_vbv_profile_validate().
+ * @param[in]   int codec - VBV_CODEC_H264
+ * @param[in]   int levelX10 - The level, or ODC, Eg. for 3.1 use 31
+ * @return      0 on success, else < 0.
+ */
 int ltntstools_vbv_profile_defaults(struct vbv_decoder_profile_s *p, int codec, int levelX10, double framerate);
 
 #ifdef __cplusplus
