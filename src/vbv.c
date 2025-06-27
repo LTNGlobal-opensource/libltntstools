@@ -149,7 +149,7 @@ static struct vbv_statistic_s *getStatisticForEvent(struct vbv_ctx_s *ctx, enum 
 	if (e == EVENT_VBV_FULLNESS_PCT) {
 		return &ctx->stats.fullness;
 	} else {
-		printf("%s() no stat for event %s (%d), fixme\n",
+		fprintf(stderr, MODULE_PREFIX "%s() no stat for event %s (%d), fixme\n",
 			__func__, ltntstools_vbv_event_name(e), e);
 	}
 
@@ -167,7 +167,7 @@ static void raiseEvent(struct vbv_ctx_s *ctx, enum ltntstools_vbv_event_e e)
 	if (ctx->verbose) {
 		struct timeval ts;
 		gettimeofday(&ts, NULL);
-		printf("%d.%06d: %s pid 0x%04x\n", (int)ts.tv_sec, (int)ts.tv_usec, ltntstools_vbv_event_name(e), ctx->pid);
+		printf(MODULE_PREFIX "%d.%06d: %s pid 0x%04x\n", (int)ts.tv_sec, (int)ts.tv_usec, ltntstools_vbv_event_name(e), ctx->pid);
 	}
 
 	if (ctx->cb) {
@@ -375,7 +375,7 @@ int ltntstools_vbv_write(void *hdl, const struct ltn_pes_packet_s *pkt)
 
 	/* Attempting to write more payload into a full buffer should trigger an overflow. */
 	if (addItem(ctx, pkt) < 0) {
-
+		return -1; /* Failed */
 	}
 
 	return 0; /* Success*/
@@ -464,7 +464,7 @@ static void * vbv_threadFunc(void *p)
 			if (ctx->verbose) {
 				struct timeval ts;
 				gettimeofday(&ts, NULL);
-				printf("%d.%06d: decoder STC %14" PRIi64 ", got PTS %14" PRIi64 " DTS %14" PRIi64 " vbv: %8d / %5.2f%%\n",
+				printf(MODULE_PREFIX "%d.%06d: decoder STC %14" PRIi64 ", got PTS %14" PRIi64 " DTS %14" PRIi64 " vbv: %8d / %5.2f%%\n",
 					(int)ts.tv_sec, (int)ts.tv_usec,
 					ctx->decoder_stc,
 					item->pkt.PTS, item->pkt.DTS,
