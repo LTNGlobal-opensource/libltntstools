@@ -133,6 +133,18 @@ const char *ltntstools_vbv_event_name(enum ltntstools_vbv_event_e e)
 	}
 }
 
+int ltntstools_vbv_verbose(void *hdl, uint32_t level)
+{
+	struct vbv_ctx_s *ctx = (struct vbv_ctx_s *)hdl;
+	if (!ctx) {
+		return -1;
+	}
+
+	ctx->verbose = level;
+
+	return 0; /* Success */
+}
+
 static void statsReset(struct vbv_ctx_s *ctx)
 {
 	memset(&ctx->stats, 0, sizeof(ctx->stats));
@@ -343,7 +355,7 @@ int ltntstools_vbv_alloc(void **hdl, uint16_t pid, vbv_callback cb, void *userCo
 	ctx->dts_lwm = INT64_MAX;
 	ctx->dts_last = INT64_MAX;
 	ctx->decoder_stc = INT64_MAX;
-	ctx->verbose = 1;
+	ctx->verbose = 0;
 
 	statsReset(ctx);
 

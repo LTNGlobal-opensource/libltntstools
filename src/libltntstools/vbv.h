@@ -115,6 +115,13 @@ int ltntstools_vbv_bitrate_lookup(int codec, int levelX10);
  */
 int ltntstools_vbv_profile_defaults(struct vbv_decoder_profile_s *p, int codec, int levelX10, double framerate);
 
+/**
+ * @brief       Increase debug verbosity level.
+ * @param[in]   uint32_t level - higher levels increase verbosity
+ * @return      0 on success, else < 0.
+ */
+int ltntstools_vbv_verbose(void *hdl, uint32_t level);
+
 #ifdef __cplusplus
 };
 #endif
