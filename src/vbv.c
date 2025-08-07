@@ -502,7 +502,12 @@ static void * vbv_threadFunc(void *p)
 			next_time.tv_nsec -= 1000000000;
 			next_time.tv_sec += 1;
 		}
+#ifdef __linux__
 		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next_time, NULL);
+#endif
+#ifdef __APPLE__
+		nanosleep(&next_time, NULL);
+#endif
 		ctx->decoder_stc += framerateToTicks(ctx->decoder_profile.framerate);
 	}
 	ctx->threadRunning = 1;
