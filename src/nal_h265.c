@@ -410,8 +410,6 @@ void h265_slice_counter_reset_pid(void *ctx, uint16_t pid)
 
 
 /* See Rec. ITU-T H.265 v5 (02/2018) Page 287 */
-#define H265_NAL_TYPE_SEI 0x06
-
 static struct h265SEI_s {
 	const char *name;
 	const char *type;
@@ -508,8 +506,9 @@ int ltn_sei_h265_find_headers(struct ltn_nal_headers_s *nals, int nalArrayLength
 
 	struct ltn_sei_headers_s *hdr = *array;
 
+	/* TODO: ST - This was refactored and copied from H264 with no testing. Fair warning. */
 	for (int i = 0; i < nalArrayLength; i++) {
-		if (nals[i].nalType == H265_NAL_TYPE_SEI) {
+		if (nals[i].nalType == 39 || nals[i].nalType == 40) {
 
 			uint8_t seiType = nals[i].ptr[4]; /* SEI Sub Type, buffer_period 0, PIC_TIMING 1, etc */
 

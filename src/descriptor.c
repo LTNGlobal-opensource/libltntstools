@@ -27,6 +27,24 @@ int ltntstools_descriptor_list_add(struct ltntstools_descriptor_list_s *list,
 	return 0;
 }
 
+int ltntstools_descriptor_list_contains_smpte2064_registration(struct ltntstools_descriptor_list_s *list)
+{
+	int found = 0;
+
+	for (int i = 0; i < list->count; i++) {
+		struct ltntstools_descriptor_entry_s *d = &list->array[i];
+
+		if (d->tag == 0x05 && d->len == 0x04) {
+			if (d->data[0] == 'L' && d->data[1] == 'I' && d->data[2] == 'P' && d->data[3] == 'S') {
+				found = 1;
+				break;
+			}
+		}
+	}
+
+	return found;
+}
+
 int ltntstools_descriptor_list_contains_scte35_cue_registration(struct ltntstools_descriptor_list_s *list)
 {
 	int found = 0;
