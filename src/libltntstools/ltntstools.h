@@ -52,3 +52,4 @@
 #include <libltntstools/rtp-analyzer.h>
 #include <libltntstools/ac3.h>
 #include <libltntstools/vbv.h>
+#include <libltntstools/nal_bitreader.h>
