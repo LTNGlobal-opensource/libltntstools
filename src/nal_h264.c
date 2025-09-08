@@ -5,6 +5,36 @@
 
 #include <libltntstools/nal_bitreader.h>
 
+/*
+ * See ISO-14496-10:2004 section 7.3.1 NAL unit Syntax.
+ */
+int ltn_nal_h264_strip_emulation_prevention(struct ltn_nal_headers_s *h)
+{
+	if (!h) {
+		return -1;
+	}
+
+	if (!h->ptr || h->lengthBytes < 4) {
+		return -1;
+	}
+
+	int dropped = 0;
+	for (unsigned int i = 1; i < h->lengthBytes; i++) {
+		if (i + 2 < h->lengthBytes &&
+			h->ptr[i + 0] == 0x00 &&
+			h->ptr[i + 1] == 0x00 &&
+			h->ptr[i + 2] == 0x03)
+		{
+				/* Convert 00 00 03 to 00 00 */
+				memcpy((unsigned char *)&h->ptr[i + 2], &h->ptr[i + 3], h->lengthBytes - i - 3);
+				dropped++;
+		}
+	}
+	h->lengthBytes -= dropped;
+
+	return 0; /* Success */
+}
+
 int ltn_nal_h264_find_headers(const uint8_t *buf, int lengthBytes, struct ltn_nal_headers_s **array, int *arrayLength)
 {
 	int idx = 0;

@@ -118,4 +118,13 @@ int ltn_sei_h264_find_headers(struct ltn_nal_headers_s *nals, int nalArrayLength
 /* Guaranteed to return a usable string, even if the sei Type is invalid */
 const char *ltn_sei_h264_lookupName(int seiType);
 
+/**
+ * @brief         Strip the RBSP emulation prevents bytes from a nal header. Necessary for SEI processing typically.
+ *                The ptr field buffer and lengthBytes fields are adjusted.
+ * @param[in]     struct ltn_nal_headers_s *h - Nal to modify
+ * @return          0 - Success
+ * @return        < 0 - Error
+ */
+int ltn_nal_h264_strip_emulation_prevention(struct ltn_nal_headers_s *h);
+
 #endif /* NAL_H264_H */
