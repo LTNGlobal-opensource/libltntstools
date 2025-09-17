@@ -89,6 +89,7 @@ struct ltntstools_bc_ctx_s
 	int64_t ticksPerPCR;
 	int64_t ticksPerPacket;        /**< Per transport packet */
 	int64_t stc;                   /**< System Target Clock. We establish this through PCRs then advance it it per packet. */
+	uint64_t ccErrorsStreamLastWrite;    /**< Cache the stream cc error count from the last write call. Used to drive BC resets. */
 };
 
 enum ltntstools_notification_event_e {

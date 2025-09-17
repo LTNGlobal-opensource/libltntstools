@@ -794,6 +794,7 @@ static int ltntstools_bitrate_calculator_init(struct ltntstools_stream_statistic
 {
 	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
 	bcctx->pcrpidnr = pcrpidnr;
+	bcctx->ccErrorsStreamLastWrite = ltntstools_pid_stats_stream_get_ccerror_count(stream);
 
 	ltntstools_bitrate_calculator_reset(stream);
 	return 0; /* Success */
@@ -806,7 +807,7 @@ static void ltntstools_bitrate_calculator_reset(struct ltntstools_stream_statist
 	bcctx->pcrSecond = -1;
 	bcctx->packetsInbetween = 0;
 	bcctx->running = 1;
-	/* Intensionally, don't reset bps or stc */
+	/* Intensionally, don't reset bps or stc, or the cached ccErrors */
 }
 
 static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, unsigned int packetCount, int *complete)
@@ -829,9 +830,10 @@ static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statisti
 		const uint8_t *pkt = pkts + (i * 188);
 
 		/* If we see a CC error anywhere, it effects the bitrate calculation, reset the state machine and try again. */
-		if (ltntstools_pid_stats_stream_get_ccerror_count(stream)) {
-			printf("%s() detected pkt loss on stream, restarting state machine\n", __func__);
+		uint64_t cc = ltntstools_pid_stats_stream_get_ccerror_count(stream);
+		if (bcctx->ccErrorsStreamLastWrite != cc) {
 			ltntstools_bitrate_calculator_reset(stream);
+			bcctx->ccErrorsStreamLastWrite = cc; /* Cache the cc error count from the last write call. */
 			return 0; /* We'll call it success and expeect to start again cleanly.*/
 		}
 
