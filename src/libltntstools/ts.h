@@ -149,6 +149,14 @@ static inline uint8_t ltntstools_continuity_counter(const uint8_t *pkt)
 }
 
 /**
+ * @brief       Write a PCR value into a byte array conformant to the PCR field in MPEG-TS header (48-bit base+reserved+ext)
+ * @param[out]  uint8_t *dst - Pointer to insert into (e.g. "pkt + 6")
+ * @param[in]   int lengthBytes - Byte range of dst to not exceed
+ * @param[in]   uint64_t pcr - PCR value to write into dst
+ */
+void ltntstools_pcr_packTo(uint8_t *dst, int lengthBytes, uint64_t pcr);
+
+/**
  * @brief       In a SCR/PCR clock, subtract 'from' from 'to', compensate for a clock
  *              wrap and return a positive number of ticks.
  * @param[in]   int64_t from - tick value
