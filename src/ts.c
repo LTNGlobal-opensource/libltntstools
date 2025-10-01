@@ -61,7 +61,7 @@ void ltntstools_pcr_packTo(uint8_t *dst, int lengthBytes, uint64_t pcr)
 
 	/* Base is 90KHz clock, ext is 27MHz clock */
 	uint64_t base = (pcr / 300);
-	uint64_t ext = pcr & 0x1ff;
+	uint64_t ext = (pcr % 300);
 
 	*(dst + 0)  = base >> 25LL;
 	*(dst + 1)  = base >> 17LL;
