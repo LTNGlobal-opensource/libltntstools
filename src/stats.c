@@ -251,6 +251,11 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		pid->enabled = 1;
 		pid->packetCount++;
 
+		if (ltntstools_isPayloadPUSIInError(pkts + offset)) {
+			pid->payloadPUSIErrors++;
+			stream->payloadPUSIErrors++;
+		}
+
 		/* Per pid, of PUSI is being used, track the time we see the header
 		 * and the time we see the last write on this pid (pusi_time_current).
 		 * When a PUSI arrives, calculate the difference and make it available.
