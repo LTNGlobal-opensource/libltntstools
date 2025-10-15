@@ -131,6 +131,7 @@ struct ltntstools_pid_statistics_s
 	uint64_t scrambledCount;       /**< Number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Number of times the PCR interval has exceeded 40ms */
 	uint64_t prev_pcrExceeds40ms;  /**< Prior value of pcrExceeds40ms, updated every ltntstools_pid_stats_update() call */
+	uint64_t payloadPUSIErrors;    /**< Number of times an illegal combination of PSUI and adaption fields occurs. */
 
 	uint8_t  lastCC;               /**< Last CC value sobserved */
 
@@ -173,6 +174,7 @@ struct ltntstools_stream_statistics_s
 	uint64_t scrambledCount;       /**< Total number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Total number of times the PCR interval has exceeded 40ms */
 	uint64_t prev_pcrExceeds40ms;  /**< Prior value of pcrExceeds40ms, updated every ltntstools_pid_stats_update() call */
+	uint64_t payloadPUSIErrors;    /**< Number of times an illegal combination of PSUI and adaption fields occurs. */
 #if EXPERIMENTAL_REORDERING
 	uint64_t reorderErrors;        /**< Total number of times we've seen out of order packets create CC errors */
 #endif
@@ -393,6 +395,22 @@ uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statis
  * @return      Boolean.
  */
 int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query pid specific total errors for the PSUI / Adaption payload invalid combinations.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      Error count
+ */
+uint64_t ltntstools_pid_stats_pid_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query stream total errors for the PSUI / Adaption payload invalid combinations.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      Error count
+ */
+uint64_t ltntstools_pid_stats_stream_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT, bitrate in Mb/ps, specifically for input pid.

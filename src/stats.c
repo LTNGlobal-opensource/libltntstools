@@ -935,3 +935,14 @@ int ltntstools_bitrate_calculator_query_stc(struct ltntstools_stream_statistics_
 
 	return 0; /* Success */
 }
+
+uint64_t ltntstools_pid_stats_stream_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->payloadPUSIErrors;
+}
+
+uint64_t ltntstools_pid_stats_pid_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	return pid->payloadPUSIErrors;
+}
