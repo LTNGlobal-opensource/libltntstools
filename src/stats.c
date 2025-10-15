@@ -80,6 +80,18 @@ int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC)
 	return 1;
 }
 
+int ltntstools_isPayloadPUSIInError(const uint8_t *pkt)
+{
+	unsigned int adap = ltntstools_adaption_field_control(pkt);
+
+	/* If illegal adaption or adaption only, and PUSI is set, consider it an error */
+	if (((adap == 0) || (adap == 2)) && ltntstools_payload_unit_start_indicator(pkt)) {
+		return 1;
+	}
+
+	return 0;
+}
+
 void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes)
 {
 	time_t now;

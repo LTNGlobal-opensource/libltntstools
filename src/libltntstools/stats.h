@@ -222,6 +222,14 @@ struct ltntstools_stream_statistics_s
 int ltntstools_isCCInError(const uint8_t *pkt, uint8_t oldCC);
 
 /**
+ * @brief       For a given packet check if the adaption field control and payload_unit_start_indicator
+ *              are in a valid combination, or not.
+ * @param[in]   const uint8_t *pkt - A fully aligned single transport packet.
+ * @return      Boolean.
+ */
+int ltntstools_isPayloadPUSIInError(const uint8_t *pkt);
+
+/**
  * @brief       Write an entire MPTS into the framework, update the stream and pid statistics.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @param[in]   const uint8_t *pkts - one or more aligned transport packets
