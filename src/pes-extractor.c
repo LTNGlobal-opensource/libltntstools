@@ -451,6 +451,10 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		}
 		ctx->lastCCCounter = c;
 
+		if (ltntstools_adaption_field_control(pkt) == 0x02 /* Adaption only */) {
+			continue;
+		}
+
 		/* We don't append packets to the ring until we've seen our first payload start indicator.
 		 * even after a CC error on this pid.
 		 */
