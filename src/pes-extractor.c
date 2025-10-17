@@ -7,7 +7,7 @@
 #include "klbitstream_readwriter.h"
 
 #define LOCAL_DEBUG 0
-#define ORDERED_LIST_DEPTH 10
+#define ORDERED_LIST_DEPTH 60
 #define SIMULATE_TS_PACKET_LOSS 0
 
 struct pcr_item_s
@@ -56,6 +56,8 @@ struct pes_extractor_s
 	/* PCR to ring position management */
 	struct xorg_list pcrList;
 	uint32_t pusi_time_ms; /* Arrival duration of the entire pes */
+
+	int preventWrites; /* Used prevent write calls from modifying resources */
 };
 
 struct item_s
@@ -96,6 +98,7 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->computedRingSize = 0;
 	ctx->lastCCCounter = 0;
 	ctx->largestRingFrame = 0;
+	ctx->preventWrites = 0;
 	xorg_list_init(&ctx->pcrList);
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
@@ -228,10 +231,47 @@ int64_t findPcrFromPosition(struct pes_extractor_s *ctx, unsigned int ringPos)
 	return -1;
 }
 
+/* Called exclusively from ltntstools_pes_extractor_free().
+ * We're shutting down, flush any cached PES's otherwise we'll short
+ * any tools any important ES data.
+ * Only applicable when the caller has initialize this framework
+ * with ltntstools_pes_extractor_set_ordered_output(ctx, TRUE);
+ */
+void _flushOrderedOutput(struct pes_extractor_s *ctx)
+{
+	/* Send the PES's to the callback in the correct temporal order,
+	 * which compensates for B frames. Delete the list item because
+	 * we're in the process of shutting down.
+	 */
+	struct item_s *item = _list_find_oldest(ctx);
+	while (item) {
+		if (item->pes) {
+			/* User owns the lifetime of the object */
+			ctx->cb(ctx->userContext, item->pes);
+		}
+
+		xorg_list_del(&item->list);
+		item->pes = NULL;
+		item->correctedPTS = 0;
+		free(item);
+
+		ctx->lastDeliveredPTS = item->pes->PTS;
+
+		item = _list_find_oldest(ctx);
+	}
+}
+
 void ltntstools_pes_extractor_free(void *hdl)
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
+
+	ctx->preventWrites = 0;
+
 	rb_free(ctx->rb);
+
+	if (!ctx->orderedOutput) {
+		_flushOrderedOutput(ctx);
+	}
 
 	while (!xorg_list_is_empty(&ctx->listOrdered)) {
 		struct item_s *item = xorg_list_first_entry(&ctx->listOrdered, struct item_s, list);
@@ -410,6 +450,11 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
 	int didOverflow;
+
+	if (ctx->preventWrites) {
+		/* Library closing down */
+		return 0; /* Failed */
+	}
 
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
