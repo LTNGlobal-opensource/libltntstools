@@ -269,7 +269,7 @@ void ltntstools_pes_extractor_free(void *hdl)
 
 	rb_free(ctx->rb);
 
-	if (!ctx->orderedOutput) {
+	if (ctx->orderedOutput) {
 		_flushOrderedOutput(ctx);
 	}
 
