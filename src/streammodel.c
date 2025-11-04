@@ -313,9 +313,17 @@ static void cb_pmt(void *p_zero, dvbpsi_pmt_t *p_pmt)
 #if CHATTY_CALLBACKS
 		printf("    pid 0x%04x estype %02x\n", p_es->i_pid, p_es->i_type);
 #endif
-		struct streammodel_pid_s *es = _rom_next_find_pid(ctx, p_es->i_pid);
-		es->present = 1;
-		es->pidType = PT_ES;
+		if (p_es->i_pid >= 0x10) {
+			struct streammodel_pid_s *es = _rom_next_find_pid(ctx, p_es->i_pid);
+			es->present = 1;
+			es->pidType = PT_ES;
+		} else {
+			static unsigned int complain = 1;
+			if (complain == 1) {
+				complain = 0;
+				printf("Illegal placement of ES type 0x%02x on pid 0x%04x, it's < 0x10\n", p_es->i_type, p_es->i_pid);
+			}
+		}
 
 		p_es = p_es->p_next;
 	}
