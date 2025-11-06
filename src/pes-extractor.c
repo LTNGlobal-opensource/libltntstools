@@ -250,12 +250,12 @@ void _flushOrderedOutput(struct pes_extractor_s *ctx)
 			ctx->cb(ctx->userContext, item->pes);
 		}
 
+		ctx->lastDeliveredPTS = item->pes->PTS;
+
 		xorg_list_del(&item->list);
 		item->pes = NULL;
 		item->correctedPTS = 0;
 		free(item);
-
-		ctx->lastDeliveredPTS = item->pes->PTS;
 
 		item = _list_find_oldest(ctx);
 	}
