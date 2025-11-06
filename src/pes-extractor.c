@@ -250,7 +250,7 @@ void _flushOrderedOutput(struct pes_extractor_s *ctx)
 			ctx->cb(ctx->userContext, item->pes);
 		}
 
-		ctx->lastDeliveredPTS = item->pes->PTS;
+		//ctx->lastDeliveredPTS = item->pes->PTS;
 
 		xorg_list_del(&item->list);
 		item->pes = NULL;
