@@ -55,6 +55,9 @@ enum ltntstools_tr101290_event_e
 	E101290_P2_5__PTS_ERROR,
 	E101290_P2_6__CAT_ERROR,
 
+	/* Priority 4 */
+	E101290_P4_1__UDP_DROPS,
+
 	/* Third Priority: Application Dependant Monitoring */
 	/* Not supported. */
 
