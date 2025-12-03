@@ -44,7 +44,7 @@ struct pes_extractor_s
 	int orderedOutput;
 	struct xorg_list listOrdered;
 	pthread_mutex_t listOrderedMutex;
-	int64_t orderedBaseTime;
+	int64_t orderedBaseTime; /* Increments by MAX_PTS_TIME every time we think the PTS has wrapped */
 	int64_t lastDeliveredPTS;
 
 	int computedRingSize; /* Amount of bytes we've written to the ring buffer */
@@ -385,7 +385,11 @@ static int _processRing(struct pes_extractor_s *ctx)
 
 				if (ctx->orderedOutput) {
 					/* Send the PES's to the callback in the correct temporal order,
-					 * which compensates for B frames.
+					 * which compensates for B frames. IN other words, we've just built
+					 * a pes above, but this might not be the right PES to emit to the callback,
+					 * we're trying to emit an earlier PES to maintain temporal order.
+					 * Find the oldest, calback that, and put the NEW pes we've just created in the
+					 * right place in the time ordered queue, for later emmission.
 					 */
 					struct item_s *item = _list_find_oldest(ctx);
 					if (item) {
