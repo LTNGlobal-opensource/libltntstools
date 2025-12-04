@@ -34,6 +34,16 @@ extern "C" {
 typedef unsigned int timer_t;
 #endif
 
+/* Slight pre-cursor to have PID specific alarms.
+ * This implementd a per PMT pid timer. However, we currently
+ * expose the alarm collectively, if any PMT is < 0.5s
+ */
+struct tr_pid_s
+{
+	int pmtpid;
+	struct timeval lastChanged;	/* Last time a packet occured on this pid. */
+};
+
 struct tr_event_s
 {
 	int enabled;
@@ -93,6 +103,16 @@ struct ltntstools_tr101290_s
 	uint64_t preTEIErrors;
 	uint64_t preScrambledCount;
 	struct timeval lastPAT;
+	struct ltntstools_pat_s *cachedPAT;
+
+	/* used exclusively to measure if PMTs are arriving within 0.5s
+	 * Up to a maximum of N PMTS. We scan the stream model, for each
+	 * PMT discovered we create an entry in this array, then later
+	 * enumerate it efficiently.
+	 */
+#define PMT_ARRAY_SIZE 64
+	struct tr_pid_s lastPMTArray[PMT_ARRAY_SIZE];
+	int lastPMTArrayIndex;
 
 	/* handle to a running PSIP stream modelling collector.
 	 * The streammodel parses pats, PMTs, and pulls apart

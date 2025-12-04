@@ -312,6 +312,11 @@ void ltntstools_tr101290_free(void *hdl)
 		s->logFilename = NULL;
 	}
 
+	if (s->cachedPAT) {
+		ltntstools_pat_free(s->cachedPAT);
+		s->cachedPAT = NULL;
+	}
+	
 	free(s);
 }
 

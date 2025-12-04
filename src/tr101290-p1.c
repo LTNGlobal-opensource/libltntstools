@@ -72,12 +72,29 @@ static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_p
 
 }
 
+int timer_expired(struct ltntstools_tr101290_s *s, struct timeval *tv)
+{
+	/* Make sure we got a PAT in the last 500ms */
+	struct timeval interval = { 0, 500 * 1000 };
+	struct timeval window;
+	timeradd(tv, &interval, &window);
+
+	/* Check each of the s->p2 times, if we haven't seen a packet in the last N ms, throw an alert */
+	if (timercmp(&s->now, &window, >= )) {
+		return 0;
+	}
+
+	return 1;
+}
+
 static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval time_now)
 {
 	/* Sections with table_id 0x02, (i.e. a PMT), do not occur at least every 0,5 s on the PID which is
 	 * referred to in the PAT.
 	 * Scrambling_control_field is not 00 for all PIDs containing sections with table_id 0x02 (i.e. a PMT)
 	*/
+
+	time_t now = time(NULL);
 
 	/* PMT checking */
 	int complete = 0;
@@ -86,37 +103,87 @@ static ssize_t p1_process_p1_56(struct ltntstools_tr101290_s *s, const uint8_t *
 	/* If the stream model is completing, then the PMT's must be ok.
 	 * DVBPSI enforces the scrambling control check.
 	 */
-	//printf("complete %d\n", complete);
 	if (complete) {
-		time_t now = time(NULL);
-		if (s->lastCompleteTime < now) {
-			s->lastCompleteTime = now;
 
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_5__PMT_ERROR, &time_now);
-			ltntstools_tr101290_alarm_clear(s, E101290_P1_5a__PMT_ERROR_2, &time_now);
+		struct ltntstools_pat_s *pat;
+		if (ltntstools_streammodel_query_model(s->smHandle, &pat) == 0) {
 
-			/* Performance issue. Calling query_model is too expensive to happen on
-			 * every transport packet write. Make sure we cache the results then age them out
-			 * over time. It's fine to do this once per second.
-			 */
-
-			struct ltntstools_pat_s *pat;
-			if (ltntstools_streammodel_query_model(s->smHandle, &pat) == 0) {
-
-				/* Some of the P2 PCR checks need to know which pics have PCRs.
-				 * Give the P2 processor a sneak peak at the model.
-				 */
-				p2_process_pat_model(s, pat);
-
-				/* Check 1.6 Now that we have a stream model. */
-				p1_process_p1_6(s, pat, time_now, now);
-				free(pat);
+			if (s->cachedPAT) {
+				ltntstools_pat_free(s->cachedPAT);
+				s->cachedPAT = NULL;
 			}
-		}
+			s->cachedPAT = ltntstools_pat_clone(pat);
+			s->lastCompleteTime = time(NULL);
 
+			/* Reset the array of PMTS and timers */
+			s->lastPMTArrayIndex = 0;
+			for (int i = 0; i < pat->program_count; i++) {
+				if (pat->programs[i].program_number == 0) {
+					continue;
+				}
+
+				s->lastPMTArray[ s->lastPMTArrayIndex ].pmtpid = pat->programs[i].program_map_PID;
+				s->lastPMTArray[ s->lastPMTArrayIndex ].lastChanged = time_now;
+				s->lastPMTArrayIndex++;
+
+				if (s->lastPMTArrayIndex == PMT_ARRAY_SIZE) {
+					/* safety */
+					break;
+				}
+			}
+
+			ltntstools_pat_free(pat);
+		}
 	}
 
-	/* TODO: What should we be doing here? */
+	/* We might already have a cached PAT from the last time the model
+	 * changed. Run our checks against it.
+	 */
+	if (s->cachedPAT) {
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_5__PMT_ERROR, &time_now);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_5a__PMT_ERROR_2, &time_now);
+
+		/* Some of the P2 PCR checks need to know which pics have PCRs.
+			* Give the P2 processor a sneak peak at the model.
+			*/
+		p2_process_pat_model(s, s->cachedPAT);
+
+		/* Check 1.6 Now that we have a stream model. */
+		p1_process_p1_6(s, s->cachedPAT, time_now, now);
+	}
+
+	for (int i = 0; i < packetCount; i++) {
+		uint16_t pid = ltntstools_pid(&buf[i * 188]);
+		if (pid == 0 || pid == 0x1fff) {
+			continue;
+		}
+
+		/* Lookup pid in PMT table, when found advance its time */
+		for (int j = 0; j < s->lastPMTArrayIndex; j++) {
+			if (pid == s->lastPMTArray[j].pmtpid) {
+				/* Reset the timer */
+				s->lastPMTArray[j].lastChanged = time_now;
+			}
+		}
+	}
+
+	/* Reset any PMT Timers based on traffic on PMT pids */
+	int gotPMTError = 0;
+	for (int i = 0; i < s->lastPMTArrayIndex; i++) {
+		if (timer_expired(s, &s->lastPMTArray[i].lastChanged) == 0) {
+			gotPMTError++;
+		}
+	}
+
+	/* We don't have a seperate alarm per pid, its collective */
+	if (gotPMTError) {
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_5__PMT_ERROR, &time_now);
+		ltntstools_tr101290_alarm_raise(s, E101290_P1_5a__PMT_ERROR_2, &time_now);
+	} else
+	if (s->lastPMTArrayIndex) {
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_5__PMT_ERROR, &time_now);
+		ltntstools_tr101290_alarm_clear(s, E101290_P1_5a__PMT_ERROR_2, &time_now);
+	}
 
 	return packetCount;
 }
