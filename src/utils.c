@@ -90,7 +90,6 @@ int networkInterfaceExists(const char *ifname)
 
 	return exists;
 }
-#endif
 
 void networkInterfaceList()
 {
@@ -121,7 +120,6 @@ void networkInterfaceList()
 	freeifaddrs(addrs);
 }
 
-#if 0
 int network_addr_compare(
 	struct iphdr *src_iphdr, struct udphdr *src_udphdr,
 	struct iphdr *dst_iphdr, struct udphdr *dst_udphdr)

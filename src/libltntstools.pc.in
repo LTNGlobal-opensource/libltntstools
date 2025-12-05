@@ -6,7 +6,7 @@ includedir=@includedir@
 Name: libltntstools
 Description: LTN Library handling all things ISO13818-1
 Version: @VERSION@
-Libs: -L${libdir} -lltntstools -lpcap -lrt
+Libs: -L${libdir} -lltntstools -lrt
 Libs.private:  -lpthread -lstdc++ -lm -lc
 Requires.private: libdvbpsi
 Cflags: -I${includedir}

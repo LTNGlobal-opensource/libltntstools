@@ -3,7 +3,7 @@ AUTOMAKE_OPTIONS = foreign
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libltntstools.pc
-libltntstools_la_LDFLAGS  = -Wl,--no-as-needed -ldvbpsi -lpcap -lrt
+libltntstools_la_LDFLAGS  = -Wl,--no-as-needed -ldvbpsi -lrt
 
 lib_LTLIBRARIES = libltntstools.la
 
@@ -63,7 +63,6 @@ libltntstools_la_SOURCES += pes-extractor.c
 libltntstools_la_SOURCES += smoother-pcr.c
 libltntstools_la_SOURCES += smoother-rtp.c
 libltntstools_la_SOURCES += proc-net-udp.c
-libltntstools_la_SOURCES += source-pcap.c
 libltntstools_la_SOURCES += utils.h
 libltntstools_la_SOURCES += utils.c
 libltntstools_la_SOURCES += reframer.c
@@ -124,7 +123,6 @@ libltntstools_include_HEADERS += libltntstools/pes-extractor.h
 libltntstools_include_HEADERS += libltntstools/smoother-pcr.h
 libltntstools_include_HEADERS += libltntstools/smoother-rtp.h
 libltntstools_include_HEADERS += libltntstools/proc-net-udp.h
-libltntstools_include_HEADERS += libltntstools/source-pcap.h
 libltntstools_include_HEADERS += libltntstools/reframer.h
 libltntstools_include_HEADERS += libltntstools/igmp.h
 libltntstools_include_HEADERS += libltntstools/rtp-analyzer.h
