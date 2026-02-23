@@ -8,6 +8,10 @@
  * @brief       Track walltime bs another timebase and compute drift deltas between the them.
  *              Useful when measuring how a stream of video is drifting or how much jitter the
  *              clocks have, compared to reality.
+ *              Also, the corrected clocks calls enable a caller to place PTS values into the
+ *              framework for decades, and get a 64bit wrapped corrected value for misc use cases,
+ *              especially usefull when building demuxers, lists with sorted PTS values and detecting
+ *              gaps in time over long periods.
  */
 
 #include <time.h>
@@ -143,6 +147,48 @@ int64_t ltntstools_clock_get_drift_ms(struct ltntstools_clock_s *clk);
  * @return      int64_t - ticks
  */
 int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t ticksnow, int64_t ticksthen);
+
+/**
+ * @brief Context used exclusively with ltntstools_corrected_() calls.
+ */
+struct ltntstools_corrected_clock_s
+{
+	int      initialized;	/* Boolean. */
+	uint64_t clkMaxTicks;   /* 1ULL << 33 */
+	uint64_t lastTickValue; /* last raw 33-bit PTS (masked) */
+	int64_t  unwrapped;     /* extended 64-bit timeline (may dip with B-frames) */
+	uint64_t correctedClk;  /* monotonic public timeline */
+
+	uint64_t clk_bits; /* PTS_BITS or PCR_BITS */
+	uint64_t clk_mod;  /* PTS_MOD  or PCR_MOD */
+	uint64_t clk_mask; /* PTS_MASK or PCR_MASK */
+	uint64_t clk_half; /* PTS_HALF or PCR_HALF */
+};
+
+/**
+ * @brief       Initialize a corrected_clock context.
+ *              Only 90000 hz values are supported.
+ * @param[in]   struct ltntstools_clock_s *clk - context to be initialized
+ * @param[in]   int64_t hz - Eg. 90,000, or 27,000,000
+ * @return      0 on success else < 0.
+ */
+int ltntstools_corrected_clock_init(struct ltntstools_corrected_clock_s *ctx, unsigned int hz);
+
+/**
+ * @brief       Update the correct clock model with a new tick value, typically a new PTS.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @param[in]   int64_t ticks - PTS value obtained by any other means.
+ * @return      0 on success else < 0.
+ */
+int ltntstools_corrected_clock_update(struct ltntstools_corrected_clock_s *ctx, int64_t ticks);
+
+/**
+ * @brief       Query the corrected clock value in a uint64_t form. IE, query a long running corrected
+ *              PTS which includes multiple wraps all added over time.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @return      0 if error, or a valid clock value measured in units on Hz (during _init).
+ */
+uint64_t ltntstools_corrected_clock_unwrapped(const struct ltntstools_corrected_clock_s *ctx);
 
 #ifdef __cplusplus
 };

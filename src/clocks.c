@@ -2,6 +2,8 @@
 
 #include "libltntstools/ltntstools.h"
 
+#define LOCAL_DEBUG 0
+
 void ltntstools_clock_initialize(struct ltntstools_clock_s *clk)
 {
 	memset(clk, 0, sizeof(*clk));
@@ -115,4 +117,107 @@ int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t t
 	}
 
 	return (clk->clockWrapValue - ticksthen) + ticksnow;
+}
+
+/* JITTER_MAX: backward tolerance before clamping (optional). 0 = strict monotonic */
+#define JITTER_MAX (90000/2)
+
+/* Signed minimal delta on the 33-bit ring: result in (-2^32, +2^32] */
+static inline int64_t pts33_signed_delta(struct ltntstools_corrected_clock_s *ctx, uint64_t curr, uint64_t prev)
+{
+    uint64_t a = curr & ctx->clk_mask;
+	uint64_t b = prev & ctx->clk_mask;
+    uint64_t diff = (a - b) & ctx->clk_mask;
+
+	if (diff & ctx->clk_half) {
+		return (int64_t)diff - (int64_t)ctx->clk_mod;
+	} else {
+		return (int64_t)diff;
+	}
+}
+
+int ltntstools_corrected_clock_init(struct ltntstools_corrected_clock_s *ctx, unsigned int hz)
+{
+	if (hz == 90000) {
+		ctx->clk_bits    = 33;
+    	ctx->clkMaxTicks = (1ULL << (ctx->clk_bits));     /* 0x1ffffffff */
+		ctx->clk_mod     = (1ULL << (ctx->clk_bits));     /* 0x1ffffffff */
+		ctx->clk_mask    = ctx->clk_mod - 1;              /* 0x1fffffffe */
+		ctx->clk_half    = (1ULL << (ctx->clk_bits - 1)); /* 0x0ffffffff */
+	} else {
+		/* No PCR support yet */
+		return -1;
+	}
+
+    ctx->initialized = 1;
+    ctx->lastTickValue = 0;
+    ctx->unwrapped = 0;
+    ctx->correctedClk = 0;
+
+	return 0; /* Success */
+}
+
+/* Return an error if we think something unusual happened to the clock.
+ * zero on success else < 0
+ */
+int ltntstools_corrected_clock_update(struct ltntstools_corrected_clock_s *ctx, int64_t ticks)
+{
+	if (!ctx || !ctx->initialized) {
+		return -1; /* Failure */
+	}
+
+	int ret = 0; /* Success */
+
+#if LOCAL_DEBUG
+	printf("%s(%13" PRId64 ") ltv %13" PRId64 "\n", __func__, ticks, ctx->lastTickValue);
+#endif
+    uint64_t p33 = ((uint64_t)ticks) & ctx->clk_mask;
+
+    if (ctx->initialized == 0) {
+        ctx->initialized = 1;
+        ctx->lastTickValue = p33;
+        ctx->unwrapped = (int64_t)p33;
+        ctx->correctedClk = (uint64_t)ctx->unwrapped;
+        return ret;
+    }
+
+    int64_t d = pts33_signed_delta(ctx, p33, ctx->lastTickValue);
+	//printf("%" PRIi64 "\n", d);
+
+    /* Extend into 64-bit (can go slightly backward with B-frames) */
+    ctx->unwrapped += d;
+
+    /* Monotonic clamp (optionally allow small backward wiggle) */
+	if (ctx->unwrapped < 0) {
+#if LOCAL_DEBUG
+		printf("Massive clock correction last ticks %13" PRId64 " new ticks %13" PRId64 ", corrected %13" PRId64 " unwrapped %13" PRId64 "\n",
+			ctx->lastTickValue, p33,
+			(int64_t)ctx->correctedClk, ctx->unwrapped);
+#endif
+		/* Effeective reset of the clocks */
+		ctx->correctedClk = p33;
+		ctx->unwrapped = p33;
+		ret = -1;
+	} else
+    if ((int64_t)ctx->correctedClk - ctx->unwrapped > (int64_t)JITTER_MAX) {
+        /* Large backward jump treat as reordering glitch: hold */
+		//int64_t x = (int64_t)ctx->correctedClk - ctx->unwrapped;
+    } else {
+        if ((uint64_t)ctx->unwrapped > ctx->correctedClk) {
+            ctx->correctedClk = (uint64_t)ctx->unwrapped;
+		}
+        /* within tolerance, keep previous */
+    }
+    ctx->lastTickValue = p33;
+
+    return ret;
+}
+
+uint64_t ltntstools_corrected_clock_unwrapped(const struct ltntstools_corrected_clock_s *ctx)
+{
+	if (!ctx || !ctx->initialized) {
+		return 0;
+	}
+
+    return (uint64_t)ctx->unwrapped;
 }
