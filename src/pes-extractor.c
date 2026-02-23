@@ -44,8 +44,8 @@ struct pes_extractor_s
 	int orderedOutput;
 	struct xorg_list listOrdered;
 	pthread_mutex_t listOrderedMutex;
-	int64_t orderedBaseTime; /* Increments by MAX_PTS_TIME every time we think the PTS has wrapped */
-	int64_t lastDeliveredPTS;
+
+	struct ltntstools_corrected_clock_s correctedClock;
 
 	int computedRingSize; /* Amount of bytes we've written to the ring buffer */
 	int largestRingFrame; /* Largest ever PES we've pulled from the ring buffer - useful for sizing */
@@ -94,11 +94,11 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->userContext = userContext;
 	ctx->skipDataExtraction = 0;
 	ctx->orderedOutput = 0;
-	ctx->orderedBaseTime = 0;
 	ctx->computedRingSize = 0;
 	ctx->lastCCCounter = 0;
 	ctx->largestRingFrame = 0;
 	ctx->preventWrites = 0;
+	ltntstools_corrected_clock_init(&ctx->correctedClock, 90000);
 	xorg_list_init(&ctx->pcrList);
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
@@ -255,8 +255,6 @@ void _flushOrderedOutput(struct pes_extractor_s *ctx)
 		item->correctedPTS = 0;
 		free(item);
 
-		ctx->lastDeliveredPTS = item->pes->PTS;
-
 		item = _list_find_oldest(ctx);
 	}
 }
@@ -397,14 +395,13 @@ static int _processRing(struct pes_extractor_s *ctx)
 							/* User owns the lifetime of the object */
 							ctx->cb(ctx->userContext, item->pes);
 						}
+
+						/* Now re-use list item to store the newly constructed pes, put it back in the sorted list */
 						item->pes = pes;
-						if ((pes->PTS + (10 * 90000)) < ctx->lastDeliveredPTS) {
-							/* PTS has wrapped. Increment our base so we continue to order the 
-							 * list correctly, regardless.
-							 */
-							ctx->orderedBaseTime += MAX_PTS_VALUE;
-						}
-						item->correctedPTS = ctx->orderedBaseTime + pes->PTS; /* TODO: handle the wrap */
+						ltntstools_corrected_clock_update(&ctx->correctedClock, pes->PTS);
+
+						/* Get a PTS value that includes continious wrapping over time. */
+						item->correctedPTS = ltntstools_corrected_clock_unwrapped(&ctx->correctedClock);
 
 						/* Now put the current parsed item on the list for future callback */
 						xorg_list_del(&item->list);
@@ -412,7 +409,6 @@ static int _processRing(struct pes_extractor_s *ctx)
 #if LOCAL_DEBUG
 						_list_print(ctx);
 #endif
-						ctx->lastDeliveredPTS = pes->PTS;
 					}
 
 				} else {
