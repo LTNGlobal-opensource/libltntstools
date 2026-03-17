@@ -60,6 +60,36 @@ int  ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned c
  */
 int64_t ltntstools_probe_ltnencoder_get_total_latency(void *hdl);
 
+/**
+ * @brief       Allocate a new scheduler probe, for use with all other calls.
+ * @param[out]  void **handle - returned object.
+ * @return      0 - Success
+ * @return      < 0 - Error
+ */
+int  ltntstools_probe_scheduler_alloc(void **hdl);
+
+/**
+ * @brief       Free a previously allocated probe.
+ * @param[in]   void *handle - ltntstools_probe_scheduler_alloc()
+ */
+void ltntstools_probe_scheduler_free(void *hdl);
+
+/**
+ * @brief       Query how many times the scheduker returns a 3ms or worse sleep for a 1ms request.
+ * @param[in]   void *handle - ltntstools_probe_scheduler_alloc()
+ * @return      < 0 - Error, else error count.
+ */
+int64_t ltntstools_probe_scheduler_get_3ms_error_count(void *hdl);
+
+/**
+ * @brief       Query a histogram report showing the sleep accuracy for a 1ms sleep
+ * @param[in]   void *handle - ltntstools_probe_scheduler_alloc()
+ * @param[in]   char ** - destination pointer that receives a new memory allocation. Caller is responsible for lifespan.
+ * @return      0 - Success
+ * @return      < 0 - Error
+ */
+int ltntstools_probe_scheduler_get_histogram_report(void *hdl, char **buf);
+
 #ifdef __cplusplus
 };
 #endif

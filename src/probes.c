@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "sei-timestamp.h"
 #include <libltntstools/ltntstools.h>
@@ -41,6 +42,16 @@
 struct ltnencoder_sei_ctx_s
 {
 	int64_t latencyMs;
+};
+
+struct scheduler_probe_ctx_s
+{
+	pthread_t threadId;
+	int threadRunning, threadTerminate, threadTerminated;
+
+	struct ltn_histogram_s *schedulerAccuracy1ms;
+	pthread_mutex_t lock;
+	int64_t beyond3msCount;
 };
 
 int64_t ltntstools_probe_ltnencoder_get_total_latency(void *hdl)
@@ -101,3 +112,92 @@ int ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned ch
 
 	return -1; /* Failure */
 }
+
+extern int ltnpthread_setname_np(pthread_t thread, const char *name);
+
+static void * scheduler_probe_threadFunc(void *p)
+{
+	struct scheduler_probe_ctx_s *ctx = (struct scheduler_probe_ctx_s *)p;
+
+	pthread_detach(ctx->threadId);
+	ltnpthread_setname_np(ctx->threadId, "thread-schprobe");
+
+	ctx->threadTerminated = 0;
+	ctx->threadRunning = 1;
+
+	while (!ctx->threadTerminate) {
+		ltn_histogram_sample_begin(ctx->schedulerAccuracy1ms);
+		usleep(1000);
+		uint64_t ms = ltn_histogram_sample_end(ctx->schedulerAccuracy1ms);
+		if (ms >= 3) {
+			ctx->beyond3msCount++;
+		}
+	}
+	ctx->threadRunning = 1;
+	ctx->threadTerminated = 1;
+
+	/* TODO: pthread detach else we'll cause a small leak in valgrind. */
+	return NULL;
+}
+
+void ltntstools_probe_scheduler_free(void *hdl)
+{
+	struct scheduler_probe_ctx_s *ctx = (struct scheduler_probe_ctx_s *)hdl;
+
+	if (ctx->threadRunning) {
+		ctx->threadTerminated = 0;
+		ctx->threadTerminate = 1;
+		while (!ctx->threadTerminated) {
+			usleep(20 * 1000);
+		}
+	}
+
+	ltn_histogram_free(ctx->schedulerAccuracy1ms);
+	free(hdl);
+}
+
+int ltntstools_probe_scheduler_alloc(void **hdl)
+{
+	struct scheduler_probe_ctx_s *ctx = (struct scheduler_probe_ctx_s *)calloc(1, sizeof(*ctx));
+	if (!ctx)
+		return -1;
+
+	/* Make sure we default this to -1 so if its unset, we meet the API design docs expectations. */
+	//ctx->latencyMs = -1;
+
+	pthread_mutex_init(&ctx->lock, NULL);
+	ctx->beyond3msCount = 0;
+	ltn_histogram_alloc_video_defaults(&ctx->schedulerAccuracy1ms, "1ms scheduler accuracy");
+
+	/* Spawn a thread that manages the scheduled output queue. */
+	pthread_create(&ctx->threadId, NULL, scheduler_probe_threadFunc, ctx);
+
+	*hdl = ctx;
+	return 0;
+}
+
+int64_t ltntstools_probe_scheduler_get_3ms_error_count(void *hdl)
+{
+	struct scheduler_probe_ctx_s *ctx = (struct scheduler_probe_ctx_s *)hdl;
+	if (!ctx)
+		return -1;
+
+	return ctx->beyond3msCount;
+}
+
+int ltntstools_probe_scheduler_get_histogram_report(void *hdl, char **buf)
+{
+	struct scheduler_probe_ctx_s *ctx = (struct scheduler_probe_ctx_s *)hdl;
+	if (!ctx)
+		return -1;
+
+	/* Allocate an ascii version of our internal histogram. The caller is
+	 * responsible for the resulting lifespan of buff.
+	 */
+	pthread_mutex_lock(&ctx->lock);
+	ltn_histogram_interval_print_buf(buf, ctx->schedulerAccuracy1ms, 0);
+	pthread_mutex_unlock(&ctx->lock);
+
+	return 0; /* Success */
+}
+
