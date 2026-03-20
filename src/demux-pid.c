@@ -34,11 +34,12 @@ void demux_pid_uninit(struct demux_pid_s *pid)
 	// pthread_mutex_unlock(&pid->pesListMutex);
 }
 
-void demux_pid_init(struct demux_pid_s *pid, uint16_t pidNr)
+void demux_pid_init(struct demux_ctx_s *ctx, struct demux_pid_s *pid, uint16_t pidNr)
 {
 	pid->pidNr = pidNr;
 	pid->pesListCount = 0;
 	pid->payload = P_UNDEFINED;
+	pid->ctx = ctx;
 
 	pthread_mutex_init(&pid->pesListMutex, NULL);
 	pthread_cond_init(&pid->pesListItemAdd, NULL);
@@ -50,11 +51,14 @@ void demux_pid_set_payload(struct demux_pid_s *pid, enum payload_e payload)
 	pid->payload = payload;
 }
 
+/* PES Extractor callback */
 void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
 {
 	struct demux_pid_s *pid = (struct demux_pid_s *)userContext;
+	struct demux_ctx_s *ctx = pid->ctx;
 	struct timeval now;
 
+	/* Alloc a context, put this PES object on a list */
 	struct demux_pid_pes_item_s *item = malloc(sizeof(*item));
 	if (!item) {
 		ltn_pes_packet_free(pes);
@@ -72,12 +76,12 @@ void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
 	pid->pesListCount++;
 
 	/* Expire anything on the list older than N ms.
-	 * List is ordered by age descending.
+	 * List is ordered by age descending, youngest end of list.
 	 */
 	struct demux_pid_pes_item_s *e = NULL, *next = NULL;
 	xorg_list_for_each_entry_safe(e, next, &pid->pesList, list) {
 		if (_itemAgeMs(e, &now) < ITEM_EXPIRE_MS) {
-			break;
+			break; /* Safe to break, because otime ordering guarantees */
 		}
 
 		/* Too old, expire it */
@@ -87,7 +91,11 @@ void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
 
 	pthread_cond_signal(&pid->pesListItemAdd); /* TODO: Nobody is paying attension to this yet. */
 
+	/* Give the caller a chance to deal with the pes if registered */
+	if (ctx->callbacks && ctx->callbacks->cb_pes) {
+		ctx->callbacks->cb_pes(ctx->userContext, pid->pidNr, pes);
+	}
+
 	/* We're holding onto the lifetime of the pes. We're not freeing it. */
 	return NULL;
 }
-

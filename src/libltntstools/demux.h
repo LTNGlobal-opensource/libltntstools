@@ -4,8 +4,9 @@
 /**
  * @file        demux.h
  * @author      Steven Toth <steven.toth@ltnglobal.com>
- * @copyright   Copyright (c) 2025 LTN Global,Inc. All Rights Reserved.
- * @brief       Demultiplex a mpegts transport stream. Work in progress. Do not use.
+ * @copyright   Copyright (c) 2026 LTN Global,Inc. All Rights Reserved.
+ * @brief       Demultiplex a mpegts transport stream. Use callbacks to return various objects.
+ *              Experimental. Work in progress. Do not use.
  */
 
 #include <stdio.h>
@@ -19,6 +20,28 @@ extern "C" {
 #endif
 
 /**
+ * @brief       Callback function definition, where demuxed and parsed PES frames are delivered
+ *              to your function. Caller DOES NOT OWN the lifespan of the returned object. If caller
+ *              needs to preserve it, then duplicate it via ltn_pes_packet_copy();
+ *              Don't spend too long in your callback, you're executing on the demux_write() thread path.
+ */
+typedef void (*demux_callback_pes)(void *userContext, uint16_t pid, struct ltn_pes_packet_s *pes);
+
+/**
+ * @brief       Callback function definition, where demuxed and parsed PES frames are delivered
+ *              to your function. Caller DOES NOT OWN the lifespan of the returned object.
+ *              Don't spend too long in your callback, you're executing on the demux_write() thread path.
+ *              TODO description
+ */
+typedef void (*demux_callback_section)(void *userContext, uint16_t pid, struct ltn_pes_packet_s *pes); /* TODO */
+
+struct ltntstools_demux_callbacks
+{
+    demux_callback_pes cb_pes;
+    demux_callback_section cb_section; /* TODO */
+};
+
+/**
  * @brief         Allocate a context for use with other demux api calls.
  *                User must pass in the PAT representing the stream that they plan to demultiplex.
  *                Obtain the PAT from the streammodel framework.
@@ -29,7 +52,8 @@ extern "C" {
  * @return        0 - Success
  * @return      < 0 - Error
  */
-int ltntstools_demux_alloc_from_pat(void **hdl, void *userContext, const struct ltntstools_pat_s *pat);
+int ltntstools_demux_alloc_from_pat(void **hdl, void *userContext,
+    const struct ltntstools_demux_callbacks *callbacks, const struct ltntstools_pat_s *pat);
 
 /**
  * @brief         Free and tear down any resources allocated from this handle.

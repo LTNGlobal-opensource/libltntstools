@@ -54,3 +54,4 @@
 #include <libltntstools/nal_bitreader.h>
 #include <libltntstools/nal_h264.h>
 #include <libltntstools/nal_h265.h>
+#include <libltntstools/demux.h>

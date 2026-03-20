@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <inttypes.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "libltntstools/streammodel.h"
 #include "libltntstools/demux.h"
@@ -21,7 +22,9 @@
 #define MODULE_PREFIX "demux: "
 #define MAX_PIDS 8192
 
-#define _getPID(ctx, pidNr) (&ctx->pids[ pidNr & 0x1fff])
+#define _getPIDContext(ctx, pidNr) (&ctx->pids[ pidNr & 0x1fff])
+
+struct demux_ctx_s;
 
 enum payload_e
 {
@@ -43,8 +46,9 @@ struct demux_pid_s
 {
 	uint16_t pidNr;
 	enum payload_e payload;
+	struct demux_ctx_s *ctx;
 
-	struct xorg_list pesList; /**< list of call PES frames FIFO arrangement */
+	struct xorg_list pesList; /**< list of call PES frames FIFO arrangement, typically 2000ms deep */
 	uint32_t pesListCount;
 	pthread_cond_t pesListItemAdd;
 	pthread_mutex_t pesListMutex;
@@ -56,14 +60,17 @@ struct demux_ctx_s
 {
 	int verbose;
 	void *userContext;
+	struct ltntstools_demux_callbacks *callbacks;
 
 	const struct ltntstools_pat_s *pat;
 
 	struct demux_pid_s pids[MAX_PIDS];
+	struct demux_pid_s *pidIndex[MAX_PIDS]; /* Quick array for looking up which pids are active - performance gain */
+	int pidIndexLength;
 };
 
 void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes);
-void demux_pid_init(struct demux_pid_s *pid, uint16_t pidNr);
+void demux_pid_init(struct demux_ctx_s *ctx, struct demux_pid_s *pid, uint16_t pidNr);
 void demux_pid_uninit(struct demux_pid_s *pid);
 void demux_pid_set_estype(struct demux_pid_s *pid, enum payload_e estype);
 
