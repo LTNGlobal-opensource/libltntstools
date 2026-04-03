@@ -423,6 +423,12 @@ double ltntstools_segmentwriter_get_freespace_pct(void *hdl)
 	if (!s->fh)
 		return -1;
 
+	/* If the file currently being written is removed while in use, its safe, but,
+	 * the nic monitor will show a red warning in the UI until the next segment is
+	 * created.
+	 * Initially I thought this was a bug. On review, I think I like the behavior.
+	 * So, no change necessary.
+	 */
 	struct statvfs fs;
 	int ret = statvfs(&s->filename[0], &fs);
 	if (ret != 0)
