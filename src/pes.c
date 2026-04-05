@@ -626,7 +626,7 @@ int ltn_pes_packet_is_audio(struct ltn_pes_packet_s *pes)
 	}
 
 	/* AC3 / private */
-	if (pes->stream_id >= 0xfd) {
+	if (pes->stream_id == 0xbd || pes->stream_id >= 0xfd) {
 		return 1;
 	}
 
