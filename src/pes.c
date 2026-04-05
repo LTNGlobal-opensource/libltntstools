@@ -610,6 +610,15 @@ void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *
 	}
 }
 
+struct ltn_pes_packet_s * ltn_pes_packet_clone(struct ltn_pes_packet_s *src)
+{
+	struct ltn_pes_packet_s *dst = ltn_pes_packet_alloc();
+	if (dst) {
+		ltn_pes_packet_copy(dst, src);
+	}
+	return dst;
+}
+
 int ltn_pes_packet_is_audio(struct ltn_pes_packet_s *pes)
 {
 	if ((pes->stream_id >= 0xc0) && (pes->stream_id <= 0xdf)) {

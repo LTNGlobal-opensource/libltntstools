@@ -137,6 +137,13 @@ void ltn_pes_packet_dump_with_options(struct ltn_pes_packet_s *pkt, const char *
 void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *src);
 
 /**
+ * @brief       Allocate a new PES packet and duplicate the src PES packet and any attached payload.
+ * @param[in]   struct ltn_pes_packet_s *src - object
+ * #return      duplicate PES or NULL
+ */
+struct ltn_pes_packet_s *ltn_pes_packet_clone(struct ltn_pes_packet_s *src);
+
+/**
  * @brief       Helper function. Determine if this PES packet represents audio.
  * @param[in]   struct ltn_pes_packet_s *pes - object
  * @return      Boolean. True or false.
