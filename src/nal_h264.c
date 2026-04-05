@@ -198,6 +198,43 @@ static struct h264_slice_data_s slice_defaults[MAX_H264_SLICE_TYPES] = {
 	{ 9, 0, "i", },
 };
 
+int h264_is_slice_type_iframe(unsigned int sliceType)
+{
+	switch(sliceType) {
+	case 2:
+	case 4:
+	case 7:
+	case 9:
+		return 1;
+	}
+
+	return 0;
+}
+
+int h264_is_slice_type_pframe(unsigned int sliceType)
+{
+	switch(sliceType) {
+	case 0:
+	case 3:
+	case 5:
+	case 8:
+		return 1;
+	}
+
+	return 0;
+}
+
+int h264_is_slice_type_bframe(unsigned int sliceType)
+{
+	switch(sliceType) {
+	case 1:
+	case 6:
+		return 1;
+	}
+
+	return 0;
+}
+
 const char *h264_slice_name_ascii(int slice_type)
 {
 	return &slice_defaults[ slice_type % MAX_H264_SLICE_TYPES ].name[0];
@@ -254,6 +291,32 @@ void h264_slice_counter_dprintf(void *ctx, int fd, int printZeroCounts)
 			continue;
 		dprintf(fd, "%4d  %4s  %" PRIu64 "\n", sl->slice_type, sl->name, sl->count);
 	}
+}
+
+int h264_nal_get_slice_type_for_nal(struct ltn_nal_headers_s *hdr, unsigned int *sliceType)
+{
+	NALBitReader br;
+	int ret = -1;
+
+	if (!hdr || !sliceType)
+		return ret;
+
+	switch (hdr->nalType) {
+	case 1: /* slice_layer_without_partitioning_rbsp */
+	case 2: /* slice_data_partition_a_layer_rbsp */
+	case 5: /* slice_layer_without_partitioning_rbsp */
+	case 19: /* slice_layer_without_partitioning_rbsp */
+		NALBitReader_init(&br, hdr->ptr + 4, 4);
+		NALBitReader_read_ue(&br); /* first_mb_in_slice */
+		int st = NALBitReader_read_ue(&br);
+		if (st < MAX_H264_SLICE_TYPES) {
+			*sliceType = st;
+			ret = 0;
+		}
+		break;
+	}
+
+	return ret;
 }
 
 int h264_nal_get_slice_type(const struct ltn_nal_headers_s *hdr, char *sliceType)

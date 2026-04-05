@@ -109,9 +109,21 @@ struct h264_slice_counter_results_s
 };
 void h264_slice_counter_query(void *ctx, struct h264_slice_counter_results_s *results);
 
-const char *h274_slice_name_ascii(int slice_type);
+const char *h264_slice_name_ascii(int slice_type);
 
 int h264_nal_get_slice_type(const struct ltn_nal_headers_s *hdr, char *sliceType);
+
+int h264_is_slice_type_iframe(unsigned int sliceType);
+int h264_is_slice_type_bframe(unsigned int sliceType);
+int h264_is_slice_type_pframe(unsigned int sliceType);
+
+/**
+ * @brief         Return the AVC slice_type ror a given nal structure.
+ * @param[in]     struct ltn_nal_headers_s *s - nal header.
+ * @param[out]    unsigned int *sliceType - A valid slice_type as identified in the AVC specification.
+ * @return        0 on success else < 0
+ */
+int h264_nal_get_slice_type_for_nal(struct ltn_nal_headers_s *hdr, unsigned int *sliceType);
 
 int ltn_sei_h264_find_headers(struct ltn_nal_headers_s *nals, int nalArrayLength, struct ltn_sei_headers_s **array, int *arrayLength);
 
