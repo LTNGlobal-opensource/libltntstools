@@ -318,7 +318,7 @@ int ltntstools_vbv_profile_validate(struct vbv_decoder_profile_s *dp)
 	return 1; /* Profile is considered valid */
 }
 
-static int timesec_diff(struct timespec next_time, struct timespec last_time)
+static int timespec_diff(struct timespec next_time, struct timespec last_time)
 {
 	struct timespec diff;
 	diff.tv_sec = next_time.tv_sec - last_time.tv_sec;
@@ -432,7 +432,7 @@ static void * vbv_threadFunc(void *p)
 	ctx->threadTerminate = 0;
 	while (!ctx->threadTerminate) {
 		
-		if (timesec_diff(next_time, last_ooo_dts_time) >= 50) {
+		if (timespec_diff(next_time, last_ooo_dts_time) >= 50) {
 			last_ooo_dts_time = next_time;
 
 			/* Check the VBV and ensure DTS's are in order.
