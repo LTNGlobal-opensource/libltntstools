@@ -371,8 +371,9 @@ void ltntstools_vbv_free(void *hdl)
 	struct vbv_ctx_s *ctx = (struct vbv_ctx_s *)hdl;
 
 	if (ctx->threadRunning) {
-		ctx->threadTerminated = 0;
 		ctx->threadTerminate = 1;
+		while (!ctx->threadTerminated)
+			usleep(1 * 1000);
 	}
 
 	free(ctx);
