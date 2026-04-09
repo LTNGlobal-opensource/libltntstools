@@ -318,21 +318,6 @@ int ltntstools_vbv_profile_validate(struct vbv_decoder_profile_s *dp)
 	return 1; /* Profile is considered valid */
 }
 
-static int timespec_diff(struct timespec next_time, struct timespec last_time)
-{
-	struct timespec diff;
-	diff.tv_sec = next_time.tv_sec - last_time.tv_sec;
-	diff.tv_nsec = next_time.tv_nsec - last_time.tv_nsec;
-	if (diff.tv_nsec < 0) {
-		diff.tv_sec -= 1;
-		diff.tv_nsec += 1000000000L;
-	}
-
-	int ms = (diff.tv_sec * 1000) + (diff.tv_nsec / 1000000);
-
-	return ms;
-}
-
 int ltntstools_vbv_alloc(void **hdl, uint16_t pid, vbv_callback cb, void *userContext, struct vbv_decoder_profile_s *p)
 {
 	struct vbv_ctx_s *ctx = calloc(1, sizeof(*ctx));
@@ -432,7 +417,7 @@ static void * vbv_threadFunc(void *p)
 	ctx->threadTerminate = 0;
 	while (!ctx->threadTerminate) {
 		
-		if (timespec_diff(next_time, last_ooo_dts_time) >= 50) {
+		if (libltntstools_timespec_diff_ms(next_time, last_ooo_dts_time) >= 50) {
 			last_ooo_dts_time = next_time;
 
 			/* Check the VBV and ensure DTS's are in order.
