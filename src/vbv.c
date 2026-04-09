@@ -328,7 +328,8 @@ static int timesec_diff(struct timespec next_time, struct timespec last_time)
 		diff.tv_nsec += 1000000000L;
 	}
 
-	int ms = diff.tv_sec + diff.tv_nsec / 1e6;
+	int ms = (diff.tv_sec * 1000) + (diff.tv_nsec / 1000000);
+
 	return ms;
 }
 
