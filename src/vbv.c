@@ -60,7 +60,7 @@ struct vbv_ctx_s
 	int64_t encoder_stc; /**< continiously incrementing value, goes beyond 33bits */
 
 	pthread_t threadId;
-	int threadRunning, threadTerminate, threadTerminated;
+	int threadTerminate, threadCreated;
 };
 
 static struct vbv_bitrate_s {
@@ -361,6 +361,7 @@ int ltntstools_vbv_alloc(void **hdl, uint16_t pid, vbv_callback cb, void *userCo
 
 	/* Spawn a thread that manages the virtual decoder */
 	pthread_create(&ctx->threadId, NULL, vbv_threadFunc, ctx);
+	ctx->threadCreated = 1;
 
 	*hdl = ctx;
 	return 0; /* Success */
@@ -370,11 +371,20 @@ void ltntstools_vbv_free(void *hdl)
 {
 	struct vbv_ctx_s *ctx = (struct vbv_ctx_s *)hdl;
 
-	if (ctx->threadRunning) {
+	if (ctx->threadCreated) {
 		ctx->threadTerminate = 1;
-		while (!ctx->threadTerminated)
-			usleep(1 * 1000);
+
+		// Wait properly for thread exit
+		pthread_join(ctx->threadId, NULL);
 	}
+
+	pthread_mutex_lock(&ctx->pktListMutex);
+	while (!xorg_list_is_empty(&ctx->pktList)) {
+        struct pkt_item_s *item = xorg_list_first_entry(&ctx->pktList, struct pkt_item_s, list);
+        xorg_list_del(&item->list);
+        free(item);
+    }
+	pthread_mutex_unlock(&ctx->pktListMutex);
 
 	free(ctx);
 }
@@ -403,22 +413,22 @@ static void * vbv_threadFunc(void *p)
 {
 	struct vbv_ctx_s *ctx = (struct vbv_ctx_s *)p;
 
-	pthread_detach(ctx->threadId);
+	//pthread_detach(ctx->threadId);
 	ltnpthread_setname_np(ctx->threadId, "thread-vbv");
 
-	ctx->threadTerminated = 0;
-	ctx->threadRunning = 1;
-
 	struct timespec next_time;
-
 	struct timespec last_ooo_dts_time;
 	int decoder_stc_rebased = 0;
+
+	clock_gettime(CLOCK_MONOTONIC, &next_time);
+	last_ooo_dts_time = next_time;
 
 	/* simulate HRD, don't drain vbv until this amount of content exists */
 	/* 60% of a second into the VBV before we start to drain */
 	int initial_cpb_removal_delay = (90000 / 100) * 60;
 	int permit_vbv_drain = 0;
 
+	ctx->threadTerminate = 0;
 	while (!ctx->threadTerminate) {
 		
 		if (timesec_diff(next_time, last_ooo_dts_time) >= 50) {
@@ -511,8 +521,6 @@ static void * vbv_threadFunc(void *p)
 #endif
 		ctx->decoder_stc += framerateToTicks(ctx->decoder_profile.framerate);
 	}
-	ctx->threadRunning = 1;
-	ctx->threadTerminated = 1;
 
 	/* TODO: pthread detach else we'll cause a small leak in valgrind. */
 	return NULL;
