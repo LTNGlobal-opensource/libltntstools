@@ -54,3 +54,18 @@ int libltntstools_getTimestamp_seperated(char *buf, int buflen, time_t *when)
 
 	return 0;
 }
+
+int libltntstools_timespec_diff_ms(struct timespec next_time, struct timespec last_time)
+{
+	struct timespec diff;
+	diff.tv_sec = next_time.tv_sec - last_time.tv_sec;
+	diff.tv_nsec = next_time.tv_nsec - last_time.tv_nsec;
+	if (diff.tv_nsec < 0) {
+		diff.tv_sec -= 1;
+		diff.tv_nsec += 1000000000L;
+	}
+
+	int ms = (diff.tv_sec * 1000) + (diff.tv_nsec / 1000000);
+
+	return ms;
+}

@@ -16,6 +16,9 @@ int libltntstools_getTimestamp(char *buf, int buflen, time_t *when);
 /* Return a YYYY-MM-DD HH:MM:SS string in buf, for when (NULL) now, or sometime in the past */
 int libltntstools_getTimestamp_seperated(char *buf, int buflen, time_t *when);
 
+/* Compare two timespec times and return the different in milliseconds */
+int libltntstools_timespec_diff_ms(struct timespec next_time, struct timespec last_time);
+
 #ifdef __cplusplus
 };
 #endif
