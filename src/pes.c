@@ -689,3 +689,23 @@ int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes
 
 	return ret;
 }
+
+int ltn_pes_packet_has_PTS(struct ltn_pes_packet_s *pes)
+{
+	/* See iso13818-1 Table 2-17 – PES packet */
+	if (pes->PTS_DTS_flags & 2) {
+		return 1;
+	}
+
+	return 0;
+}
+
+int ltn_pes_packet_has_DTS(struct ltn_pes_packet_s *pes)
+{
+	/* See iso13818-1 Table 2-17 – PES packet */
+	if (pes->PTS_DTS_flags & 1) {
+		return 1;
+	}
+
+	return 0;
+}

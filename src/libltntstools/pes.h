@@ -180,6 +180,20 @@ int ltn_pes_packet_writer_init(struct ltn_pes_packet_writer_ctx *ctx, const char
  */
 int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes_packet_s *pes);
 
+/**
+ * @brief       Check if the pes object flags indicate the PTS field is populated.
+ * @param[in]   struct ltn_pes_packet_s *pes - object
+ * @return      Boolean. 1 on success else 0.
+ */
+int ltn_pes_packet_has_PTS(struct ltn_pes_packet_s *pes);
+
+/**
+ * @brief       Check if the pes object flags indicate the DTS field is populated.
+ * @param[in]   struct ltn_pes_packet_s *pes - object
+ * @return      Boolean. 1 on success else 0.
+ */
+int ltn_pes_packet_has_DTS(struct ltn_pes_packet_s *pes);
+
 #ifdef __cplusplus
 };
 #endif
