@@ -111,15 +111,17 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 		int cpy = rem < (unsigned int)payload_capacity ? (int)rem : payload_capacity;
 
 		/* If packet is not completely filled, we need adaptation stuffing */
-		int stuffing = payload_capacity - cpy;
+		/* Stuffing includes adaption_field control and flags field too */
+		int stuffing = payload_capacity - cpy - 2; /* Type bytes overhead for adaption field length and adaption flags */
+		//printf("rem %d byteCount %d pos %d payload_capacity %d cpy %d stuffing %d\n", rem, byteCount, pos, payload_capacity, cpy, stuffing);
 
 		if (needPCR || stuffing > 0) {
 			p[3] |= 0x30; /* adaptation + payload */
 
 			if (needPCR) {
 				/* adaptation_field_length excludes itself */
-				int afl = 7 + stuffing;
-				p[4] = afl;
+				int adaptation_field_length = 7 + stuffing;
+				p[4] = adaptation_field_length;
 				p[5] = 0x10; /* PCR flag */
 
 				uint64_t base = pcr / 300;
@@ -138,17 +140,18 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 				payload_offset = 12 + stuffing;
 			} else {
 				/* adaptation only for stuffing */
-				int afl = stuffing - 1;
+				int adaptation_field_length = stuffing + 1 /* flags field */;
+				//printf("adaptation_field_length 0x%x, stuffing %d\n", adaptation_field_length, stuffing);
 				if (stuffing == 1) {
 					/* single adaptation byte: length=0, no flags */
 					p[4] = 0;
 					payload_offset = 5;
 				} else {
-					p[4] = afl;
-					p[5] = 0x00; /* no flags */
-					for (int i = 0; i < stuffing - 1; i++)
+					p[4] = adaptation_field_length;
+					p[5] = 0x00; /* no flags, ie discontinuity_indicator or PCR_flag etc */
+					for (int i = 0; i < stuffing; i++)
 						p[6 + i] = 0xff;
-					payload_offset = 4 + 1 + stuffing;
+					payload_offset = 4 + 1 + 1 + stuffing; /* header, plus adaption field control plus adaption flags, plus stuffing bytes */
 				}
 			}
 		} else {
