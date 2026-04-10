@@ -71,61 +71,95 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 	uint8_t **pkts, uint32_t *packetCount,
 	int packetSize, uint8_t *cc, uint16_t pid, int64_t pcr)
 {
-	if ((!buf) || (byteCount == 0) || (!pkts) || (!packetCount) || (packetSize != 188) || (!cc) || (pid > 0x1fff))
+	if (!buf || byteCount == 0 || !pkts || !packetCount || packetSize != 188 || !cc || pid > 0x1fff)
+		return -1;
+
+	/* Worst case: one extra packet due to PCR/adaptation overhead */
+	unsigned int maxPackets = ((byteCount + 183) / 184) + 2;
+	uint8_t *arr = calloc(maxPackets, packetSize);
+	if (!arr)
 		return -1;
 
 	unsigned int pos = 0;
+	uint32_t cnt = 0;
 
-	int max = packetSize - 4;
-	int pcrneeds = 0;
-	if (pcr > -1) {
-		pcrneeds = 8;
-	}
-	int packets = (((byteCount + pcrneeds) / max) + 1) * packetSize;
-	int cnt = 0;
-
-	uint8_t *arr = calloc(packets, packetSize);
-
-	unsigned int rem = byteCount - pos;
-	while (rem) {
-		int cpy = rem;
-		if (cpy > max)
-			cpy = max;
-
-		int payload_offset = 4;
-
+	while (pos < byteCount) {
 		uint8_t *p = arr + (cnt * packetSize);
-		*(p + 0) = 0x47;
-		*(p + 1) = pid >> 8;
-		*(p + 2) = pid;
-		*(p + 3) = 0x10 | ((*cc) & 0x0f);
-		memset(p + 4, 0xff, 184);
+		memset(p, 0xff, packetSize);
 
-		if (pcr != -1 && cnt == 0) {
-			*(p + 3) |= 0x20 | ((*cc) & 0x0f); /* Enable Adaption and payload */
-			*(p + 4) = 7; /* adaption_field_length */
-			*(p + 5) = 0x10; /* PCR_flag present */
+		p[0] = 0x47;
+		p[1] = (pid >> 8) & 0x1f;
+		p[2] = pid & 0xff;
+		p[3] = (*cc) & 0x0f; /* continuity counter */
 
-			uint64_t base = pcr / 300;
-			uint64_t ext = pcr % 300;
-			*(p + 6) = (base >> 25) & 0xff;
-			*(p + 7) = (base >> 17) & 0xff;
-			*(p + 8) = (base >> 9) & 0xff;
-			*(p + 9) = (base >> 1) & 0xff;
-			*(p + 10) = ((base & 0x1) << 7) | 0x7E | ((ext >> 8) & 0x01); // Reserved 6 bits = 0x3F or 0x7E if bits set
-			*(p + 11) = ext & 0xff;
+		if (cnt == 0)
+			p[1] |= 0x40; /* PUSI */
 
+		int needPCR = (pcr != -1 && cnt == 0) ? 1 : 0;
+
+		/* Start by assuming payload only */
+		int payload_offset = 4;
+		int payload_capacity = 184;
+
+		if (needPCR) {
+			/* We know adaptation field is required for PCR */
 			payload_offset += 8;
-			cpy -= 8;
+			payload_capacity -= 8;
 		}
+
+		unsigned int rem = byteCount - pos;
+		int cpy = rem < (unsigned int)payload_capacity ? (int)rem : payload_capacity;
+
+		/* If packet is not completely filled, we need adaptation stuffing */
+		int stuffing = payload_capacity - cpy;
+
+		if (needPCR || stuffing > 0) {
+			p[3] |= 0x30; /* adaptation + payload */
+
+			if (needPCR) {
+				/* adaptation_field_length excludes itself */
+				int afl = 7 + stuffing;
+				p[4] = afl;
+				p[5] = 0x10; /* PCR flag */
+
+				uint64_t base = pcr / 300;
+				uint64_t ext = pcr % 300;
+				p[6]  = (base >> 25) & 0xff;
+				p[7]  = (base >> 17) & 0xff;
+				p[8]  = (base >> 9) & 0xff;
+				p[9]  = (base >> 1) & 0xff;
+				p[10] = ((base & 0x1) << 7) | 0x7e | ((ext >> 8) & 0x01);
+				p[11] = ext & 0xff;
+
+				/* stuffing bytes follow PCR */
+				for (int i = 0; i < stuffing; i++)
+					p[12 + i] = 0xff;
+
+				payload_offset = 12 + stuffing;
+			} else {
+				/* adaptation only for stuffing */
+				int afl = stuffing - 1;
+				if (stuffing == 1) {
+					/* single adaptation byte: length=0, no flags */
+					p[4] = 0;
+					payload_offset = 5;
+				} else {
+					p[4] = afl;
+					p[5] = 0x00; /* no flags */
+					for (int i = 0; i < stuffing - 1; i++)
+						p[6 + i] = 0xff;
+					payload_offset = 4 + 1 + stuffing;
+				}
+			}
+		} else {
+			p[3] |= 0x10; /* payload only */
+			payload_offset = 4;
+		}
+
 		memcpy(p + payload_offset, buf + pos, cpy);
 		pos += cpy;
 		(*cc)++;
-
-		if (cnt++ == 0)
-			*(p + 1) |= 0x40; /* PES Header - Payload unit start indicator */
-
-		rem = byteCount - pos;
+		cnt++;
 	}
 
 	*pkts = arr;
