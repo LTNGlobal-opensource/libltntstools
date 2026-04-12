@@ -685,7 +685,7 @@ int ltntstools_pat_create_packet_ts(struct ltntstools_pat_s *pat, uint8_t cc, ui
 	p[i++] = pat->transport_stream_id >> 8;
 	p[i++] = pat->transport_stream_id;
 
-	p[i++] = 0xC0 | pat->current_next_indicator;
+	p[i++] = 0xC0 | ((pat->version_number & 0x1f) < 1) | pat->current_next_indicator;
 	p[i++] = 0x00; /* Section */
 	p[i++] = 0x00; /* last section */
 
@@ -717,6 +717,18 @@ int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *pmt, uint16_t pid, 
 
 	memset(p, 0xFF, packetLength);
 
+	int outerLen = 0;
+	for (int j = 0; j < pmt->descr_list.count; j++) {
+		outerLen += (pmt->descr_list.array[j].len + 2);
+	}
+
+	int innerLenTotal = 0;
+	for (int j = 0; j < pmt->stream_count; j++) {
+		for (int k = 0; k < pmt->streams[j].descr_list.count; k++) {
+			innerLenTotal += (pmt->streams[j].descr_list.array[k].len + 2);
+		}
+	}
+
 	p[i++] = 0x47;
 	p[i++] = 0x40 | ((pid & 0x1fff) >> 8);
 	p[i++] = pid & 0xff;
@@ -726,26 +738,49 @@ int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *pmt, uint16_t pid, 
 	p[i++] = 0x02; /* PMT Table */
 	p[i++] = 0xB0;
 
-	p[i++] = 9 + 4 + (pmt->stream_count * 5); /* Length */
+	p[i++] = 9 + 4 + (pmt->stream_count * 5) + outerLen + innerLenTotal; /* Length */
 
 	p[i++] = pmt->program_number >> 8;
 	p[i++] = pmt->program_number;
-	p[i++] = 0xc3;
+	p[i++] = 0xC0 | ((pmt->version_number & 0x1f) < 1) | pmt->current_next_indicator;
 	p[i++] = 0x00; /* section */
 	p[i++] = 0x00; /* last section */
 
-	p[i++] = pmt->PCR_PID >> 8;
+	p[i++] = 0xe0 | (pmt->PCR_PID & 0x1fff) >> 8;
 	p[i++] = pmt->PCR_PID;
 
-	p[i++] = 0xf0; 
-	p[i++] = 0x00;
+	p[i++] = 0xf0 | ((outerLen & 0xfff) >> 8); 
+	p[i++] = outerLen;
+
+	for (int j = 0; j < pmt->descr_list.count; j++) {
+		p[i++] = pmt->descr_list.array[j].tag;
+		p[i++] = pmt->descr_list.array[j].len;
+		for (int k = 0; k < pmt->descr_list.array[j].len; k++) {
+			p[i++] = pmt->descr_list.array[j].data[k];
+		}
+	}
 
 	for (int j = 0; j < pmt->stream_count; j++) {
 		p[i++] = pmt->streams[j].stream_type;
-		p[i++] = pmt->streams[j].elementary_PID >> 8;
+		p[i++] = 0xe0 | (pmt->streams[j].elementary_PID & 0x1fff) >> 8;
 		p[i++] = pmt->streams[j].elementary_PID;
-		p[i++] = 0xf0; 
-		p[i++] = 0x00;
+
+		int innerLen = 0;
+		for (int k = 0; k < pmt->streams[j].descr_list.count; k++) {
+			innerLen += (pmt->streams[j].descr_list.array[k].len + 2);
+		}
+
+		p[i++] = 0xf0 | ((innerLen & 0xfff) >> 8); 
+		p[i++] = innerLen;
+
+		for (int k = 0; k < pmt->streams[j].descr_list.count; k++) {
+			p[i++] = pmt->streams[j].descr_list.array[k].tag;
+			p[i++] = pmt->streams[j].descr_list.array[k].len;
+			for (int l = 0; l < pmt->streams[j].descr_list.array[k].len; l++) {
+				p[i++] = pmt->streams[j].descr_list.array[k].data[l];
+			}
+		}
+
 	}
 
 	uint32_t crc;
