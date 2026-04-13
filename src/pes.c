@@ -702,7 +702,7 @@ int ltn_pes_packet_save_pes(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pe
 	 */
 
 	uint32_t crc32 = 0;
-	ltntstools_getCRC32(pes->data, pes->dataLengthBytes, &crc32);
+	ltntstools_getCRC32(pes->rawBuffer, pes->rawBufferLengthBytes, &crc32);
 
 	char fn[256];
 
