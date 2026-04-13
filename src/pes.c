@@ -90,7 +90,7 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 		(pkt->stream_id != 0xF8 /* ITU H.222.1 type E */))
 	{
 
-		klbs_write_bits(bs, 0xff, 2); /* reserved */
+		klbs_write_bits(bs, 0x02, 2); /* reserved '10' */
 
 		klbs_write_bits(bs, pkt->PES_scrambling_control, 2);
 		klbs_write_bits(bs, pkt->PES_priority, 1);
