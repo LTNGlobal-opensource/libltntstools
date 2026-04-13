@@ -61,11 +61,14 @@ int ltntstools_ts_packetizer(const uint8_t *buf, unsigned int byteCount,
  * @param[in]   uint16_t pid - transport packet identifier for the output packets.
  * @param[in]   int64_t pcr - PCR value, may be larger than allowable PCR value, wrapping will truncate properly.
  *                            A valid of -1 indicates NOT to insert a PCR.
+ * @param[in]   int - random_access_indicator flag
+ * @param[in]   int - elementary_stream_priority_indicator
  * @return      0 on success, else < 0.
  */
 int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount,
 	uint8_t **pkts, uint32_t *packetCount,
-	int packetSize, uint8_t *cc, uint16_t pid, int64_t pcr);
+	int packetSize, uint8_t *cc, uint16_t pid, int64_t pcr, int random_access_indicator,
+	int elementary_stream_priority_indicator);
 
 #ifdef __cplusplus
 };
