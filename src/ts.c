@@ -84,7 +84,7 @@ int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid
 	*(pkt + 1) = (pid & 0x1fff) >> 8;
 	*(pkt + 2) = pid;
 	*(pkt + 3) = 0x20 | ((*cc)++ & 0x0f); /* Adaption field only, no payload */
-	*(pkt + 4) = 1 + 6; /* Adaption field length. Indicators plus pcr field */
+	*(pkt + 4) = 183; /* Adaption field length. Indicators plus pcr field plus stuffing. */
 	*(pkt + 5) = 0x10; /* PCR_flag = 1 */
 
 	ltntstools_pcr_packTo(pkt + 6, 188 - 6, pcr);
