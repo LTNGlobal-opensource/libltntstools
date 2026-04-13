@@ -68,14 +68,13 @@ int ltntstools_ts_packetizer(const uint8_t *buf, unsigned int byteCount,
 }
 
 int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount,
-	uint8_t **pkts, uint32_t *packetCount,
-	int packetSize, uint8_t *cc, uint16_t pid, int64_t pcr)
+uint8_t **pkts, uint32_t *packetCount,
+int packetSize, uint8_t *cc, uint16_t pid, int64_t pcr)
 {
 	if (!buf || byteCount == 0 || !pkts || !packetCount || packetSize != 188 || !cc || pid > 0x1fff)
 		return -1;
 
-	/* Worst case: one extra packet due to PCR/adaptation overhead */
-	unsigned int maxPackets = ((byteCount + 183) / 184) + 2;
+	unsigned int maxPackets = (byteCount + 175) / 176 + 1;
 	uint8_t *arr = calloc(maxPackets, packetSize);
 	if (!arr)
 		return -1;
@@ -87,81 +86,78 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 		uint8_t *p = arr + (cnt * packetSize);
 		memset(p, 0xff, packetSize);
 
+		int needPCR = (pcr != -1 && cnt == 0);
+
 		p[0] = 0x47;
-		p[1] = (pid >> 8) & 0x1f;
+		p[1] = ((pid >> 8) & 0x1f);
 		p[2] = pid & 0xff;
-		p[3] = (*cc) & 0x0f; /* continuity counter */
+		p[3] = (*cc) & 0x0f;
 
 		if (cnt == 0)
 			p[1] |= 0x40; /* PUSI */
 
-		int needPCR = (pcr != -1 && cnt == 0) ? 1 : 0;
-
-		/* Start by assuming payload only */
+		unsigned int rem = byteCount - pos;
 		int payload_offset = 4;
-		int payload_capacity = 184;
+		int cpy = 0;
 
 		if (needPCR) {
-			/* We know adaptation field is required for PCR */
-			payload_offset += 8;
-			payload_capacity -= 8;
-		}
+			/* adaptation + payload */
+			p[3] |= 0x30;
 
-		unsigned int rem = byteCount - pos;
-		int cpy = rem < (unsigned int)payload_capacity ? (int)rem : payload_capacity;
-
-		/* If packet is not completely filled, we need adaptation stuffing */
-		/* Stuffing includes adaption_field control and flags field too */
-		int stuffing = payload_capacity - cpy - 2; /* Type bytes overhead for adaption field length and adaption flags */
-		//printf("rem %d byteCount %d pos %d payload_capacity %d cpy %d stuffing %d\n", rem, byteCount, pos, payload_capacity, cpy, stuffing);
-
-		if (needPCR || stuffing > 0) {
-			p[3] |= 0x30; /* adaptation + payload */
-
-			if (needPCR) {
-				/* adaptation_field_length excludes itself */
-				int adaptation_field_length = 7 + stuffing;
-				p[4] = adaptation_field_length;
-				p[5] = 0x10; /* PCR flag */
-
-				uint64_t base = pcr / 300;
-				uint64_t ext = pcr % 300;
-				p[6]  = (base >> 25) & 0xff;
-				p[7]  = (base >> 17) & 0xff;
-				p[8]  = (base >> 9) & 0xff;
-				p[9]  = (base >> 1) & 0xff;
-				p[10] = ((base & 0x1) << 7) | 0x7e | ((ext >> 8) & 0x01);
-				p[11] = ext & 0xff;
-
-				/* stuffing bytes follow PCR */
-				for (int i = 0; i < stuffing; i++)
-					p[12 + i] = 0xff;
-
-				payload_offset = 12 + stuffing;
+			if (rem >= 176) {
+				/* exact PCR packet, no stuffing */
+				p[4] = 7;      /* flags + PCR */
+				p[5] = 0x10;   /* PCR_flag */
+				cpy = 176;
+				payload_offset = 12;
 			} else {
-				/* adaptation only for stuffing */
-				int adaptation_field_length = stuffing + 1 /* flags field */;
-				//printf("adaptation_field_length 0x%x, stuffing %d\n", adaptation_field_length, stuffing);
-				if (stuffing == 1) {
-					/* single adaptation byte: length=0, no flags */
-					p[4] = 0;
-					payload_offset = 5;
-				} else {
-					p[4] = adaptation_field_length;
-					p[5] = 0x00; /* no flags, ie discontinuity_indicator or PCR_flag etc */
-					for (int i = 0; i < stuffing; i++)
-						p[6 + i] = 0xff;
-					payload_offset = 4 + 1 + 1 + stuffing; /* header, plus adaption field control plus adaption flags, plus stuffing bytes */
+				/* short packet with PCR and stuffing */
+				int adaptation_field_length = 183 - (int)rem;
+				p[4] = adaptation_field_length;
+				p[5] = 0x10;   /* PCR_flag */
+
+				cpy = (int)rem;
+				payload_offset = 4 + 1 + adaptation_field_length;
+
+				/* stuffing after PCR starts at p[12] */
+				for (int i = 12; i < payload_offset; i++)
+					p[i] = 0xff;
+			}
+
+			uint64_t base = (uint64_t)(pcr / 300);
+			uint64_t ext  = (uint64_t)(pcr % 300);
+			p[6]  = (base >> 25) & 0xff;
+			p[7]  = (base >> 17) & 0xff;
+			p[8]  = (base >> 9)  & 0xff;
+			p[9]  = (base >> 1)  & 0xff;
+			p[10] = ((base & 0x1) << 7) | 0x7e | ((ext >> 8) & 0x01);
+			p[11] = ext & 0xff;
+		} else {
+			if (rem >= 184) {
+				/* payload only */
+				p[3] |= 0x10;
+				cpy = 184;
+				payload_offset = 4;
+			} else {
+				/* adaptation + payload with stuffing */
+				int adaptation_field_length = 183 - (int)rem;
+				p[3] |= 0x30;
+				p[4] = adaptation_field_length;
+
+				cpy = (int)rem;
+				payload_offset = 4 + 1 + adaptation_field_length;
+
+				if (adaptation_field_length > 0) {
+					p[5] = 0x00; /* no flags */
+					for (int i = 6; i < payload_offset; i++)
+						p[i] = 0xff;
 				}
 			}
-		} else {
-			p[3] |= 0x10; /* payload only */
-			payload_offset = 4;
 		}
 
 		memcpy(p + payload_offset, buf + pos, cpy);
 		pos += cpy;
-		(*cc)++;
+		*cc = (*cc + 1) & 0x0f;
 		cnt++;
 	}
 
