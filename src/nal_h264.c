@@ -186,16 +186,18 @@ struct h264_slice_data_s
 
 #define MAX_H264_SLICE_TYPES 10
 static struct h264_slice_data_s slice_defaults[MAX_H264_SLICE_TYPES] = {
-	{ 0, 0, "P", },
-	{ 1, 0, "B", },
-	{ 2, 0, "I", },
-	{ 3, 0, "p", },
-	{ 4, 0, "i", },
-	{ 5, 0, "P", },
-	{ 6, 0, "B", },
-	{ 7, 0, "I", },
-	{ 8, 0, "p", },
-	{ 9, 0, "i", },
+// 0–4 = “normal” slice types
+// 5-9 = same types, but with a constraint: all slices in the picture are that type
+	{ 0, 0, "P", }, // P slice
+	{ 1, 0, "B", }, // I slice
+	{ 2, 0, "I", }, // I slice
+	{ 3, 0, "p", }, // SP
+	{ 4, 0, "i", }, // SI
+	{ 5, 0, "P", }, // P slice (all slices same type)
+	{ 6, 0, "B", }, // B slice (all slices same type)
+	{ 7, 0, "I", }, // I slice (all slices same type)
+	{ 8, 0, "p", }, // SP slice (all slices same type)
+	{ 9, 0, "i", }, // SI slice (all slices same type)
 };
 
 int h264_is_slice_type_iframe(unsigned int sliceType)
