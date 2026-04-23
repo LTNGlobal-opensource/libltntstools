@@ -2,7 +2,6 @@
 #ifndef LTNTOOLS_UTILS_H
 #define LTNTOOLS_UTILS_H
 
-#include <pcap.h>
 #include <arpa/inet.h>
 #include <netinet/if_ether.h>
 #include <netinet/ip.h>
