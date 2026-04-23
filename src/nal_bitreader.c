@@ -62,3 +62,11 @@ int NALBitReader_read_ue(NALBitReader *br)
 
 	return (1 << leadingZeroBits) - 1 + infoBits;
 }
+
+int NALBitReader_read_se(NALBitReader *br)
+{
+	int codeNum = NALBitReader_read_ue(br);
+	int val = (codeNum & 1) ? (int)((codeNum + 1) >> 1) : -(int)(codeNum >> 1);
+
+    return val;
+}

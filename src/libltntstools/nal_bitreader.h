@@ -25,4 +25,6 @@ unsigned int NALBitReader_read_bits(NALBitReader *br, int n);
 // Unsigned Exp-Golomb code
 int NALBitReader_read_ue(NALBitReader *br);
 
+int NALBitReader_read_se(NALBitReader *br);
+
 #endif /* NAL_BITREADER.h */
