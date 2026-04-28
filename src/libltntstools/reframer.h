@@ -13,6 +13,10 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief       Callback function definition, where frames chunks of data are emiited.
  *              For example 7 * 188 bytes could be emmited.
@@ -59,6 +63,10 @@ int ltststools_reframer_write(struct ltntstools_reframer_ctx_s *ctx, const uint8
  * @param[in]   struct ltntstools_reframer_ctx_s *ctx - object.
  */
 void ltntstools_reframer_free(struct ltntstools_reframer_ctx_s *ctx);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* REFRAMER_H */
 

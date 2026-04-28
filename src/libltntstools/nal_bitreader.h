@@ -8,6 +8,10 @@
  * @brief       Helper functions to query bitstreams found within nals.
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     const unsigned char *data;
     int size;
@@ -26,5 +30,9 @@ unsigned int NALBitReader_read_bits(NALBitReader *br, int n);
 int NALBitReader_read_ue(NALBitReader *br);
 
 int NALBitReader_read_se(NALBitReader *br);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* NAL_BITREADER.h */

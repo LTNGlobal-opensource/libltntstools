@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <sys/time.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 static inline int64_t ltn_timeval_to_ms(struct timeval *tv)
 {
 	int64_t sec = tv->tv_sec, usec = tv->tv_usec;
@@ -28,5 +32,8 @@ static inline int64_t ltn_timeval_subtract_us(struct timeval *x, struct timeval 
 	return ltn_timeval_to_us(x) - ltn_timeval_to_us(y);
 }
 
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* LTN_TIMEVAL_H */

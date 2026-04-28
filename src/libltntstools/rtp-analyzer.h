@@ -16,6 +16,10 @@
 #include <inttypes.h> 
 #include <libltntstools/histogram.h> 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 //
 // please define based on your architecture.
 // RTP_LITTLE_ENDIAN seems to work for OS X El Capitan
@@ -105,5 +109,9 @@ struct rtp_frame_position_s
  * @return      0 on success else < 0 if error
  */
 int rtp_frame_queryPositions(const unsigned char *buf, int lengthBytes, uint64_t addr,  uint32_t ssrc, struct rtp_frame_position_s **array, int *arrayLength);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* KL_RTP_ANALYZER_H */

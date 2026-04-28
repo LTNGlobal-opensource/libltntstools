@@ -8,6 +8,10 @@
 #ifndef KL_QUEUE_H
 #define KL_QUEUE_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <pthread.h>
 #include <stdint.h>
 #include <libltntstools/xorg-list.h>
@@ -81,5 +85,9 @@ void klqueue_push(struct klqueue_s *q, void *item);
  * @return      0 - Success, else < 0 on error.
  */
 int  klqueue_pop_non_blocking(struct klqueue_s *q, int usec, void **item);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* KL_QUEUE_H */

@@ -13,6 +13,10 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SCR_TICKS_TO_MS(t) ((t) / 27000)
 #define PTS_TICKS_TO_MS(t) ((t) / 90)
 
@@ -419,5 +423,9 @@ void ltntstools_pcr_to_ascii(char **buf, int64_t pcr);
  * @param[in]   int64_t pts - tick value
  */
 void ltntstools_pts_to_ascii(char **buf, int64_t pts);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* TS_H */
