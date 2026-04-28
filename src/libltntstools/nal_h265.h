@@ -11,10 +11,6 @@
 extern "C" {
 #endif
 
-#ifdef __cplusplus
-};
-#endif
-
 /**
  * @brief         Search buffer for the byte sequence 000001, a NAL header signature, return an array inside a new
  *                memory allocation for the caller.
@@ -115,5 +111,9 @@ int ltn_sei_h265_find_headers(struct ltn_nal_headers_s *nals, int nalArrayLength
 
 /* Guaranteed to return a usable string, even if the sei Type is invalid */
 const char *ltn_sei_h265_lookupName(int seiType);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* NAL_H265_H */
