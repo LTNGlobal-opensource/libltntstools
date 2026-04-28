@@ -202,10 +202,6 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
  */
 int ltntstools_pat_enum_services(struct ltntstools_pat_s *pat, int *e, uint16_t pid, struct ltntstools_pmt_s **pmt);
 
-#ifdef __cplusplus
-};
-#endif
-
 int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, uint8_t *estype);
 
 /**
@@ -225,5 +221,9 @@ const struct ltntstools_pmt_entry_s **ltntstools_pmt_enum_services_audio(const s
  * @see        ltntstools_is_ESPayloadType_Audio()
  */
 int ltntstools_pmt_entry_is_audio(const struct ltntstools_pmt_entry_s *pmt);
+
+#ifdef __cplusplus
+};
+#endif
 
 #endif /* TR101290_PAT_H */
