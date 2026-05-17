@@ -268,7 +268,7 @@ int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enu
 {
 	struct tr_event_s *ev = &s->event_tbl[event];
 	if (event >= E101290_MAX) {
-		return -1;
+		return 0;
 	}
 
 #if LOCAL_DEBUG
