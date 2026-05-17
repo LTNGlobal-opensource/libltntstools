@@ -18,6 +18,9 @@ void ltntstools_tr101290_alarm_raise_with_arg(struct ltntstools_tr101290_s *s, e
 #if LOCAL_DEBUG
 	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
 #endif
+	if (event >= E101290_MAX) {
+		return;
+	}
 	struct tr_event_s *ev = &s->event_tbl[event];
 
 	if (ev->raised == 0) {
@@ -36,6 +39,10 @@ void ltntstools_tr101290_alarm_raise(struct ltntstools_tr101290_s *s, enum ltnts
 #if LOCAL_DEBUG
 	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
 #endif
+	if (event >= E101290_MAX) {
+		return;
+	}
+
 	struct tr_event_s *ev = &s->event_tbl[event];
 
 	if (ev->raised == 0) {
@@ -54,6 +61,9 @@ void ltntstools_tr101290_alarm_clear(struct ltntstools_tr101290_s *s, enum ltnts
 #if LOCAL_DEBUG
 	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
 #endif
+	if (event >= E101290_MAX) {
+		return;
+	}
 	struct tr_event_s *ev = &s->event_tbl[event];
 
 	if (ev->raised == 1) {

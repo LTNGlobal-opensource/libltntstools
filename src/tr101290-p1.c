@@ -37,7 +37,7 @@ static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_p
 	 */
 
 	int raiseIssue = 0;
-	char msg[128];
+	char msg[256];
 	msg[0] = 0;
 
 	for (int i = 0; i < pat->program_count; i++) {
@@ -47,7 +47,7 @@ static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_p
 
 		/* Check the PMT */
 		if (isPIDActive(s, prg->program_map_PID, now) == 0) {
-			sprintf(msg + strlen(msg), "0x%04x ", prg->program_map_PID);
+			snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), "0x%04x ", prg->program_map_PID);
 			raiseIssue++;
 		}
 
@@ -57,7 +57,7 @@ static void p1_process_p1_6(struct ltntstools_tr101290_s *s, struct ltntstools_p
 
 			/* Check each ES */
 			if (isPIDActive(s, strm->elementary_PID, now) == 0) {
-				sprintf(msg + strlen(msg), "0x%04x ", strm->elementary_PID);
+				snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg), "0x%04x ", strm->elementary_PID);
 				raiseIssue++;
 			}
 

@@ -123,7 +123,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 
 	struct timeval now;
 	while (!s->threadTerminate) {
-		usleep(10 * 1000);
+		usleep(50 * 1000);
 		gettimeofday(&now, NULL);
 
 		/* For each possible event, determine if we need to build and alarm
@@ -355,9 +355,9 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 	/* Pass all of the packets to the P1 analysis layer. */
 	p1_write(s, buf, packetCount, &s->now);
 
-	/* Pass all of the packets to the P1 analysis layer. */
+	/* Pass all of the packets to the P2 analysis layer. */
 	p2_write(s, buf, packetCount, &s->now);
-
+	
 	pthread_mutex_unlock(&s->mutex);
 
 	return packetCount;
