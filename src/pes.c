@@ -648,7 +648,7 @@ int ltn_pes_packet_writer_init(struct ltn_pes_packet_writer_ctx *ctx, const char
 		return -1;
 
 	ctx->nr = 0;
-	strncpy(&ctx->dirname[0], dirname, sizeof(ctx->dirname));
+	snprintf(ctx->dirname, sizeof(ctx->dirname), "%s", dirname);
 
 	return 0; /* Success */
 }
