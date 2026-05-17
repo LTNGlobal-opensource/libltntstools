@@ -648,7 +648,7 @@ int ltn_pes_packet_writer_init(struct ltn_pes_packet_writer_ctx *ctx, const char
 		return -1;
 
 	ctx->nr = 0;
-	strncpy(&ctx->dirname[0], dirname, sizeof(ctx->dirname));
+	snprintf(ctx->dirname, sizeof(ctx->dirname), "%s", dirname);
 
 	return 0; /* Success */
 }
@@ -667,7 +667,7 @@ int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes
 	uint32_t crc32 = 0;
 	ltntstools_getCRC32(pes->data, pes->dataLengthBytes, &crc32);
 
-	char fn[256];
+	char fn[512];
 
 	sprintf(fn, "%s/es-seq%014" PRIu64 "-pts%014" PRIu64 "-dts%014" PRIu64 "-len%08" PRIu32 "-crc%08x",
 		ctx->dirname,
@@ -704,7 +704,7 @@ int ltn_pes_packet_save_pes(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pe
 	uint32_t crc32 = 0;
 	ltntstools_getCRC32(pes->rawBuffer, pes->rawBufferLengthBytes, &crc32);
 
-	char fn[256];
+	char fn[512];
 
 	sprintf(fn, "%s/pes-seq%014" PRIu64 "-pts%014" PRIu64 "-dts%014" PRIu64 "-len%08" PRIu32 "-crc%08x",
 		ctx->dirname,

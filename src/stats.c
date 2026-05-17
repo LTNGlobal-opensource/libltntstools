@@ -468,7 +468,7 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 
 void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 {
-	if (!stream || !stream->pids)
+	if (!stream)
 		return;
 
 	if (stream->packetIntervals) {

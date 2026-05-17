@@ -508,7 +508,7 @@ size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int pac
 {
 	struct streammodel_ctx_s *ctx = (struct streammodel_ctx_s *)hdl;
 
-	if (!ctx || !pkt || packetCount <= 0 || &ctx->rom_mutex == NULL)
+	if (!ctx || !pkt || packetCount <= 0)
 		return -1;
 
 	pthread_mutex_lock(&ctx->rom_mutex);
