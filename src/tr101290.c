@@ -34,7 +34,7 @@ int ltntstools_tr101290_log_append(struct ltntstools_tr101290_s *s, int addTimes
 		char ts[64];
 		strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
 
-		sprintf(buf, "%s: ", ts);
+		snprintf(buf, sizeof(buf), "%s: ", ts);
 	}
 
     va_list vl;
@@ -85,7 +85,7 @@ static void ltntstools_tr101290_log_summary(struct ltntstools_tr101290_s *s)
 		if (ev->enabled == 0)
 			continue;
 
-		sprintf(buf, "%-40s - Status %s ", ltntstools_tr101290_event_name_ascii(ev->id), ev->raised ? " raised" : "cleared");
+		snprintf(buf, sizeof(buf), "%-40s - Status %s ", ltntstools_tr101290_event_name_ascii(ev->id), ev->raised ? " raised" : "cleared");
 
 		if (strlen(ev->arg)) {
 			if (ev->raised) {
@@ -145,6 +145,7 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				ltntstools_tr101290_log_append(s, 1, "-------------------------------------------------------------------------------------------------------");
 			}
 #endif
+
 			/* Find all events we should be reporting on,  */
 			if (ltntstools_tr101290_event_should_report(s, ev->id, &now)) {
 
@@ -173,9 +174,8 @@ void *ltntstools_tr101290_threadFunc(void *p)
 				char ts[64];
 				strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", whentm);
 
-                               sprintf(alarm->description, "%s",
-                                       ltntstools_tr101290_event_name_ascii(alarm->id));
-				strcpy(alarm->arg, ev->arg);
+				snprintf(alarm->description, sizeof(alarm->description), "%s", ltntstools_tr101290_event_name_ascii(alarm->id));
+				strncpy(alarm->arg, ev->arg, sizeof(alarm->arg));
 
 				if (strlen(alarm->arg)) {
 					if (alarm->raised) {

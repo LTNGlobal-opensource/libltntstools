@@ -27,7 +27,7 @@ void ltntstools_tr101290_alarm_raise_with_arg(struct ltntstools_tr101290_s *s, e
 		ev->raised = 1;
 		ev->lastChanged = *time_now;
 	}
-	sprintf(ev->arg, "%s", msg);
+	snprintf(ev->arg, sizeof(ev->arg), "%s", msg);
 
 	/* Setup an timer, in N seconds this event goes into alarm again. */
 	struct timeval interval = { ev->autoClearAlarmAfterReport / 1000, (ev->autoClearAlarmAfterReport * 1000) % 1000000 };
