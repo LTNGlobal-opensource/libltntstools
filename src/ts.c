@@ -221,6 +221,8 @@ const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType)
         case 0x29:
         case 0x2A:
             return "HEVC Video";
+        case 0x33:
+            return "VVC Video";
         case 0x81:
             return "ATSC AC-3 Audio";
         case 0xC1:
