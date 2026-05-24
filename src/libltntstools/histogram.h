@@ -73,6 +73,7 @@
 #ifndef LTN_HISTOGRAM_H
 #define LTN_HISTOGRAM_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -177,7 +178,7 @@ static inline int ltn_histogram_alloc(struct ltn_histogram_s **handle, const cha
 
 	ctx->minValMs = minValMs;
 	ctx->maxValMs = maxValMs;
-	ctx->bucketCount = maxValMs - minValMs;
+	ctx->bucketCount = maxValMs - minValMs + 1;
 	strncpy(ctx->name, name, sizeof(ctx->name));
 	gettimeofday(&ctx->intervalLast, NULL);
 
@@ -359,6 +360,9 @@ static inline void ltn_histogram_interval_print(int fd, struct ltn_histogram_s *
 
 static inline void ltn_histogram_summary_print(int fd, struct ltn_histogram_s *ctx, unsigned int seconds, unsigned int bucketSizeMs)
 {
+	if (!bucketSizeMs)
+		return;
+
 	if (seconds) {
 		struct timeval now;
 		gettimeofday(&now, NULL);
@@ -374,14 +378,20 @@ static inline void ltn_histogram_summary_print(int fd, struct ltn_histogram_s *c
 	struct ltn_histogram_s *h;
 	char name[256];
 	sprintf(name, "%s - Summarized into buckets of %d ms", ctx->name, bucketSizeMs);
-	ltn_histogram_alloc(&h, name, ctx->minValMs, ctx->maxValMs);
+	h = NULL;
+	if (ltn_histogram_alloc(&h, name, ctx->minValMs, ctx->maxValMs) < 0)
+		return;
 
 	/* Walk all of the buckets based on ms, grab the bucket and summary it into a new histogram with a new bucketsize */
-	for (uint64_t i = ctx->minValMs; i < ctx->maxValMs; i += bucketSizeMs) {
-		struct ltn_histogram_bucket_s *dst = ltn_histogram_bucket(h, i + bucketSizeMs);
+	for (uint64_t i = ctx->minValMs; i <= ctx->maxValMs; i += bucketSizeMs) {
+		uint64_t bucketMax = i + bucketSizeMs - 1;
+		if ((bucketMax < i) || (bucketMax > ctx->maxValMs))
+			bucketMax = ctx->maxValMs;
 
-		for (uint64_t j = 0; j < (bucketSizeMs - 1); j++) {
-			struct ltn_histogram_bucket_s *src = ltn_histogram_bucket(ctx, i + j);
+		struct ltn_histogram_bucket_s *dst = ltn_histogram_bucket(h, bucketMax);
+
+		for (uint64_t j = i; j <= bucketMax; j++) {
+			struct ltn_histogram_bucket_s *src = ltn_histogram_bucket(ctx, j);
 			if (!src)
 				continue;
 
@@ -391,7 +401,12 @@ static inline void ltn_histogram_summary_print(int fd, struct ltn_histogram_s *c
 			if (_compareTime(&src->lastUpdate, &dst->lastUpdate) > 0)
 				dst->lastUpdate = src->lastUpdate; /* Implicit struct copy. */
 		}
+
+		if (ctx->maxValMs - i < bucketSizeMs)
+			break;
 	}
+	h->bucketMissCount = ctx->bucketMissCount;
+	h->totalCount = ctx->totalCount;
 	ltn_histogram_interval_print(fd, h, seconds);
 	ltn_histogram_free(h);
 }
@@ -459,4 +474,3 @@ static inline uint64_t ltn_histogram_sample_end(struct ltn_histogram_s *ctx)
 }
 
 #endif /* LTN_HISTOGRAM_H */
-
