@@ -168,6 +168,21 @@ int64_t ltntstools_clock_get_drift_ms(struct ltntstools_clock_s *clk)
 	return ltntstools_clock_get_drift_us(clk) / 1000;
 }
 
+int64_t ltntstools_clock_compare(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b, int64_t ticks_per_second)
+{
+	if (!clock_a || !clock_b || ticks_per_second <= 0 ||
+		clock_a->ticks_per_second <= 0 || clock_b->ticks_per_second <= 0) {
+		return 0;
+	}
+
+	long double a = (long double)clock_a->monotonicTime_ticks * (long double)ticks_per_second /
+		(long double)clock_a->ticks_per_second;
+	long double b = (long double)clock_b->monotonicTime_ticks * (long double)ticks_per_second /
+		(long double)clock_b->ticks_per_second;
+
+	return (int64_t)(a - b);
+}
+
 int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t ticksnow, int64_t ticksthen)
 {
 	/* We have to be able to deal with clock wrapping. */

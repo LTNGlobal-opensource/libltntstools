@@ -168,6 +168,15 @@ int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk);
 int64_t ltntstools_clock_get_drift_ms(struct ltntstools_clock_s *clk);
 
 /**
+ * @brief       Compare two separate clocks after converting both to a caller supplied timebase.
+ * @param[in]   struct ltntstools_clock_s *clock_a - first clock context
+ * @param[in]   struct ltntstools_clock_s *clock_b - second clock context
+ * @param[in]   int64_t ticks_per_second - result timebase, e.g. 90000 or 27000000
+ * @return      int64_t signed delta, clock_a - clock_b, in ticks_per_second units.
+ */
+int64_t ltntstools_clock_compare(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b, int64_t ticks_per_second);
+
+/**
  * @brief       Compute the delta (always expressed as positive) between two timebase values.
  *              For example, computing the difference between two tick values in this timebase,
  *              regardless of whether the clock will wrap or not.
