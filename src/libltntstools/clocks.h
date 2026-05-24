@@ -43,6 +43,7 @@ struct ltntstools_clock_s
 	int64_t ticks_per_second;
 
 	int64_t currentTime_ticks;
+	int64_t monotonicTime_ticks; /* True monotonic clock, advanced by ticks across clockWrapValue wraps. */
 	int64_t clockWrapOccurences; /* Number of times this clock as past us "clockWrapValue" upper limit */
 	int64_t establishedTime_ticks;
 	struct timeval establishedWalltime; /* Walltime when we establish the 'establishedTime' field value. */
@@ -111,6 +112,13 @@ void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks);
  * @return      int64_t ticks - current measurement from clock context.
  */
 int64_t ltntstools_clock_get_ticks(struct ltntstools_clock_s *clk);
+
+/**
+ * @brief       Get the monotonic timebase clock value, including accumulated ticks across wraps.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @return      int64_t ticks - monotonic measurement from clock context.
+ */
+int64_t ltntstools_clock_get_monotonic_ticks(struct ltntstools_clock_s *clk);
 
 /**
  * @brief       Add N ticks to the existing clock context, positive or negative values are supported.
@@ -195,5 +203,4 @@ uint64_t ltntstools_corrected_clock_unwrapped(const struct ltntstools_corrected_
 #endif
 
 #endif /* _CLOCKS_H */
-
 

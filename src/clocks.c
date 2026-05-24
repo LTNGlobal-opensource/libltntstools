@@ -20,6 +20,8 @@ void ltntstools_clock_establish_timebase(struct ltntstools_clock_s *clk, int64_t
 	clk->ticks_per_second = ticks_per_second;
 	clk->establishedTime_ticks = 0;
 	clk->currentTime_ticks = 0;
+	clk->monotonicTime_ticks = 0;
+	clk->clockWrapOccurences = 0;
 
 	if (clk->ticks_per_second == 90000)
 		clk->clockWrapValue = MAX_PTS_VALUE;
@@ -44,13 +46,25 @@ void ltntstools_clock_establish_wallclock(struct ltntstools_clock_s *clk, int64_
 	gettimeofday(&clk->establishedWalltime, NULL);
 	clk->establishedTime_ticks = ticks;
 	clk->currentTime_ticks = ticks;
+	clk->monotonicTime_ticks = ticks;
+	clk->clockWrapOccurences = 0;
 }
 
 void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
+	int wrapped = 0;
+
 	/* If the new tick value jumps the clock backwards by more than 50%, assume it naturally wrapped */
 	if (ticks < (clk->currentTime_ticks / 50)) {
 		clk->clockWrapOccurences++;
+		wrapped = 1;
+	}
+
+	if (ticks >= clk->currentTime_ticks) {
+		clk->monotonicTime_ticks += ticks - clk->currentTime_ticks;
+	} else
+	if (wrapped && clk->clockWrapValue > 0) {
+		clk->monotonicTime_ticks += ltntstools_clock_compute_delta(clk, ticks, clk->currentTime_ticks);
 	}
 	clk->currentTime_ticks = ticks;
 }
@@ -60,9 +74,29 @@ int64_t ltntstools_clock_get_ticks(struct ltntstools_clock_s *clk)
 	return clk->currentTime_ticks;
 }
 
+int64_t ltntstools_clock_get_monotonic_ticks(struct ltntstools_clock_s *clk)
+{
+	return clk->monotonicTime_ticks;
+}
+
 void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
+	if (ticks > 0) {
+		clk->monotonicTime_ticks += ticks;
+	}
 	clk->currentTime_ticks += ticks;
+
+	if (clk->clockWrapValue > 0) {
+		while (clk->currentTime_ticks >= clk->clockWrapValue) {
+			clk->currentTime_ticks -= clk->clockWrapValue;
+			clk->clockWrapOccurences++;
+		}
+		while (clk->currentTime_ticks < 0) {
+			clk->currentTime_ticks += clk->clockWrapValue;
+			if (clk->clockWrapOccurences > 0)
+				clk->clockWrapOccurences--;
+		}
+	}
 }
 
 int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk)
@@ -78,7 +112,7 @@ int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk)
 	int64_t elapsedWT = ltn_timeval_subtract_us(&now, &clk->establishedWalltime);
 
 	/* How many timebase ticks have passed since we established time? */
-	int64_t ticks = (clk->clockWrapOccurences * clk->clockWrapValue) + (clk->currentTime_ticks - clk->establishedTime_ticks);
+	int64_t ticks = clk->monotonicTime_ticks - clk->establishedTime_ticks;
 #if 0
 printf("clk->currentTime_ticks %" PRIi64 ",	clk->establishedTime_ticks %" PRIi64 "\n",
 	clk->currentTime_ticks,
