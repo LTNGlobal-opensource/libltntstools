@@ -46,6 +46,7 @@ struct ltntstools_clock_s
 	int64_t monotonicTime_ticks; /* True monotonic clock, advanced by ticks across clockWrapValue wraps. */
 	int64_t clockWrapOccurences; /* Number of times this clock as past us "clockWrapValue" upper limit */
 	uint64_t backwardJumpUnder500msCount; /* Number of non-wrap backward jumps under 500 ms. */
+	uint64_t forwardJumpOver200msCount; /* Number of forward jumps over 200 ms. */
 	int64_t establishedTime_ticks;
 	struct timeval establishedWalltime; /* Walltime when we establish the 'establishedTime' field value. */
 
@@ -134,6 +135,13 @@ int64_t ltntstools_clock_get_wrap_occurences(struct ltntstools_clock_s *clk);
  * @return      uint64_t count of backward jumps under 500 ms.
  */
 uint64_t ltntstools_clock_get_backward_jump_under_500ms_count(struct ltntstools_clock_s *clk);
+
+/**
+ * @brief       Get the number of forward clock jumps over 200 ms.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @return      uint64_t count of forward jumps over 200 ms.
+ */
+uint64_t ltntstools_clock_get_forward_jump_over_200ms_count(struct ltntstools_clock_s *clk);
 
 /**
  * @brief       Add N ticks to the existing clock context, positive or negative values are supported.
