@@ -77,6 +77,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
@@ -171,7 +172,9 @@ static inline int ltn_histogram_alloc(struct ltn_histogram_s **handle, const cha
 		return -1;
 	if (!name)
 		return -1;
-	
+	if ((maxValMs - minValMs) > (UINT32_MAX - 1))
+		return -1;
+
 	struct ltn_histogram_s *ctx = (struct ltn_histogram_s *)calloc(1, sizeof(*ctx));
 	if (!ctx)
 		return -1;
@@ -182,9 +185,11 @@ static inline int ltn_histogram_alloc(struct ltn_histogram_s **handle, const cha
 	strncpy(ctx->name, name, sizeof(ctx->name));
 	gettimeofday(&ctx->intervalLast, NULL);
 
-	ctx->buckets = (struct ltn_histogram_bucket_s *)calloc(ctx->bucketCount, sizeof(struct ltn_histogram_s));
-	if (!ctx->buckets)
+	ctx->buckets = (struct ltn_histogram_bucket_s *)calloc(ctx->bucketCount, sizeof(struct ltn_histogram_bucket_s));
+	if (!ctx->buckets) {
+		free(ctx);
 		return -1;
+	}
 
 	ltn_histogram_reset(ctx);
 
@@ -251,8 +256,10 @@ static inline void ltn_histogram_interval_print_buf(char **buf, struct ltn_histo
 
 		uint32_t diffMs = ltn_timeval_subtract_ms(&now, &ctx->printLast);
 
-		if (diffMs < (seconds * 1000))
+		if (diffMs < (seconds * 1000)) {
+			free(p);
 			return;
+		}
 
 		ctx->printLast = now; /* Implicit struct copy. */
 	}
