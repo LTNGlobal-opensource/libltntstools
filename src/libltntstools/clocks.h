@@ -12,6 +12,20 @@
  *              framework for decades, and get a 64bit wrapped corrected value for misc use cases,
  *              especially usefull when building demuxers, lists with sorted PTS values and detecting
  *              gaps in time over long periods.
+ *
+ *              PCR example:
+ *
+ *                  struct ltntstools_clock_s pcr;
+ *                  ltntstools_clock_initialize(&pcr);
+ *                  ltntstools_clock_set_metadata(&pcr, ltntstools_CLOCK_TYPE_PCR, "video-pcr");
+ *                  ltntstools_clock_establish_timebase(&pcr, 27000000);
+ *                  ltntstools_clock_establish_wallclock(&pcr, first_pcr_ticks);
+ *
+ *                  For each later PCR value, call ltntstools_clock_set_ticks(&pcr, pcr_ticks).
+ *                  The framework keeps the raw PCR, a monotonic PCR that survives wraparound,
+ *                  walltime drift, wrap counts, and small backward / large forward jump counters.
+ *                  Applications can use these values to detect unstable PCR cadence, timestamp
+ *                  discontinuities, or clocks drifting away from walltime or another clock.
  */
 
 #include <time.h>
