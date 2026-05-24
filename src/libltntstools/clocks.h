@@ -73,6 +73,8 @@ struct ltntstools_clock_s
 	int64_t clockWrapOccurences; /* Number of times this clock as past us "clockWrapValue" upper limit */
 	uint64_t backwardJumpUnder500msCount; /* Number of non-wrap backward jumps under 500 ms. */
 	uint64_t forwardJumpOver200msCount; /* Number of forward jumps over 200 ms. */
+	uint64_t discontinuityCount; /* Number of caller-marked clock discontinuities. */
+	int pendingDiscontinuity; /* Next tick update should rebase the clock instead of counting anomalies. */
 	int64_t establishedTime_ticks;
 	struct timeval establishedWalltime; /* Walltime when we establish the 'establishedTime' field value. */
 
@@ -199,6 +201,21 @@ uint64_t ltntstools_clock_get_backward_jump_under_500ms_count(struct ltntstools_
  * @return      uint64_t count of forward jumps over 200 ms.
  */
 uint64_t ltntstools_clock_get_forward_jump_over_200ms_count(struct ltntstools_clock_s *clk);
+
+/**
+ * @brief       Mark the clock discontinuous. The next set_ticks() call rebases the clock.
+ *              Call this when the surrounding application knows the stream reset or restarted,
+ *              the framework will reset internally - knowing this.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ */
+void ltntstools_clock_mark_discontinuity(struct ltntstools_clock_s *clk);
+
+/**
+ * @brief       Get the number of caller-marked discontinuities.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @return      uint64_t count of discontinuities.
+ */
+uint64_t ltntstools_clock_get_discontinuity_count(struct ltntstools_clock_s *clk);
 
 /**
  * @brief       Add N ticks to the existing clock context, positive or negative values are supported.

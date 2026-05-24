@@ -91,6 +91,8 @@ void ltntstools_clock_establish_timebase(struct ltntstools_clock_s *clk, int64_t
 	clk->clockWrapOccurences = 0;
 	clk->backwardJumpUnder500msCount = 0;
 	clk->forwardJumpOver200msCount = 0;
+	clk->discontinuityCount = 0;
+	clk->pendingDiscontinuity = 0;
 
 	if (clk->ticks_per_second == 90000)
 		clk->clockWrapValue = MAX_PTS_VALUE;
@@ -119,11 +121,23 @@ void ltntstools_clock_establish_wallclock(struct ltntstools_clock_s *clk, int64_
 	clk->clockWrapOccurences = 0;
 	clk->backwardJumpUnder500msCount = 0;
 	clk->forwardJumpOver200msCount = 0;
+	clk->pendingDiscontinuity = 0;
 }
 
 void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
 	int wrapped = 0;
+
+	if (clk->pendingDiscontinuity) {
+		clk->pendingDiscontinuity = 0;
+		clk->clockWrapOccurences = 0;
+		clk->currentTime_ticks = ticks;
+		clk->monotonicTime_ticks = ticks;
+		clk->establishedTime_ticks = ticks;
+		gettimeofday(&clk->establishedWalltime, NULL);
+		clk->establishedWT = 1;
+		return;
+	}
 
 	/* If the new tick value jumps the clock backwards by more than 50%, assume it naturally wrapped */
 	if (ticks < (clk->currentTime_ticks / 50)) {
@@ -169,6 +183,25 @@ uint64_t ltntstools_clock_get_backward_jump_under_500ms_count(struct ltntstools_
 uint64_t ltntstools_clock_get_forward_jump_over_200ms_count(struct ltntstools_clock_s *clk)
 {
 	return clk->forwardJumpOver200msCount;
+}
+
+void ltntstools_clock_mark_discontinuity(struct ltntstools_clock_s *clk)
+{
+	if (!clk) {
+		return;
+	}
+
+	clk->discontinuityCount++;
+	clk->pendingDiscontinuity = 1;
+}
+
+uint64_t ltntstools_clock_get_discontinuity_count(struct ltntstools_clock_s *clk)
+{
+	if (!clk) {
+		return 0;
+	}
+
+	return clk->discontinuityCount;
 }
 
 void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
