@@ -235,6 +235,16 @@ int64_t ltntstools_clock_compare(struct ltntstools_clock_s *clock_a, struct ltnt
 	return (int64_t)(a - b);
 }
 
+int64_t ltntstools_clock_compare_us(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b)
+{
+	return ltntstools_clock_compare(clock_a, clock_b, 1000000);
+}
+
+int64_t ltntstools_clock_compare_ms(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b)
+{
+	return ltntstools_clock_compare(clock_a, clock_b, 1000);
+}
+
 int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t ticksnow, int64_t ticksthen)
 {
 	/* We have to be able to deal with clock wrapping. */

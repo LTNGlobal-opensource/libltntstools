@@ -233,6 +233,22 @@ int64_t ltntstools_clock_get_drift_ms(struct ltntstools_clock_s *clk);
 int64_t ltntstools_clock_compare(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b, int64_t ticks_per_second);
 
 /**
+ * @brief       Compare two separate clocks and return the signed delta in microseconds.
+ * @param[in]   struct ltntstools_clock_s *clock_a - first clock context
+ * @param[in]   struct ltntstools_clock_s *clock_b - second clock context
+ * @return      int64_t signed delta, clock_a - clock_b, in us.
+ */
+int64_t ltntstools_clock_compare_us(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b);
+
+/**
+ * @brief       Compare two separate clocks and return the signed delta in milliseconds.
+ * @param[in]   struct ltntstools_clock_s *clock_a - first clock context
+ * @param[in]   struct ltntstools_clock_s *clock_b - second clock context
+ * @return      int64_t signed delta, clock_a - clock_b, in ms.
+ */
+int64_t ltntstools_clock_compare_ms(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b);
+
+/**
  * @brief       Compute the delta (always expressed as positive) between two timebase values.
  *              For example, computing the difference between two tick values in this timebase,
  *              regardless of whether the clock will wrap or not.
