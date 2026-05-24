@@ -22,6 +22,7 @@ void ltntstools_clock_establish_timebase(struct ltntstools_clock_s *clk, int64_t
 	clk->currentTime_ticks = 0;
 	clk->monotonicTime_ticks = 0;
 	clk->clockWrapOccurences = 0;
+	clk->backwardJumpUnder500msCount = 0;
 
 	if (clk->ticks_per_second == 90000)
 		clk->clockWrapValue = MAX_PTS_VALUE;
@@ -48,6 +49,7 @@ void ltntstools_clock_establish_wallclock(struct ltntstools_clock_s *clk, int64_
 	clk->currentTime_ticks = ticks;
 	clk->monotonicTime_ticks = ticks;
 	clk->clockWrapOccurences = 0;
+	clk->backwardJumpUnder500msCount = 0;
 }
 
 void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
@@ -65,6 +67,9 @@ void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 	} else
 	if (wrapped && clk->clockWrapValue > 0) {
 		clk->monotonicTime_ticks += ltntstools_clock_compute_delta(clk, ticks, clk->currentTime_ticks);
+	} else
+	if (clk->ticks_per_second > 0 && (clk->currentTime_ticks - ticks) < (clk->ticks_per_second / 2)) {
+		clk->backwardJumpUnder500msCount++;
 	}
 	clk->currentTime_ticks = ticks;
 }
@@ -82,6 +87,11 @@ int64_t ltntstools_clock_get_monotonic_ticks(struct ltntstools_clock_s *clk)
 int64_t ltntstools_clock_get_wrap_occurences(struct ltntstools_clock_s *clk)
 {
 	return clk->clockWrapOccurences;
+}
+
+uint64_t ltntstools_clock_get_backward_jump_under_500ms_count(struct ltntstools_clock_s *clk)
+{
+	return clk->backwardJumpUnder500msCount;
 }
 
 void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
