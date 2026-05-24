@@ -121,6 +121,13 @@ int64_t ltntstools_clock_get_ticks(struct ltntstools_clock_s *clk);
 int64_t ltntstools_clock_get_monotonic_ticks(struct ltntstools_clock_s *clk);
 
 /**
+ * @brief       Get the number of clockWrapValue wraps observed by this clock context.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @return      int64_t wrap occurences.
+ */
+int64_t ltntstools_clock_get_wrap_occurences(struct ltntstools_clock_s *clk);
+
+/**
  * @brief       Add N ticks to the existing clock context, positive or negative values are supported.
  *              Don't use this if you want to be reliably tracka  clock against walltime and use the
  *              ltntstools_clock_get_drift_us() function, Instead, use _set_ticks() followed by
@@ -203,4 +210,3 @@ uint64_t ltntstools_corrected_clock_unwrapped(const struct ltntstools_corrected_
 #endif
 
 #endif /* _CLOCKS_H */
-

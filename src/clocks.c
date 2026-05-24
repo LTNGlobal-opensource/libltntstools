@@ -79,6 +79,11 @@ int64_t ltntstools_clock_get_monotonic_ticks(struct ltntstools_clock_s *clk)
 	return clk->monotonicTime_ticks;
 }
 
+int64_t ltntstools_clock_get_wrap_occurences(struct ltntstools_clock_s *clk)
+{
+	return clk->clockWrapOccurences;
+}
+
 void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
 	if (ticks > 0) {
