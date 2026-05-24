@@ -18,7 +18,6 @@
  *                  struct ltntstools_clock_s pcr;
  *                  ltntstools_clock_initialize(&pcr);
  *                  ltntstools_clock_set_metadata(&pcr, ltntstools_CLOCK_TYPE_PCR, "video-pcr");
- *                  ltntstools_clock_establish_timebase(&pcr, 27000000);
  *                  ltntstools_clock_establish_wallclock(&pcr, first_pcr_ticks);
  *
  *                  For each later PCR value, call ltntstools_clock_set_ticks(&pcr, pcr_ticks).
@@ -94,6 +93,8 @@ void ltntstools_clock_initialize(struct ltntstools_clock_s *clk);
 
 /**
  * @brief       Set a clock type and optional caller supplied name for diagnostics.
+ *              PCR automatically establishes a 27 MHz timebase; PTS and DTS automatically
+ *              establish a 90 kHz timebase.
  * @param[in]   struct ltntstools_clock_s *clk - context
  * @param[in]   enum ltntstools_clock_type_e type - clock type
  * @param[in]   const char *name - optional name, pass NULL to use the type name

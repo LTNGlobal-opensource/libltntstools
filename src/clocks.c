@@ -41,6 +41,21 @@ void ltntstools_clock_set_metadata(struct ltntstools_clock_s *clk, enum ltntstoo
 	}
 
 	snprintf(clk->name, sizeof(clk->name), "%s", name);
+
+	switch (type) {
+	case ltntstools_CLOCK_TYPE_PCR:
+		ltntstools_clock_establish_timebase(clk, 27000000);
+		break;
+	case ltntstools_CLOCK_TYPE_PTS:
+	case ltntstools_CLOCK_TYPE_DTS:
+	case ltntstools_CLOCK_TYPE_RTP:
+		ltntstools_clock_establish_timebase(clk, 90000);
+		break;
+	case ltntstools_CLOCK_TYPE_NTP:
+	case ltntstools_CLOCK_TYPE_UNKNOWN:
+	default:
+		break;
+	}
 }
 
 enum ltntstools_clock_type_e ltntstools_clock_get_type(struct ltntstools_clock_s *clk)
