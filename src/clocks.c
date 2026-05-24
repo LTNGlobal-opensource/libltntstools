@@ -7,6 +7,58 @@
 void ltntstools_clock_initialize(struct ltntstools_clock_s *clk)
 {
 	memset(clk, 0, sizeof(*clk));
+	ltntstools_clock_set_metadata(clk, ltntstools_CLOCK_TYPE_UNKNOWN, NULL);
+}
+
+const char *ltntstools_clock_type_name(enum ltntstools_clock_type_e type)
+{
+	switch (type) {
+	case ltntstools_CLOCK_TYPE_PCR:
+		return "PCR";
+	case ltntstools_CLOCK_TYPE_PTS:
+		return "PTS";
+	case ltntstools_CLOCK_TYPE_DTS:
+		return "DTS";
+	case ltntstools_CLOCK_TYPE_RTP:
+		return "RTP";
+	case ltntstools_CLOCK_TYPE_NTP:
+		return "NTP";
+	case ltntstools_CLOCK_TYPE_UNKNOWN:
+	default:
+		return "UNKNOWN";
+	}
+}
+
+void ltntstools_clock_set_metadata(struct ltntstools_clock_s *clk, enum ltntstools_clock_type_e type, const char *name)
+{
+	if (!clk) {
+		return;
+	}
+
+	clk->type = type;
+	if (!name || !*name) {
+		name = ltntstools_clock_type_name(type);
+	}
+
+	snprintf(clk->name, sizeof(clk->name), "%s", name);
+}
+
+enum ltntstools_clock_type_e ltntstools_clock_get_type(struct ltntstools_clock_s *clk)
+{
+	if (!clk) {
+		return ltntstools_CLOCK_TYPE_UNKNOWN;
+	}
+
+	return clk->type;
+}
+
+const char *ltntstools_clock_get_name(struct ltntstools_clock_s *clk)
+{
+	if (!clk || !clk->name[0]) {
+		return ltntstools_clock_type_name(ltntstools_CLOCK_TYPE_UNKNOWN);
+	}
+
+	return clk->name;
 }
 
 int ltntstools_clock_is_established_timebase(struct ltntstools_clock_s *clk)

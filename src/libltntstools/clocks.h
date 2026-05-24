@@ -21,6 +21,16 @@
 extern "C" {
 #endif
 
+enum ltntstools_clock_type_e
+{
+	ltntstools_CLOCK_TYPE_UNKNOWN = 0,
+	ltntstools_CLOCK_TYPE_PCR,
+	ltntstools_CLOCK_TYPE_PTS,
+	ltntstools_CLOCK_TYPE_DTS,
+	ltntstools_CLOCK_TYPE_RTP,
+	ltntstools_CLOCK_TYPE_NTP,
+};
+
 /*
  * Walltime: time on the running host, measured in uS.
  * Timebase: A clock runnig at a rate of 27MHz, or 90Khz, or any other rate, for example.
@@ -39,6 +49,9 @@ struct ltntstools_clock_s
 {
 	int establishedTimebase;
 	int establishedWT;
+
+	enum ltntstools_clock_type_e type;
+	char name[32];
 
 	int64_t ticks_per_second;
 
@@ -64,6 +77,35 @@ struct ltntstools_clock_s
  * @param[in]   struct ltntstools_clock_s *clk - user allocated storage for the clock context
  */
 void ltntstools_clock_initialize(struct ltntstools_clock_s *clk);
+
+/**
+ * @brief       Set a clock type and optional caller supplied name for diagnostics.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @param[in]   enum ltntstools_clock_type_e type - clock type
+ * @param[in]   const char *name - optional name, pass NULL to use the type name
+ */
+void ltntstools_clock_set_metadata(struct ltntstools_clock_s *clk, enum ltntstools_clock_type_e type, const char *name);
+
+/**
+ * @brief       Get the configured clock type.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @return      enum ltntstools_clock_type_e clock type.
+ */
+enum ltntstools_clock_type_e ltntstools_clock_get_type(struct ltntstools_clock_s *clk);
+
+/**
+ * @brief       Get a printable clock name suitable for diagnostics.
+ * @param[in]   struct ltntstools_clock_s *clk - context
+ * @return      const char * clock name.
+ */
+const char *ltntstools_clock_get_name(struct ltntstools_clock_s *clk);
+
+/**
+ * @brief       Get a printable name for a clock type.
+ * @param[in]   enum ltntstools_clock_type_e type - clock type
+ * @return      const char * clock type name.
+ */
+const char *ltntstools_clock_type_name(enum ltntstools_clock_type_e type);
 
 /**
  * @brief       Establish a timebase of N ticks_per_second, for this clock context.
