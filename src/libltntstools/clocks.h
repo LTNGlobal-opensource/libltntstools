@@ -25,6 +25,15 @@
  *                  walltime drift, wrap counts, and small backward / large forward jump counters.
  *                  Applications can use these values to detect unstable PCR cadence, timestamp
  *                  discontinuities, or clocks drifting away from walltime or another clock.
+ *
+ *              Discontinuities:
+ *
+ *                  Call ltntstools_clock_mark_discontinuity(&pcr) when the caller knows the
+ *                  timestamp timeline is intentionally broken, such as an MPEG-TS discontinuity
+ *                  indicator, encoder restart, source failover, splice point, PID/program switch,
+ *                  or segment boundary. The next ltntstools_clock_set_ticks() call rebases the
+ *                  clock to the new timeline instead of counting the transition as drift, wrap,
+ *                  or a backward/forward timestamp jump.
  */
 
 #include <time.h>
