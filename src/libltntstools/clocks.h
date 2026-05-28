@@ -79,6 +79,7 @@ struct ltntstools_clock_s
 
 	int64_t currentTime_ticks;
 	int64_t monotonicTime_ticks; /* True monotonic clock, advanced by ticks across clockWrapValue wraps. */
+	int64_t monotonicReference_ticks; /* Raw tick high-water mark already accounted for in monotonicTime_ticks. */
 	int64_t clockWrapOccurences; /* Number of times this clock as past us "clockWrapValue" upper limit */
 	uint64_t backwardJumpUnder500msCount; /* Number of non-wrap backward jumps under 500 ms. */
 	uint64_t forwardJumpOver200msCount; /* Number of forward jumps over 200 ms. */
