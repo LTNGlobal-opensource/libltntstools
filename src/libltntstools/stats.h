@@ -397,6 +397,14 @@ uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statis
 int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream);
 
 /**
+ * @brief       Query the total number of transport packets processed since the last reset, or startup.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - packet Count
+ */
+uint64_t  ltntstools_pid_stats_stream_get_packet_count(struct ltntstools_stream_statistics_s *stream);
+
+
+/**
  * @brief       Query pid specific total errors for the PSUI / Adaption payload invalid combinations.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @param[in]   uint16_t pidnr - pid

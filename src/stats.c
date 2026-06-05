@@ -580,6 +580,11 @@ uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics
 	return stream->pps * 188 * 8;
 }
 
+uint64_t ltntstools_pid_stats_stream_get_packet_count(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->packetCount;
+}
+
 static void _expire_per_second_pid_stats(struct ltntstools_pid_statistics_s *pid)
 {
 	time_t now;
