@@ -53,6 +53,7 @@
 #include <inttypes.h>
 #include <libltntstools/clocks.h>
 #include <libltntstools/histogram.h>
+#include <libltntstools/history-metric.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -171,6 +172,9 @@ struct ltntstools_stream_statistics_s
 	uint64_t packetCount;          /**< Total number of packets processed. */
 	uint64_t teiErrors;            /**< Total number of transport error indicator issues processed */
 	uint64_t ccErrors;             /**< Total number of continuity counter issues processed */
+
+	struct ltntstools_history_metric_collection_s ccErrorHistory;
+
 	uint64_t scrambledCount;       /**< Total number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Total number of times the PCR interval has exceeded 40ms */
 	uint64_t prev_pcrExceeds40ms;  /**< Prior value of pcrExceeds40ms, updated every ltntstools_pid_stats_update() call */
@@ -376,6 +380,20 @@ uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_sta
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_statistics_s *stream);
 
 /**
+ * @brief       Query TRANSPORT stream - Discontinuities detected in the last hour, or since the last reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - count
+ */
+uint64_t ltntstools_pid_stats_stream_get_ccerror_count_1hr(struct ltntstools_stream_statistics_s *stream);
+
+/**
+ * @brief       Query TRANSPORT stream - Discontinuities detected in the last 24 hours, or since the last reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @return      uint64_t - count
+ */
+uint64_t ltntstools_pid_stats_stream_get_ccerror_count_24hr(struct ltntstools_stream_statistics_s *stream);
+
+/**
  * @brief       Query TRANSPORT stream - Scrambled packets detected since last ltntstools_pid_stats_reset()
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
  * @return      uint64_t - count
@@ -402,7 +420,6 @@ int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_st
  * @return      uint64_t - packet Count
  */
 uint64_t  ltntstools_pid_stats_stream_get_packet_count(struct ltntstools_stream_statistics_s *stream);
-
 
 /**
  * @brief       Query pid specific total errors for the PSUI / Adaption payload invalid combinations.
