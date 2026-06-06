@@ -402,6 +402,26 @@ int ltntstools_vbv_write(void *hdl, const struct ltn_pes_packet_s *pkt)
 	return 0; /* Success*/
 }
 
+int ltntstools_vbv_get_fullness(void *hdl, double *pct)
+{
+	struct vbv_ctx_s *ctx = (struct vbv_ctx_s *)hdl;
+	if (!ctx) {
+		return -1; /* Missing mandatory args */
+	}
+
+	uint32_t used_bytes;
+
+	pthread_mutex_lock(&ctx->pktListMutex);
+	used_bytes = ctx->usedBytes;
+	pthread_mutex_unlock(&ctx->pktListMutex);
+
+	double p = ((double)used_bytes / (double)ctx->decoder_profile.vbv_buffer_size) * 100.0;
+
+	*pct = p;
+	
+	return 0; /* Success */
+}
+
 static void printDiagnostics(struct vbv_ctx_s *ctx)
 {
 	struct timespec now;

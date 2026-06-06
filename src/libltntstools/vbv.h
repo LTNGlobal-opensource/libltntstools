@@ -118,10 +118,19 @@ int ltntstools_vbv_profile_defaults(struct vbv_decoder_profile_s *p, int codec, 
 
 /**
  * @brief       Increase debug verbosity level.
+ * @param[in]   void *hdl - Handle / context for further use.
  * @param[in]   uint32_t level - higher levels increase verbosity
  * @return      0 on success, else < 0.
  */
 int ltntstools_vbv_verbose(void *hdl, uint32_t level);
+
+/**
+ * @brief       Query the VBV fullness
+ * @param[in]   void *hdl - Handle / context for further use.
+ * @param[in]   double percent - percentage of fullness. below 10% and above 90% the stack starts to warn.
+ * @return      0 on success, else < 0.
+ */
+int ltntstools_vbv_get_fullness(void *hdl, double *pct);
 
 #ifdef __cplusplus
 };
