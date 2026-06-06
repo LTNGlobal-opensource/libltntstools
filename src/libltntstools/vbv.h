@@ -38,7 +38,8 @@ extern "C" {
 
 enum ltntstools_vbv_event_e {
 	EVENT_VBV_UNDEFINED = 0,
-	EVENT_VBV_FULLNESS_PCT,   /**< triggered when fullness < 10% or > 90% */
+	EVENT_VBV_FULLNESS_PCT_LT_10PCT, /**< triggered when fullness < 10% */
+	EVENT_VBV_FULLNESS_PCT_GT_90PCT, /**< triggered when fullness > 90% */
 	EVENT_VBV_BPS,
 	EVENT_VBV_UNDERFLOW,      /**< Buffering violation */
 	EVENT_VBV_OVERFLOW,       /**< Buffering violation */
