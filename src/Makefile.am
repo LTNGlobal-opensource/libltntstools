@@ -77,6 +77,7 @@ libltntstools_la_SOURCES += libltntstools/demux.h
 libltntstools_la_SOURCES += demux-types.h
 libltntstools_la_SOURCES += demux.c
 libltntstools_la_SOURCES += demux-pid.c
+libltntstools_la_SOURCES += history-metric.c
 
 libltntstools_la_CFLAGS = -Wall -DVERSION=\"$(VERSION)\" -DPROG="\"$(PACKAGE)\"" \
 	-D_FILE_OFFSET_BITS=64 -O3 -D_DEFAULT_SOURCE -I$(top_srcdir)/include
@@ -129,3 +130,4 @@ libltntstools_include_HEADERS += libltntstools/rtp-analyzer.h
 libltntstools_include_HEADERS += libltntstools/ac3.h
 libltntstools_include_HEADERS += libltntstools/vbv.h
 libltntstools_include_HEADERS += libltntstools/demux.h
+libltntstools_include_HEADERS += libltntstools/history-metric.h

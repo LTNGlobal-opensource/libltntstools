@@ -1,6 +1,7 @@
 /* Copyright LiveTimeNet, Inc. 2017. All Rights Reserved. */
 
 #include "libltntstools/ltntstools.h"
+#include "xorg-list.h"
 
 /* Forward defines */
 #if EXPERIMENTAL_REORDERING
@@ -164,6 +165,9 @@ static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *s
 
 	stream->ccErrors++;
 	stream->last_cc_error = now.tv_sec;
+
+	struct ltntstools_history_metric_s *m = ltntstools_history_metric_alloc(now.tv_sec, 1);
+	ltntstools_history_metric_collection_add(&stream->ccErrorHistory, m);
 
 	if (stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb) {
 		stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb(stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].userContext, 
@@ -410,6 +414,7 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->packetCount = 0;
 	stream->teiErrors = 0;
 	stream->ccErrors = 0;
+	ltntstools_history_metric_collection_reset(&stream->ccErrorHistory);
 	stream->last_cc_error = 0;
 	stream->mbps = 0;
 #if EXPERIMENTAL_REORDERING
@@ -459,6 +464,7 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 	if (!stream)
 		return -1;
 
+	ltntstools_history_metric_collection_init(&stream->ccErrorHistory, "CC Error History");
 	ltn_histogram_alloc_video_defaults(&stream->packetIntervals, "IAT Intervals");
 	ltntstools_pid_stats_reset(stream);
 
@@ -470,6 +476,8 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 {
 	if (!stream)
 		return;
+
+	ltntstools_history_metric_collection_free(&stream->ccErrorHistory);
 
 	if (stream->packetIntervals) {
 		ltn_histogram_free(stream->packetIntervals);
@@ -549,6 +557,20 @@ uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_
 	return stream->ccErrors;
 }
 
+uint64_t ltntstools_pid_stats_stream_get_ccerror_count_1hr(struct ltntstools_stream_statistics_s *stream)
+{
+	uint64_t val = 0;
+	ltntstools_history_metric_collection_count_until_1hr(&stream->ccErrorHistory, &val);
+	return val;
+}
+
+uint64_t ltntstools_pid_stats_stream_get_ccerror_count_24hr(struct ltntstools_stream_statistics_s *stream)
+{
+	uint64_t val = 0;
+	ltntstools_history_metric_collection_count_until_24hr(&stream->ccErrorHistory, &val);
+	return val;
+}
+
 #if EXPERIMENTAL_REORDERING
 uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream)
 {
@@ -578,6 +600,11 @@ uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics
 {
 	_expire_per_second_stream_stats(stream);
 	return stream->pps * 188 * 8;
+}
+
+uint64_t ltntstools_pid_stats_stream_get_packet_count(struct ltntstools_stream_statistics_s *stream)
+{
+	return stream->packetCount;
 }
 
 static void _expire_per_second_pid_stats(struct ltntstools_pid_statistics_s *pid)
