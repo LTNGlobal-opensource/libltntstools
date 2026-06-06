@@ -2,7 +2,7 @@
 
 #include "libltntstools/ac3.h"
 
-#include "klbitstream_readwriter.h"
+#include "libltntstools/klbitstream_readwriter.h"
 
 void ltntstools_ac3_header_dprintf(int fd, struct ltn_ac3_header_syncframe_s *sf)
 {

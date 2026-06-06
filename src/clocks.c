@@ -7,6 +7,73 @@
 void ltntstools_clock_initialize(struct ltntstools_clock_s *clk)
 {
 	memset(clk, 0, sizeof(*clk));
+	ltntstools_clock_set_metadata(clk, ltntstools_CLOCK_TYPE_UNKNOWN, NULL);
+}
+
+const char *ltntstools_clock_type_name(enum ltntstools_clock_type_e type)
+{
+	switch (type) {
+	case ltntstools_CLOCK_TYPE_PCR:
+		return "PCR";
+	case ltntstools_CLOCK_TYPE_PTS:
+		return "PTS";
+	case ltntstools_CLOCK_TYPE_DTS:
+		return "DTS";
+	case ltntstools_CLOCK_TYPE_RTP:
+		return "RTP";
+	case ltntstools_CLOCK_TYPE_NTP:
+		return "NTP";
+	case ltntstools_CLOCK_TYPE_UNKNOWN:
+	default:
+		return "UNKNOWN";
+	}
+}
+
+void ltntstools_clock_set_metadata(struct ltntstools_clock_s *clk, enum ltntstools_clock_type_e type, const char *name)
+{
+	if (!clk) {
+		return;
+	}
+
+	clk->type = type;
+	if (!name || !*name) {
+		name = ltntstools_clock_type_name(type);
+	}
+
+	snprintf(clk->name, sizeof(clk->name), "%s", name);
+
+	switch (type) {
+	case ltntstools_CLOCK_TYPE_PCR:
+		ltntstools_clock_establish_timebase(clk, 27000000);
+		break;
+	case ltntstools_CLOCK_TYPE_PTS:
+	case ltntstools_CLOCK_TYPE_DTS:
+	case ltntstools_CLOCK_TYPE_RTP:
+		ltntstools_clock_establish_timebase(clk, 90000);
+		break;
+	case ltntstools_CLOCK_TYPE_NTP:
+	case ltntstools_CLOCK_TYPE_UNKNOWN:
+	default:
+		break;
+	}
+}
+
+enum ltntstools_clock_type_e ltntstools_clock_get_type(struct ltntstools_clock_s *clk)
+{
+	if (!clk) {
+		return ltntstools_CLOCK_TYPE_UNKNOWN;
+	}
+
+	return clk->type;
+}
+
+const char *ltntstools_clock_get_name(struct ltntstools_clock_s *clk)
+{
+	if (!clk || !clk->name[0]) {
+		return ltntstools_clock_type_name(ltntstools_CLOCK_TYPE_UNKNOWN);
+	}
+
+	return clk->name;
 }
 
 int ltntstools_clock_is_established_timebase(struct ltntstools_clock_s *clk)
@@ -20,6 +87,13 @@ void ltntstools_clock_establish_timebase(struct ltntstools_clock_s *clk, int64_t
 	clk->ticks_per_second = ticks_per_second;
 	clk->establishedTime_ticks = 0;
 	clk->currentTime_ticks = 0;
+	clk->monotonicTime_ticks = 0;
+	clk->monotonicReference_ticks = 0;
+	clk->clockWrapOccurences = 0;
+	clk->backwardJumpUnder500msCount = 0;
+	clk->forwardJumpOver200msCount = 0;
+	clk->discontinuityCount = 0;
+	clk->pendingDiscontinuity = 0;
 
 	if (clk->ticks_per_second == 90000)
 		clk->clockWrapValue = MAX_PTS_VALUE;
@@ -44,13 +118,53 @@ void ltntstools_clock_establish_wallclock(struct ltntstools_clock_s *clk, int64_
 	gettimeofday(&clk->establishedWalltime, NULL);
 	clk->establishedTime_ticks = ticks;
 	clk->currentTime_ticks = ticks;
+	clk->monotonicTime_ticks = ticks;
+	clk->monotonicReference_ticks = ticks;
+	clk->clockWrapOccurences = 0;
+	clk->backwardJumpUnder500msCount = 0;
+	clk->forwardJumpOver200msCount = 0;
+	clk->pendingDiscontinuity = 0;
 }
 
 void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
+	int wrapped = 0;
+
+	if (clk->pendingDiscontinuity) {
+		clk->pendingDiscontinuity = 0;
+		clk->clockWrapOccurences = 0;
+		clk->currentTime_ticks = ticks;
+		clk->monotonicTime_ticks = ticks;
+		clk->monotonicReference_ticks = ticks;
+		clk->establishedTime_ticks = ticks;
+		gettimeofday(&clk->establishedWalltime, NULL);
+		clk->establishedWT = 1;
+		return;
+	}
+
 	/* If the new tick value jumps the clock backwards by more than 50%, assume it naturally wrapped */
 	if (ticks < (clk->currentTime_ticks / 50)) {
 		clk->clockWrapOccurences++;
+		wrapped = 1;
+	}
+
+	if (wrapped && clk->clockWrapValue > 0) {
+		clk->monotonicTime_ticks += ltntstools_clock_compute_delta(clk,
+			ticks, clk->monotonicReference_ticks);
+		clk->monotonicReference_ticks = ticks;
+	} else
+	if (ticks > clk->monotonicReference_ticks) {
+		if (clk->ticks_per_second > 0 && (ticks - clk->monotonicReference_ticks) > (clk->ticks_per_second / 5)) {
+			clk->forwardJumpOver200msCount++;
+		}
+		clk->monotonicTime_ticks += ticks - clk->monotonicReference_ticks;
+		clk->monotonicReference_ticks = ticks;
+	} else
+	if (ticks < clk->currentTime_ticks &&
+		clk->ticks_per_second > 0 &&
+		(clk->currentTime_ticks - ticks) < (clk->ticks_per_second / 2))
+	{
+		clk->backwardJumpUnder500msCount++;
 	}
 	clk->currentTime_ticks = ticks;
 }
@@ -60,9 +174,66 @@ int64_t ltntstools_clock_get_ticks(struct ltntstools_clock_s *clk)
 	return clk->currentTime_ticks;
 }
 
+int64_t ltntstools_clock_get_monotonic_ticks(struct ltntstools_clock_s *clk)
+{
+	return clk->monotonicTime_ticks;
+}
+
+int64_t ltntstools_clock_get_wrap_occurences(struct ltntstools_clock_s *clk)
+{
+	return clk->clockWrapOccurences;
+}
+
+uint64_t ltntstools_clock_get_backward_jump_under_500ms_count(struct ltntstools_clock_s *clk)
+{
+	return clk->backwardJumpUnder500msCount;
+}
+
+uint64_t ltntstools_clock_get_forward_jump_over_200ms_count(struct ltntstools_clock_s *clk)
+{
+	return clk->forwardJumpOver200msCount;
+}
+
+void ltntstools_clock_mark_discontinuity(struct ltntstools_clock_s *clk)
+{
+	if (!clk) {
+		return;
+	}
+
+	clk->discontinuityCount++;
+	clk->pendingDiscontinuity = 1;
+}
+
+uint64_t ltntstools_clock_get_discontinuity_count(struct ltntstools_clock_s *clk)
+{
+	if (!clk) {
+		return 0;
+	}
+
+	return clk->discontinuityCount;
+}
+
 void ltntstools_clock_add_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
+	if (ticks > 0) {
+		clk->monotonicTime_ticks += ticks;
+	}
 	clk->currentTime_ticks += ticks;
+	clk->monotonicReference_ticks += ticks;
+
+	if (clk->clockWrapValue > 0) {
+		while (clk->currentTime_ticks >= clk->clockWrapValue) {
+			clk->currentTime_ticks -= clk->clockWrapValue;
+			clk->monotonicReference_ticks -= clk->clockWrapValue;
+			clk->clockWrapOccurences++;
+		}
+		while (clk->currentTime_ticks < 0) {
+			clk->currentTime_ticks += clk->clockWrapValue;
+			clk->monotonicReference_ticks += clk->clockWrapValue;
+			if (clk->clockWrapOccurences > 0)
+				clk->clockWrapOccurences--;
+		}
+	}
 }
 
 int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk)
@@ -78,7 +249,7 @@ int64_t ltntstools_clock_get_drift_us(struct ltntstools_clock_s *clk)
 	int64_t elapsedWT = ltn_timeval_subtract_us(&now, &clk->establishedWalltime);
 
 	/* How many timebase ticks have passed since we established time? */
-	int64_t ticks = (clk->clockWrapOccurences * clk->clockWrapValue) + (clk->currentTime_ticks - clk->establishedTime_ticks);
+	int64_t ticks = clk->monotonicTime_ticks - clk->establishedTime_ticks;
 #if 0
 printf("clk->currentTime_ticks %" PRIi64 ",	clk->establishedTime_ticks %" PRIi64 "\n",
 	clk->currentTime_ticks,
@@ -107,6 +278,31 @@ printf("clk->currentTime_ticks %" PRIi64 ",	clk->establishedTime_ticks %" PRIi64
 int64_t ltntstools_clock_get_drift_ms(struct ltntstools_clock_s *clk)
 {
 	return ltntstools_clock_get_drift_us(clk) / 1000;
+}
+
+int64_t ltntstools_clock_compare(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b, int64_t ticks_per_second)
+{
+	if (!clock_a || !clock_b || ticks_per_second <= 0 ||
+		clock_a->ticks_per_second <= 0 || clock_b->ticks_per_second <= 0) {
+		return 0;
+	}
+
+	long double a = (long double)clock_a->monotonicTime_ticks * (long double)ticks_per_second /
+		(long double)clock_a->ticks_per_second;
+	long double b = (long double)clock_b->monotonicTime_ticks * (long double)ticks_per_second /
+		(long double)clock_b->ticks_per_second;
+
+	return (int64_t)(a - b);
+}
+
+int64_t ltntstools_clock_compare_us(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b)
+{
+	return ltntstools_clock_compare(clock_a, clock_b, 1000000);
+}
+
+int64_t ltntstools_clock_compare_ms(struct ltntstools_clock_s *clock_a, struct ltntstools_clock_s *clock_b)
+{
+	return ltntstools_clock_compare(clock_a, clock_b, 1000);
 }
 
 int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t ticksnow, int64_t ticksthen)

@@ -63,6 +63,24 @@ int ltntstools_descriptor_list_contains_scte35_cue_registration(struct ltntstool
 	return found;
 }
 
+int ltntstools_descriptor_list_contains_video_av1_registration(struct ltntstools_descriptor_list_s *list)
+{
+	int found = 0;
+
+	for (int i = 0; i < list->count; i++) {
+		struct ltntstools_descriptor_entry_s *d = &list->array[i];
+
+		if (d->tag == 0x05 && d->len >= 0x04) {
+			if (d->data[0] == 'A' && d->data[1] == 'V' && d->data[2] == '0' && d->data[3] == '1') {
+				found = 1;
+				break;
+			}
+		}
+	}
+
+	return found;
+}
+
 int ltntstools_descriptor_list_contains_teletext(struct ltntstools_descriptor_list_s *list)
 {
 	int found = 0;

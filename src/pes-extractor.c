@@ -4,7 +4,7 @@
 
 #include <libltntstools/ltntstools.h>
 #include "klringbuffer.h"
-#include "klbitstream_readwriter.h"
+#include "libltntstools/klbitstream_readwriter.h"
 
 #define LOCAL_DEBUG 0
 #define ORDERED_LIST_DEPTH 60
