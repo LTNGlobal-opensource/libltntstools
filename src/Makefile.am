@@ -7,8 +7,7 @@ libltntstools_la_LDFLAGS  = -Wl,--no-as-needed -ldvbpsi -lrt
 
 lib_LTLIBRARIES = libltntstools.la
 
-libltntstools_la_SOURCES  = klbitstream_readwriter.h
-libltntstools_la_SOURCES += xorg-list.h
+libltntstools_la_SOURCES  = xorg-list.h
 libltntstools_la_SOURCES += ts_packetizer.c
 libltntstools_la_SOURCES += libltntstools/ts_packetizer.h
 libltntstools_la_SOURCES += klringbuffer.h
@@ -131,3 +130,4 @@ libltntstools_include_HEADERS += libltntstools/ac3.h
 libltntstools_include_HEADERS += libltntstools/vbv.h
 libltntstools_include_HEADERS += libltntstools/demux.h
 libltntstools_include_HEADERS += libltntstools/history-metric.h
+libltntstools_include_HEADERS += libltntstools/klbitstream_readwriter.h

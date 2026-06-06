@@ -242,13 +242,15 @@ void _tr101290_event_clear(struct ltntstools_tr101290_s *s, enum ltntstools_tr10
 #if LOCAL_DEBUG
 	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));
 #endif
+	if (event >= E101290_MAX) {
+		return;
+	}
 	s->event_tbl[event].raised = 0;
 }
 
 int ltntstools_tr101290_event_clear(void *hdl, enum ltntstools_tr101290_event_e event)
 {
 	struct ltntstools_tr101290_s *s = (struct ltntstools_tr101290_s *)hdl;
-
 	if (event >= E101290_MAX)
 		return -1;
 
@@ -265,6 +267,9 @@ int ltntstools_tr101290_event_clear(void *hdl, enum ltntstools_tr101290_event_e 
 int ltntstools_tr101290_event_should_report(struct ltntstools_tr101290_s *s, enum ltntstools_tr101290_event_e event, struct timeval *now)
 {
 	struct tr_event_s *ev = &s->event_tbl[event];
+	if (event >= E101290_MAX) {
+		return 0;
+	}
 
 #if LOCAL_DEBUG
 	printf("%s(?, %s)\n", __func__, ltntstools_tr101290_event_name_ascii(event));

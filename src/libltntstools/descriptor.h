@@ -37,6 +37,7 @@ int ltntstools_descriptor_list_contains_iso639_audio_descriptor(struct ltntstool
 	unsigned char *lang, unsigned int *type);
 int ltntstools_descriptor_list_contains_teletext(struct ltntstools_descriptor_list_s *list);
 int ltntstools_descriptor_list_contains_smpte2064_registration(struct ltntstools_descriptor_list_s *list);
+int ltntstools_descriptor_list_contains_video_av1_registration(struct ltntstools_descriptor_list_s *list);
 
 #ifdef __cplusplus
 };

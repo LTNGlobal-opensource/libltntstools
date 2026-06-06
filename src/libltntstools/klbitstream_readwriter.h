@@ -495,14 +495,14 @@ static inline void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32_t b
  */
 static inline struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t storageSizeBytes, int writeMode)
 {
-	struct klbs_context_s *ctx = calloc(1, sizeof(struct klbs_context_s));
+	struct klbs_context_s *ctx = (struct klbs_context_s *)calloc(1, sizeof(struct klbs_context_s));
 	if (!ctx)
 		return NULL;
 
 	klbs_init(ctx);
 	ctx->didAllocateStorage = 1;
 
-	uint8_t *buf = calloc(1, storageSizeBytes);
+	uint8_t *buf = (uint8_t *)calloc(1, storageSizeBytes);
 	if (!buf) {
 		free(ctx);
 		return NULL;
@@ -530,7 +530,7 @@ static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_
 		return;
 #endif
 
-	for(int i = 0; i < bits; i++) {
+	for(size_t i = 0; i < bits; i++) {
 		klbs_write_bit(dst, klbs_read_bit(src));
 		if (src->overrun || dst->overrun) {
 #if KLBITSTREAM_DEBUG

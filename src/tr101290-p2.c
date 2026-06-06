@@ -131,7 +131,8 @@ static void p2_process_p2_3(struct ltntstools_tr101290_s *s, const uint8_t *buf,
 			}
 
 			if (!found) {
-				sprintf(msg + strlen(msg), "0x%04x ", pid);
+				int s = strlen(msg);
+				snprintf(msg + strlen(msg), s - strlen(msg), "0x%04x ", pid);
 				raiseIssue++;
 				arr[arrCount++] = pid;
 			}

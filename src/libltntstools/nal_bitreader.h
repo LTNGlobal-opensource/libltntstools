@@ -22,6 +22,8 @@ void NALBitReader_init(NALBitReader *br, const unsigned char *data, int size);
 
 void NALBitReader_skip_bits(NALBitReader *br, int n);
 
+void NALBitReader_skip_to_byte_aligned(NALBitReader *br);
+
 int NALBitReader_read_bit(NALBitReader *br);
 
 unsigned int NALBitReader_read_bits(NALBitReader *br, int n);
@@ -30,6 +32,10 @@ unsigned int NALBitReader_read_bits(NALBitReader *br, int n);
 int NALBitReader_read_ue(NALBitReader *br);
 
 int NALBitReader_read_se(NALBitReader *br);
+
+int NALBitReader_read_me(NALBitReader *br, int intra);
+
+int NALBitReader_read_te(NALBitReader *br, int maxVal);
 
 #ifdef __cplusplus
 };

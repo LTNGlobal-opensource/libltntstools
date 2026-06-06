@@ -139,6 +139,8 @@ int ltntstools_is_ESPayloadType_Video(uint8_t esPayloadType)
         case 0x28:
         case 0x29:
         case 0x2A: // HEVC Video
+        case 0x33: // VVC/H.266 Video
+        case 0xd2: // AV1 Video
         case 0xdb: // H.264 Video (HLS TS Encryption)
 			return 1;
         default:
@@ -199,7 +201,7 @@ const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType)
         case 0x0E:
             return "ISO/IEC 13818-1 auxillary";
         case 0x0F:
-            return "ISO/IEC 13818-7 Audio with ADTS transport syntax";
+            return "ISO/IEC 13818-7 Audio with ADTS transport syntax - AAC";
         case 0x10:
             return "ISO/IEC 14496-2 (MPEG-4) Visual";
         case 0x11:
@@ -211,18 +213,25 @@ const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType)
         case 0x14:
             return "ISO/IEC 13818-6 Synchronized Download Protocol";
         case 0x1B:
-            return "H.264 Video";
+            return "AVC/H.264 Video";
         case 0x21:
             return "JPEG 2000";
         case 0x24:
+            return "HEVC/H.265 Video";
         case 0x25:
         case 0x27:
         case 0x28:
         case 0x29:
         case 0x2A:
-            return "HEVC Video";
+            return "HEVC/H.265 Video";
+        case 0x32:
+            return "JPEG-XS Video";
+        case 0x33:
+            return "VVC/H.266 Video";
         case 0x81:
             return "ATSC AC-3 Audio";
+        case 0xd2:
+            return "AV1 Video";
         case 0xC1:
             /* See https://developer.apple.com/library/content/documentation/AudioVideo/Conceptual/HLS_Sample_Encryption/TransportStreamSignaling/TransportStreamSignaling.html#//apple_ref/doc/uid/TP40012862-CH3-SW1 */
             return "ATSC AC-3 Audio (HLS TS Encryption)";
