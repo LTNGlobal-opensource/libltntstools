@@ -13,6 +13,7 @@ extern int usleep(useconds_t usec);
 extern int ltnpthread_setname_np(pthread_t thread, const char *name);
 static void * vbv_threadFunc(void *p);
 static int isValidFramerate(double framerate);
+static int64_t pktClock(const struct ltn_pes_packet_s *pkt);
 
 struct pkt_item_s
 {
@@ -65,6 +66,7 @@ struct vbv_ctx_s
 	uint64_t diag_pkts_out;
 	uint64_t diag_underflows;
 	struct timespec diag_last_ts;
+	uint64_t resetGeneration;
 
 	pthread_t threadId;
 	int threadTerminate, threadCreated;
@@ -195,6 +197,36 @@ static void raiseEvent(struct vbv_ctx_s *ctx, enum ltntstools_vbv_event_e e)
 	}
 }
 
+static void clearPktListLocked(struct vbv_ctx_s *ctx)
+{
+	while (!xorg_list_is_empty(&ctx->pktList)) {
+		struct pkt_item_s *item = xorg_list_first_entry(&ctx->pktList, struct pkt_item_s, list);
+		xorg_list_del(&item->list);
+		free(item);
+	}
+}
+
+static void resetModelLocked(struct vbv_ctx_s *ctx)
+{
+	clearPktListLocked(ctx);
+
+	ctx->usedBytes = 0;
+	ctx->dts_hwm = 0;
+	ctx->dts_lwm = INT64_MAX;
+	ctx->dts_last = INT64_MAX;
+	ctx->decoder_stc = INT64_MAX;
+	ctx->encoder_stc = 0;
+
+	ctx->diag_bytes_in = 0;
+	ctx->diag_bytes_out = 0;
+	ctx->diag_pkts_in = 0;
+	ctx->diag_pkts_out = 0;
+	ctx->diag_underflows = 0;
+	clock_gettime(CLOCK_MONOTONIC, &ctx->diag_last_ts);
+
+	ctx->resetGeneration++;
+}
+
 /* Allocates memory from the VBV to store the PES and payload, if the action
  * of doing so would not overflow the VBV.
  * Trigger any notifications efficienly.
@@ -213,8 +245,16 @@ static int addItem(struct vbv_ctx_s *ctx, const struct ltn_pes_packet_s *pkt)
 	i->pkt.rawBuffer = NULL;
 	clock_gettime(CLOCK_REALTIME, &i->ts);
 
+	int64_t clk = pktClock(pkt);
 	int overflow = 1;
 	pthread_mutex_lock(&ctx->pktListMutex);
+
+	if (clk != 0 && ctx->dts_last != INT64_MAX && ctx->dts_last - clk >= 90000) {
+		printf(MODULE_PREFIX "pid 0x%04x clock reset detected, resetting VBV model last %" PRIi64 " current %" PRIi64 "\n",
+			ctx->pid, ctx->dts_last, clk);
+		resetModelLocked(ctx);
+	}
+
 	if (ctx->usedBytes + pkt->rawBufferLengthBytes < ctx->decoder_profile.vbv_buffer_size) {
 
 		xorg_list_append(&i->list, &ctx->pktList);
@@ -222,18 +262,9 @@ static int addItem(struct vbv_ctx_s *ctx, const struct ltn_pes_packet_s *pkt)
 		ctx->diag_bytes_in += i->pkt.rawBufferLengthBytes;
 		ctx->diag_pkts_in++;
 
-		/* Assume no clock, then acquire either PTS or DTS */
-		int64_t clk = 0;
-		if (ltn_pes_packet_has_PTS((struct ltn_pes_packet_s *)pkt) &&
-			ltn_pes_packet_has_DTS((struct ltn_pes_packet_s *)pkt) == 0) {
-			/* PTS Only */
-			clk = pkt->PTS;
+		if (ctx->dts_last == INT64_MAX) {
+			ctx->encoder_stc = clk * 300;
 		} else
-		if (ltn_pes_packet_has_PTS((struct ltn_pes_packet_s *)pkt) && ltn_pes_packet_has_DTS((struct ltn_pes_packet_s *)pkt)) {
-			/* PTS and DTS */
-			clk = pkt->DTS;
-		}
-
 		if (clk == ctx->dts_last) {
 			/* Repeated DTS - We're OK with this */
 			ctx->encoder_stc += (0 * 300);
@@ -377,11 +408,7 @@ void ltntstools_vbv_free(void *hdl)
 	}
 
 	pthread_mutex_lock(&ctx->pktListMutex);
-	while (!xorg_list_is_empty(&ctx->pktList)) {
-        struct pkt_item_s *item = xorg_list_first_entry(&ctx->pktList, struct pkt_item_s, list);
-        xorg_list_del(&item->list);
-        free(item);
-    }
+	clearPktListLocked(ctx);
 	pthread_mutex_unlock(&ctx->pktListMutex);
 
 	free(ctx);
@@ -496,11 +523,19 @@ static void * vbv_threadFunc(void *p)
 	/* 60% of a second into the VBV before we start to drain */
 	int initial_cpb_removal_delay = (90000 / 100) * 60;
 	int permit_vbv_drain = 0;
+	uint64_t resetGeneration = 0;
 
 	ctx->threadTerminate = 0;
 	while (!ctx->threadTerminate) {
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
+
+		pthread_mutex_lock(&ctx->pktListMutex);
+		if (resetGeneration != ctx->resetGeneration) {
+			resetGeneration = ctx->resetGeneration;
+			permit_vbv_drain = 0;
+		}
+		pthread_mutex_unlock(&ctx->pktListMutex);
 		
 		if (libltntstools_timespec_diff_ms(now, last_ooo_dts_time) >= 50) {
 			last_ooo_dts_time = now;
