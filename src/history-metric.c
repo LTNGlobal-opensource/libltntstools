@@ -30,6 +30,7 @@ int ltntstools_history_metric_collection_init(struct ltntstools_history_metric_c
 	xorg_list_init(&c->list);
 	pthread_mutex_init(&c->lock, NULL);
 	c->name = strdup(name);
+	c->wasAlloc = 0;
 
 	return 0; /* Success */
 }
@@ -43,6 +44,7 @@ struct ltntstools_history_metric_collection_s *ltntstools_history_metric_collect
 	struct ltntstools_history_metric_collection_s *c = (struct ltntstools_history_metric_collection_s *)malloc(sizeof(*c));
 	if (c) {
 		ltntstools_history_metric_collection_init(c, name);
+		c->wasAlloc = 1;
 	}
 	return c;
 }
@@ -62,7 +64,10 @@ void ltntstools_history_metric_collection_free(struct ltntstools_history_metric_
 	pthread_mutex_unlock(&c->lock);
 
 	free((char *)c->name);
-	free(c);
+
+	if (c->wasAlloc) {
+		free(c);
+	}
 }
 
 void ltntstools_history_metric_collection_add(struct ltntstools_history_metric_collection_s *c,
