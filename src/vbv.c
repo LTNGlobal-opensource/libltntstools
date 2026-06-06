@@ -282,7 +282,7 @@ uint32_t framerateToNs(double framerate)
 uint32_t framerateToUs(double framerate)
 {
 	double n = 1e6 / framerate;
-	return n * 1000;
+	return n;
 }
 
 uint32_t framerateToTicks(double framerate)
@@ -493,7 +493,7 @@ static void * vbv_threadFunc(void *p)
 		/* Track BPS used between DTS of one second and notify on this. */
 
 		/* Have a haba daba too time... sleep a frame duration */
-		uint32_t ns = framerateToUs(ctx->decoder_profile.framerate);
+		uint32_t ns = framerateToNs(ctx->decoder_profile.framerate);
 		next_time.tv_nsec += ns;
 		while (next_time.tv_nsec >= 1000000000) {
 			next_time.tv_nsec -= 1000000000;
