@@ -214,11 +214,12 @@ static int addItem(struct vbv_ctx_s *ctx, const struct ltn_pes_packet_s *pkt)
 
 		/* Assume no clock, then acquire either PTS or DTS */
 		int64_t clk = 0;
-		if ((pkt->PTS_DTS_flags & 0x03) == 1) {
+		if (ltn_pes_packet_has_PTS((struct ltn_pes_packet_s *)pkt) &&
+			ltn_pes_packet_has_DTS((struct ltn_pes_packet_s *)pkt) == 0) {
 			/* PTS Only */
 			clk = pkt->PTS;
 		} else
-		if ((pkt->PTS_DTS_flags & 0x03) == 3) {
+		if (ltn_pes_packet_has_PTS((struct ltn_pes_packet_s *)pkt) && ltn_pes_packet_has_DTS((struct ltn_pes_packet_s *)pkt)) {
 			/* PTS and DTS */
 			clk = pkt->DTS;
 		}
