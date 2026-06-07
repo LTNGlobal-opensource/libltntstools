@@ -163,9 +163,9 @@ struct ltntstools_pid_statistics_s
 
 /**
  * @brief A larger statistics container, representing all pids in an entire SPTS/MPTS.
- * The stream object owns a sparse array of PID statistics pointers. PID statistics
- * objects are allocated lazily as packets are observed, so entries in pids[] may be
- * NULL for PIDs that have not yet been seen.
+ * The stream object owns a heap-allocated sparse array of PID statistics pointers.
+ * PID statistics objects are allocated lazily as packets are observed, so entries
+ * in pids[] may be NULL for PIDs that have not yet been seen.
  *
  * The stream object must be allocated with ltntstools_pid_stats_alloc() and freed
  * with ltntstools_pid_stats_free(), which also releases any allocated PID statistics
@@ -173,7 +173,7 @@ struct ltntstools_pid_statistics_s
  */
 struct ltntstools_stream_statistics_s
 {
-	struct ltntstools_pid_statistics_s *pids[MAX_PID];
+	struct ltntstools_pid_statistics_s **pids;
 	uint64_t packetCount;          /**< Total number of packets processed. */
 	uint64_t teiErrors;            /**< Total number of transport error indicator issues processed */
 	uint64_t ccErrors;             /**< Total number of continuity counter issues processed */
