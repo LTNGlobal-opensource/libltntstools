@@ -490,6 +490,14 @@ uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_stat
 uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
+ * @brief       Query TRANSPORT pid - TEI error count since last ltntstools_pid_stats_reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      uint64_t - count, or 0 if stream is NULL or PID has not been observed/allocated.
+ */
+uint64_t ltntstools_pid_stats_pid_get_tei_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
  * @brief       Query TRANSPORT, last time the pid statistics were updated, specifically for input pid.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid

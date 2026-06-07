@@ -975,6 +975,18 @@ uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statist
 	return pid->ccErrors;
 }
 
+uint64_t ltntstools_pid_stats_pid_get_tei_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	if (!stream || !stream->pids) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
+	return pid->teiErrors;
+}
+
 void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
 	if (!stream || !stream->pids) {
