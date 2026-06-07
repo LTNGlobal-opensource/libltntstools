@@ -358,6 +358,13 @@ uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_sta
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
+ * @brief       Query TRANSPORT stream - TEI error count since last ltntstools_pid_stats_reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
+ */
+uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream);
+
+/**
  * @brief       Query TRANSPORT stream - time of last cc error.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @return      time_t - datetime, zero if no cc errors detected or stream is NULL.
