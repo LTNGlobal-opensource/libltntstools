@@ -66,6 +66,7 @@ struct vbv_ctx_s
 	uint64_t diag_pkts_out;
 	uint64_t diag_underflows;
 	struct timespec diag_last_ts;
+	struct timespec lastInputTs;
 	uint64_t resetGeneration;
 
 	pthread_t threadId;
@@ -222,6 +223,7 @@ static void resetModelLocked(struct vbv_ctx_s *ctx)
 	ctx->diag_pkts_in = 0;
 	ctx->diag_pkts_out = 0;
 	ctx->diag_underflows = 0;
+	memset(&ctx->lastInputTs, 0, sizeof(ctx->lastInputTs));
 	clock_gettime(CLOCK_MONOTONIC, &ctx->diag_last_ts);
 
 	ctx->resetGeneration++;
@@ -261,6 +263,7 @@ static int addItem(struct vbv_ctx_s *ctx, const struct ltn_pes_packet_s *pkt)
 		ctx->usedBytes += i->pkt.rawBufferLengthBytes;
 		ctx->diag_bytes_in += i->pkt.rawBufferLengthBytes;
 		ctx->diag_pkts_in++;
+		clock_gettime(CLOCK_MONOTONIC, &ctx->lastInputTs);
 
 		if (ctx->dts_last == INT64_MAX) {
 			ctx->encoder_stc = clk * 300;
@@ -504,6 +507,22 @@ static int64_t pktClock(const struct ltn_pes_packet_s *pkt)
 	return 0;
 }
 
+static int64_t elapsedTicks90k(struct timespec start, struct timespec end)
+{
+	int64_t sec = end.tv_sec - start.tv_sec;
+	int64_t nsec = end.tv_nsec - start.tv_nsec;
+	if (nsec < 0) {
+		sec--;
+		nsec += 1000000000;
+	}
+
+	if (sec < 0) {
+		return 0;
+	}
+
+	return (sec * 90000) + ((nsec * 90000) / 1000000000);
+}
+
 /* Simulate a virtual video decoder, pulling frames from a EBn (with VBV policy)
  * one frame at a time.
  * Create any UNDERFLOW conditions efficiently.
@@ -576,7 +595,11 @@ static void * vbv_threadFunc(void *p)
 		if (!xorg_list_is_empty(&ctx->pktList)) {
 			item = xorg_list_first_entry(&ctx->pktList, struct pkt_item_s, list);
 			int64_t item_stc = pktClock(&item->pkt);
-			int64_t due_stc = ctx->dts_hwm - initial_cpb_removal_delay;
+			int64_t dts_hwm = ctx->dts_hwm;
+			if (ctx->lastInputTs.tv_sec != 0 || ctx->lastInputTs.tv_nsec != 0) {
+				dts_hwm += elapsedTicks90k(ctx->lastInputTs, now);
+			}
+			int64_t due_stc = dts_hwm - initial_cpb_removal_delay;
 			int64_t ticks_until_due = item_stc - due_stc;
 			if (ticks_until_due <= 0) {
 				ctx->decoder_stc = item_stc;
