@@ -61,6 +61,12 @@ extern "C" {
 
 #define MAX_PID 8192
 
+#define ltntstools_stats_for_each_pid(s, e, pid) \
+	for (int e = 0; (s) && (s)->pids && e < MAX_PID && (((pid) = (s)->pids[e]) || 1); e++) \
+		if (!(pid)) { \
+			continue; \
+		} else
+
 #define EXPERIMENTAL_REORDERING 0
 
 struct ltntstools_pid_statistics_s;
