@@ -4,7 +4,7 @@
 /**
  * @file        stats.h
  * @author      Steven Toth <steven.toth@ltnglobal.com>
- * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
+ * @copyright   Copyright (c) 2020-2026 LTN Global,Inc. All Rights Reserved.
  * @brief       Parse and analyze MPEG-TS transport streams, collect and expose
  *              multiplex and pid specific statistics.
  * 
@@ -163,12 +163,17 @@ struct ltntstools_pid_statistics_s
 
 /**
  * @brief A larger statistics container, representing all pids in an entire SPTS/MPTS.
- * Structure is approximately 3MB, plus an additional 2x256KB for each PCR PID.
- * So a single SPTS mux needs 3.5MB of RAM. 
+ * The stream object owns a sparse array of PID statistics pointers. PID statistics
+ * objects are allocated lazily as packets are observed, so entries in pids[] may be
+ * NULL for PIDs that have not yet been seen.
+ *
+ * The stream object must be allocated with ltntstools_pid_stats_alloc() and freed
+ * with ltntstools_pid_stats_free(), which also releases any allocated PID statistics
+ * objects.
  */
 struct ltntstools_stream_statistics_s
 {
-	struct ltntstools_pid_statistics_s pids[MAX_PID];
+	struct ltntstools_pid_statistics_s *pids[MAX_PID];
 	uint64_t packetCount;          /**< Total number of packets processed. */
 	uint64_t teiErrors;            /**< Total number of transport error indicator issues processed */
 	uint64_t ccErrors;             /**< Total number of continuity counter issues processed */
@@ -237,15 +242,15 @@ int ltntstools_isPayloadPUSIInError(const uint8_t *pkt);
 
 /**
  * @brief       Write an entire MPTS into the framework, update the stream and pid statistics.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[in]   const uint8_t *pkts - one or more aligned transport packets
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
+ * @param[in]   const uint8_t *pkts - one or more aligned transport packets. Must not be NULL.
  * @param[in]   uint32_t packetCount - number of packets
  */
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount);
 
 /**
  * @brief       Write a basic ascii pid report to the file descriptor;
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
  * @param[in]   int fd - file descriptor
  */
 void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream, int fd);
@@ -254,266 +259,281 @@ void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream,
  * @brief       Reset all statistics. Its mandatory that this is called on a handle returned by ltntstools_pid_stats_alloc().
  *              Putting struct ltntstools_stream_statistics_s in some random context as an allocation and not a pointer
  *              will result in a segfault during reset(). Always use _alloc() to allocate this structure.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
  */
 void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Allocate a new stats object instance.
- * @param[out]  struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[out]  struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
  * @return      0 - Success, else < 0 on error.
  */
 int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **stream);
 
 /**
  * @brief       Free a previously allocated stats object.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. NULL is accepted and ignored.
  */
 void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream);
 
 /**
+ * @brief       Find the pid object specific to a pid number.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      obj - Success, else NULL if stream is NULL or the PID has not been observed/allocated.
+ */
+struct ltntstools_pid_statistics_s *ltntstools_pid_stats_get(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
  * @brief       Allocate a new stats object instance, duplicate the contents of src into it.
  *              Caller responsible for freeing the previous dst object, if it was used;
- * @param[in]   struct ltntstools_stream_statistics_s *src - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *src - Handle / context. Must not be NULL.
  * @return      full deep object copy, or NULL
  */
 struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntstools_stream_statistics_s *src);
 
 /**
  * @brief       Query CTP stream bitrate in Mb/ps
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      double - bitrate
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      double - bitrate, or 0 if stream is NULL.
  */
 double   ltntstools_ctp_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query BYTESTREAM stream bitrate in Mb/ps
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      double - bitrate
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      double - bitrate, or 0 if stream is NULL.
  */
 double   ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream bitrate in Mb/ps
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      double - bitrate
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      double - bitrate, or 0 if stream is NULL.
  */
 double   ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream);
 
 #if EXPERIMENTAL_REORDERING
 /**
  * @brief       Query TRANSPORT stream, cumulative count of out of order UDP frame issues measured. (DISABLED)
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      double - bitrate
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream);
 #endif
 
 /**
  * @brief       Query TRANSPORT stream - transport packets per second.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint32_t  - packets per second
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint32_t  - packets per second, or 0 if stream is NULL.
  */
 uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - transport bits per second.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint32_t  - bits per second
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint32_t  - bits per second, or 0 if stream is NULL.
  */
 uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query CTP stream - transport bits per second.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint32_t  - bits per second
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint32_t  - bits per second, or 0 if stream is NULL.
  */
 uint32_t ltntstools_ctp_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query BYTESTREAM stream - transport bits per second.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint32_t  - bits per second
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint32_t  - bits per second, or 0 if stream is NULL.
  */
 uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - CC error count since last ltntstools_pid_stats_reset()
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - time of last cc error.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      time_t - datetime, zero if no cc errors detected
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      time_t - datetime, zero if no cc errors detected or stream is NULL.
  */
 time_t ltntstools_pid_stats_stream_get_cc_error_time(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Number of times ltntstools_pid_stats_update() was called with packetCount != 7. 
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_notmultipleofseven_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Time of last NotAMultipleofSeven error.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      time_t - datetime, zero if no cc errors detected
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      time_t - datetime, zero if no error detected or stream is NULL.
  */
 time_t ltntstools_pid_stats_stream_get_notmultipleofseven_time(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Transport error indicator count since last ltntstools_pid_stats_reset()
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Discontinuities detected since last ltntstools_pid_stats_reset()
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Discontinuities detected in the last hour, or since the last reset()
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count_1hr(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Discontinuities detected in the last 24 hours, or since the last reset()
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count_24hr(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Scrambled packets detected since last ltntstools_pid_stats_reset()
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - overall stream padding percentage for the entire mux.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint32_t - percent
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint32_t - percent, or 0 if stream is NULL.
  */
 uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT stream - Did any pids violate PCR transport timing windows?
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      Boolean.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      Boolean. Current implementation returns non-zero if stream is NULL.
  */
 int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query the total number of transport packets processed since the last reset, or startup.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @return      uint64_t - packet Count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      uint64_t - packet Count, or 0 if stream is NULL.
  */
 uint64_t  ltntstools_pid_stats_stream_get_packet_count(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query pid specific total errors for the PSUI / Adaption payload invalid combinations.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      Error count
+ * @return      Error count, or 0 if stream is NULL or PID has not been observed/allocated.
  */
 uint64_t ltntstools_pid_stats_pid_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query stream total errors for the PSUI / Adaption payload invalid combinations.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[in]   uint16_t pidnr - pid
- * @return      Error count
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      Error count, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Query TRANSPORT, bitrate in Mb/ps, specifically for input pid.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      double - bitrate
+ * @return      double - bitrate, or 0 if stream is NULL or PID has not been observed/allocated.
  */
 double   ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query TRANSPORT, packets per second (188), specifically for input pid.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      packets per second
+ * @return      packets per second, or 0 if stream is NULL or PID has not been observed/allocated.
  */
 uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query TRANSPORT, bits per second (188), specifically for input pid.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      bps
+ * @return      bps, or 0 if stream is NULL or PID has not been observed/allocated.
  */
 uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query TRANSPORT, packet count, specifically for input pid.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      packet count
+ * @return      packet count, or 0 if stream is NULL or PID has not been observed/allocated.
  */
 uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
- * @brief       Query TRANSPORT, last time the pid statistics were updated, specifically for input pid.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @brief       Query TRANSPORT pid - CC error count since last ltntstools_pid_stats_reset()
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      time_t lastUpdate
+ * @return      uint64_t - count, or 0 if stream is NULL or PID has not been observed/allocated.
+ */
+uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
+
+/**
+ * @brief       Query TRANSPORT, last time the pid statistics were updated, specifically for input pid.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @param[in]   uint16_t pidnr - pid
+ * @return      time_t lastUpdate, or 0 if stream is NULL or PID has not been observed/allocated.
  */
 time_t   ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query TRANSPORT - Did input pid violate PCR transport timing windows?
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      Boolean.
+ * @return      Boolean. Current implementation returns non-zero if stream is NULL or PID has not been observed/allocated.
  */
 int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query TRANSPORT - Inform framework that this pid contains a PCR and PCR clocks math should be performed.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
  * @param[in]   uint16_t pidnr - pid
  */
 void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query TRANSPORT - Check if input PID is expected to have a PCR.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      Boolean.
+ * @return      Boolean, or 0 if stream is NULL or PID has not been observed/allocated.
  */
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query the current PCR tick value, if this PID contains a PCR. Else, return 0.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      PCR tick value in a 27MHz clock.
+ * @return      PCR tick value in a 27MHz clock, or 0 if stream is NULL, PID has not been observed/allocated, or PID has no PCR.
  */
 int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 
 /**
  * @brief       Query the current pid PCR vs walltime drift, assuming this PID contains a PCR. Else, return -1.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @param[out]  int64_t driftMs - Amount of drift ahead of walltime, or behind walltime, the PCR is
- * @return      0 - Success, else < 0 on error.
+ * @param[out]  int64_t driftMs - Amount of drift ahead of walltime, or behind walltime, the PCR is. Must not be NULL on success path.
+ * @return      0 - Success, else < 0 if stream is NULL, PID has not been observed/allocated, or PID has no PCR.
  */
 int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr, int64_t *driftMs);
 
@@ -521,9 +541,9 @@ int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_s
  * @brief       Write a CTP buffer into the stats layer.
  *              Limited but useful stats will be collected and exposed.
  *              ATSC3.0 A/324 stats wedged into this framework, better than nothing.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[in]   const uint8_t *buf - CTP buffer of bytes
- * @param[in]   uint32_t lengthBytes - length of CTP buffer in bytes
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
+ * @param[in]   const uint8_t *buf - CTP buffer of bytes. Must not be NULL.
+ * @param[in]   uint32_t lengthBytes - length of CTP buffer in bytes. Values less than 4 are counted as malformed and ignored.
  */
 void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
 
@@ -531,29 +551,30 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
  * @brief       Write a generic BYTESTREAM buffer into the stats layer.
  *              Limited but useful stats will be collected and exposed.
  *              Use for SMPTE2110 for example.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[in]   const uint8_t *buf - CTP buffer of bytes
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
+ * @param[in]   const uint8_t *buf - CTP buffer of bytes. Must not be NULL.
  * @param[in]   uint32_t lengthBytes - length of CTP buffer in bytes
  */
 void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes);
 
 /**
  * @brief       Get the IAT high watermark measured in 'us', of all update calls in the last 5 seconds.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[in]   uint64_t lengthBytes - length of CTP buffer in bytes
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @return      IAT high watermark in microseconds, or 0 if stream is NULL.
  */
 uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Register a user event notification callback, to fire when important events trigger within the state framework.
  *              Applications callbacks should not meaningfully block, linger or otherwise delay a return.
- *              Its valid to register a callback, and then register a NULL callback to disable callbacks.
+ *              To disable callbacks, use ltntstools_notification_unregister_callback() or
+ *              ltntstools_notification_unregister_callbacks().
  *              Don't attempt to unregister during a callback.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
  * @param[in]   void * - User specific application context (optional)
- * @param[in]   enum ltntstools_notification_event_e - event id for callbacks
- * @param[in]   ltntstools_notification_callback cb - User specific application callback.
- * @return      0 - Success, else < 0 on error.
+ * @param[in]   enum ltntstools_notification_event_e - event id for callbacks. Must be in range.
+ * @param[in]   ltntstools_notification_callback cb - User specific application callback. Must not be NULL.
+ * @return      0 - Success, else < 0 if stream is NULL, event is invalid, or cb is NULL.
  */
 int ltntstools_notification_register_callback(struct ltntstools_stream_statistics_s *stream, enum ltntstools_notification_event_e e,
 	void *userContext, ltntstools_notification_callback cb);
@@ -561,16 +582,15 @@ int ltntstools_notification_register_callback(struct ltntstools_stream_statistic
 /**
  * @brief       Unregister a specific user callback.
  *              Don't attempt to unregister during a callback.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[in]   enum ltntstools_notification_event_e - event id to unregister
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. NULL is accepted and ignored.
+ * @param[in]   enum ltntstools_notification_event_e - event id to unregister. Invalid values are ignored.
  */
 void ltntstools_notification_unregister_callback(struct ltntstools_stream_statistics_s *stream, enum ltntstools_notification_event_e e);
 
 /**
  * @brief       Unregister all user callbacks.
  *              Don't attempt to unregister during a callback.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[in]   enum ltntstools_notification_event_e - event id to unregister
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. NULL is accepted and ignored.
  */
 void ltntstools_notification_unregister_callbacks(struct ltntstools_stream_statistics_s *stream);
 
@@ -586,27 +606,27 @@ const char *ltntstools_notification_event_name(enum ltntstools_notification_even
  *              the PCR calculated bitrate. This is a useful and fast way of calculating the bitrate
  *              of a file, or stream, it runs substantially faster than realtime and you may
  *              call ltntstools_pid_stats_update() as quickfile as you like, from a file source for example.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[out]  double * - bps
- * @return      0 - Success, else < 0 on error.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @param[out]  double * - bps. Must not be NULL.
+ * @return      0 - Success, else < 0 if stream or bps is NULL.
  */
 int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statistics_s *stream, double *bps);
 
 /**
  * @brief       After the callback for event EVENT_UPDATE_PCR_MBPS has fired, you can query
  *              the PCR calculated ticks (27MHz) per transport packet.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[out]  int64_t * - ticks
- * @return      0 - Success, else < 0 on error.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @param[out]  int64_t * - ticks. Must not be NULL.
+ * @return      0 - Success, else < 0 if stream or ticks is NULL.
  */
 int ltntstools_bitrate_calculator_query_ticks_per_packet(struct ltntstools_stream_statistics_s *stream, int64_t *ticks);
 
 /**
  * @brief       After the callback for event EVENT_UPDATE_PCR_MBPS has fired, you can query
  *              the PCR based STC clock ticks (27MHz) per transport packet.
- * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context.
- * @param[out]  int64_t * - ticks
- * @return      0 - Success, else < 0 on error.
+ * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
+ * @param[out]  int64_t * - stc. Must not be NULL.
+ * @return      0 - Success, else < 0 if stream or stc is NULL.
  */
 int ltntstools_bitrate_calculator_query_stc(struct ltntstools_stream_statistics_s *stream, int64_t *stc);
 

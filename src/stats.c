@@ -13,11 +13,58 @@ int      ltntstools_cc_reorder_table_corelate(struct ltntstools_cc_reorder_table
 void     ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s *t);
 #endif
 static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *stream, struct timeval *ts);
+void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid);
 
 static int ltntstools_bitrate_calculator_init(struct ltntstools_stream_statistics_s *stream, uint16_t pcrpidnr);
 static void ltntstools_bitrate_calculator_reset(struct ltntstools_stream_statistics_s *stream);
 static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts,
 	unsigned int packetCount, int *complete);
+
+static struct ltn_histogram_s *ltntstools_histogram_clone(struct ltn_histogram_s *src)
+{
+	struct ltn_histogram_s *dst = NULL;
+	if (!src)
+		return NULL;
+
+	if (ltn_histogram_alloc(&dst, src->name, src->minValMs, src->maxValMs) < 0)
+		return NULL;
+
+	memcpy(dst->buckets, src->buckets, sizeof(struct ltn_histogram_bucket_s) * src->bucketCount);
+	dst->bucketMissCount = src->bucketMissCount;
+	dst->intervalLast = src->intervalLast;
+	dst->cumulativeMs = src->cumulativeMs;
+	dst->cumulativeLast = src->cumulativeLast;
+	dst->sampleMs = src->sampleMs;
+	dst->sampleLast = src->sampleLast;
+	dst->printLast = src->printLast;
+	dst->printSummaryLast = src->printSummaryLast;
+	dst->totalCount = src->totalCount;
+
+	return dst;
+}
+
+static int ltntstools_history_metric_collection_clone_into(
+	struct ltntstools_history_metric_collection_s *dst,
+	struct ltntstools_history_metric_collection_s *src)
+{
+	struct ltntstools_history_metric_s *m = NULL;
+
+	ltntstools_history_metric_collection_reset(dst);
+
+	pthread_mutex_lock(&src->lock);
+	xorg_list_for_each_entry(m, &src->list, list) {
+			struct ltntstools_history_metric_s *copy = ltntstools_history_metric_alloc(m->ts, m->count);
+			if (!copy) {
+				pthread_mutex_unlock(&src->lock);
+				ltntstools_history_metric_collection_reset(dst);
+				return -1;
+			}
+		ltntstools_history_metric_collection_add(dst, copy);
+	}
+	pthread_mutex_unlock(&src->lock);
+
+	return 0;
+}
 
 const char *ltntstools_notification_event_name(enum ltntstools_notification_event_e e)
 {
@@ -39,6 +86,9 @@ const char *ltntstools_notification_event_name(enum ltntstools_notification_even
 int ltntstools_notification_register_callback(struct ltntstools_stream_statistics_s *stream, enum ltntstools_notification_event_e e,
 	void *userContext, ltntstools_notification_callback cb)
 {
+	if (!stream || e < 0 || e >= EVENT_NOTIFICATION_MAX) {
+		return -1;
+	}
 	if (cb == NULL) {
 		return -1;
 	}
@@ -52,12 +102,18 @@ int ltntstools_notification_register_callback(struct ltntstools_stream_statistic
 
 void ltntstools_notification_unregister_callback(struct ltntstools_stream_statistics_s *stream, enum ltntstools_notification_event_e e)
 {
+	if (!stream || e < 0 || e >= EVENT_NOTIFICATION_MAX) {
+		return;
+	}
 	stream->notifications[e].cb = NULL;
 	stream->notifications[e].userContext = NULL;
 }
 
 void ltntstools_notification_unregister_callbacks(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return;
+	}
 	for (int i = 0; i < EVENT_NOTIFICATION_MAX; i++) {
 		stream->notifications[i].cb = NULL;
 		stream->notifications[i].userContext = NULL;
@@ -93,6 +149,121 @@ int ltntstools_isPayloadPUSIInError(const uint8_t *pkt)
 	return 0;
 }
 
+void ltntstools_pid_statistics_reset(struct ltntstools_pid_statistics_s *pid)
+{
+	pid->enabled = 1;
+	pid->packetCount = 0;
+	pid->ccErrors = 0;
+	pid->teiErrors = 0;
+	pid->scrambledCount = 0;
+	pid->pcrExceeds40ms = 0;
+	pid->prev_pcrExceeds40ms = 0;
+	pid->payloadPUSIErrors = 0;
+	pid->lastCC = 0;
+	pid->pps_last_update = 0;
+	pid->pps = 0;
+	pid->pps_window = 0;
+	pid->mbps = 0;
+	pid->clocks[ltntstools_CLOCK_PCR].drift_us_hwm = 0;
+	pid->clocks[ltntstools_CLOCK_PCR].drift_us_lwm = 0;
+	pid->clocks[ltntstools_CLOCK_PCR].establishedWT = 0;
+	pid->seenPCR = 0;
+	pid->lastPCRWalltimeDriftMs = 0;
+	pid->pusi_time_first.tv_sec = 0;
+	pid->pusi_time_first.tv_usec = 0;
+	pid->pusi_time_current.tv_sec = 0;
+	pid->pusi_time_current.tv_usec = 0;
+	pid->pusi_time_ms = 0;
+
+	if (pid->pcrTickIntervals) {
+		ltn_histogram_reset(pid->pcrTickIntervals);
+	}
+	if (pid->pcrWallDrift) {
+		ltn_histogram_reset(pid->pcrWallDrift);
+	}
+#if EXPERIMENTAL_REORDERING
+	if (pid->reorderTable) {
+		ltntstools_cc_reorder_table_reset(pid->reorderTable);
+	}
+#endif		
+}
+
+struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_alloc(uint16_t pidNr)
+{
+	struct ltntstools_pid_statistics_s *pid = calloc(1, sizeof(*pid));
+	if (pid) {
+		pid->pidNr = pidNr;
+		ltntstools_pid_statistics_reset(pid);
+	}
+	return pid;
+}
+
+struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_clone(struct ltntstools_pid_statistics_s *src)
+{
+	struct ltntstools_pid_statistics_s *pid = calloc(1, sizeof(*pid));
+	if (pid) {
+		memcpy(pid, src, sizeof(*src));
+		pid->pcrTickIntervals = NULL;
+		pid->pcrWallDrift = NULL;
+#if EXPERIMENTAL_REORDERING
+		pid->reorderTable = NULL;
+#endif
+		if (src->pcrTickIntervals) {
+			pid->pcrTickIntervals = ltntstools_histogram_clone(src->pcrTickIntervals);
+			if (!pid->pcrTickIntervals) {
+				ltntstools_pid_statistics_free(pid);
+				return NULL;
+			}
+		}
+		if (src->pcrWallDrift) {
+			pid->pcrWallDrift = ltntstools_histogram_clone(src->pcrWallDrift);
+			if (!pid->pcrWallDrift) {
+				ltntstools_pid_statistics_free(pid);
+				return NULL;
+			}
+		}
+#if EXPERIMENTAL_REORDERING
+		if (src->reorderTable) {
+			pid->reorderTable = malloc(sizeof(*pid->reorderTable));
+			if (!pid->reorderTable) {
+				ltntstools_pid_statistics_free(pid);
+				return NULL;
+			}
+			memcpy(pid->reorderTable, src->reorderTable, sizeof(*pid->reorderTable));
+		}
+#endif
+	}
+	return pid;
+}
+
+void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid)
+{
+	if (pid->pcrTickIntervals) {
+		ltn_histogram_free(pid->pcrTickIntervals);
+		pid->pcrTickIntervals = NULL;
+	}
+	if (pid->pcrWallDrift) {
+		ltn_histogram_free(pid->pcrWallDrift);
+		pid->pcrWallDrift = NULL;
+	}
+#if EXPERIMENTAL_REORDERING
+	if (pid->reorderTable) {
+		free(pid->reorderTable);
+		pid->reorderTable = NULL;
+	}
+#endif
+	free(pid);
+}
+
+struct ltntstools_pid_statistics_s *ltntstools_pid_stats_get(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	if (!stream) {
+		return NULL;
+	}
+	pidnr &= 0x1fff;
+	return stream->pids[pidnr];
+}
+
 void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes)
 {
 	time_t now;
@@ -124,6 +295,9 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 	if (lengthBytes != (7 * 188)) {
 		stream->notMultipleOfSevenError++;
 		stream->last_notMultipleOfSeven_error = now;
+	}
+	if (lengthBytes < 4) {
+		return;
 	}
 
 	/* Pull the CC out of the frame and check for CC loss. */
@@ -250,7 +424,15 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		int offset = i * 188;
 
 		uint16_t pidnr = ltntstools_pid(pkts + offset);
-		struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr];
+		struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr];
+		if (pid == NULL) {
+			/* New pid arrived, may sire we have space for it */
+			stream->pids[pidnr] = ltntstools_pid_statistics_alloc(pidnr);
+			pid = stream->pids[pidnr];
+			if (!pid) {
+				continue;
+			}
+		}
 
 		pid->enabled = 1;
 		pid->packetCount++;
@@ -415,44 +597,44 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->teiErrors = 0;
 	stream->ccErrors = 0;
 	ltntstools_history_metric_collection_reset(&stream->ccErrorHistory);
+	stream->scrambledCount = 0;
+	stream->pcrExceeds40ms = 0;
+	stream->prev_pcrExceeds40ms = 0;
+	stream->payloadPUSIErrors = 0;
 	stream->last_cc_error = 0;
+	stream->pps_last_update = 0;
+	stream->pps = 0;
+	stream->pps_window = 0;
 	stream->mbps = 0;
 #if EXPERIMENTAL_REORDERING
 	stream->reorderErrors = 0;
 #endif
+	stream->a324_sequence_number = 0;
+	stream->Bps_last_update = 0;
+	stream->Bps = 0;
+	stream->Bps_window = 0;
+	stream->a324_mbps = 0;
+	stream->a324_bps = 0;
 	stream->notMultipleOfSevenError = 0;
 	stream->last_notMultipleOfSeven_error = 0;
 	stream->iat_lwm_us = 50000000;
 	stream->iat_hwm_us = -1;
 	stream->iat_cur_us = 0;
+	stream->iat_hwm_us_last_nsecond = 0;
+	stream->iat_hwm_us_last_nsecond_accumulator = 0;
+	stream->iat_hwm_us_last_nsecond_time = 0;
+	stream->iat_last_frame.tv_sec = 0;
+	stream->iat_last_frame.tv_usec = 0;
 
 	ltn_histogram_reset(stream->packetIntervals);
+	ltntstools_bitrate_calculator_reset(stream);
 
 	for (int i = 0; i < MAX_PID; i++) {
-		stream->pids[i].pidNr = i;
-		if (!stream->pids[i].enabled)
+		struct ltntstools_pid_statistics_s *pid = stream->pids[i];
+		if (!pid) {
 			continue;
-		stream->pids[i].packetCount = 0;
-		stream->pids[i].ccErrors = 0;
-		stream->pids[i].teiErrors = 0;
-		stream->pids[i].mbps = 0;
-
-		stream->pids[i].clocks[ltntstools_CLOCK_PCR].drift_us_hwm = 0;
-		stream->pids[i].clocks[ltntstools_CLOCK_PCR].drift_us_lwm = 0;
-		stream->pids[i].clocks[ltntstools_CLOCK_PCR].establishedWT = 0;
-		stream->pids[i].seenPCR = 0;
-
-		if (stream->pids[i].pcrTickIntervals) {
-			ltn_histogram_reset(stream->pids[i].pcrTickIntervals);
 		}
-		if (stream->pids[i].pcrWallDrift) {
-			ltn_histogram_reset(stream->pids[i].pcrWallDrift);
-		}
-#if EXPERIMENTAL_REORDERING
-		if (stream->pids[i].reorderTable) {
-			ltntstools_cc_reorder_table_reset(stream->pids[i].reorderTable);
-		}
-#endif
+		ltntstools_pid_statistics_reset(pid);		
 	}
 }
 
@@ -464,8 +646,17 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 	if (!stream)
 		return -1;
 
+	/* We do lazy PID array allocation, so stream->pids[n] contains no pids initially. */
+
 	ltntstools_history_metric_collection_init(&stream->ccErrorHistory, "CC Error History");
-	ltn_histogram_alloc_video_defaults(&stream->packetIntervals, "IAT Intervals");
+	int ret = ltn_histogram_alloc_video_defaults(&stream->packetIntervals, "IAT Intervals");
+	if (ret < 0) {
+		// Error
+		ltntstools_history_metric_collection_free(&stream->ccErrorHistory);
+		free(stream);
+		return -1;
+	}
+	
 	ltntstools_pid_stats_reset(stream);
 
 	*ctx = stream;
@@ -485,22 +676,12 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 	}
 
 	for (int i = 0; i < MAX_PID; i++) {
-		if (!stream->pids[i].enabled)
+		struct ltntstools_pid_statistics_s *pid = stream->pids[i];
+		if (!pid) {
 			continue;
-		if (stream->pids[i].pcrTickIntervals) {
-			ltn_histogram_free(stream->pids[i].pcrTickIntervals);
-			stream->pids[i].pcrTickIntervals = NULL;
 		}
-		if (stream->pids[i].pcrWallDrift) {
-			ltn_histogram_free(stream->pids[i].pcrWallDrift);
-			stream->pids[i].pcrWallDrift = NULL;
-		}
-#if EXPERIMENTAL_REORDERING
-		if (stream->pids[i].reorderTable) {
-			free(stream->pids[i].reorderTable);
-			stream->pids[i].reorderTable = NULL;
-		}
-#endif
+		ltntstools_pid_statistics_free(pid);
+		stream->pids[i] = NULL;
 	}
 
 	free(stream);
@@ -508,17 +689,54 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 
 struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntstools_stream_statistics_s *src)
 {
-	struct ltntstools_stream_statistics_s *dst = malloc(sizeof(*src));
-	if (!dst)
+	struct ltntstools_stream_statistics_s *dst = NULL;
+	if (ltntstools_pid_stats_alloc(&dst) < 0)
 		return NULL;
 
+	struct ltntstools_history_metric_collection_s ccErrorHistory = dst->ccErrorHistory;
+	struct ltn_histogram_s *packetIntervals = dst->packetIntervals;
+
 	memcpy(dst, src, sizeof(*dst));
+	memset(dst->pids, 0, sizeof(dst->pids));
+	dst->ccErrorHistory = ccErrorHistory;
+	dst->packetIntervals = packetIntervals;
+
+	if (src->packetIntervals) {
+		struct ltn_histogram_s *h = ltntstools_histogram_clone(src->packetIntervals);
+		if (!h) {
+			ltntstools_pid_stats_free(dst);
+			return NULL;
+		}
+		ltn_histogram_free(dst->packetIntervals);
+		dst->packetIntervals = h;
+	}
+
+	if (ltntstools_history_metric_collection_clone_into(&dst->ccErrorHistory, &src->ccErrorHistory) < 0) {
+		ltntstools_pid_stats_free(dst);
+		return NULL;
+	}
+
+	for (int i = 0; i < MAX_PID; i++) {
+		struct ltntstools_pid_statistics_s *pid = src->pids[i];
+		if (!pid) {
+			continue;
+		}
+		dst->pids[i] = ltntstools_pid_statistics_clone(pid);
+		if (!dst->pids[i]) {
+			ltntstools_pid_stats_free(dst);
+			return NULL;
+		}
+	}
 
 	return dst;
 }
 
 static void _expire_per_second_stream_stats(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return;
+	}
+
 	time_t now;
 	time(&now);
 
@@ -536,30 +754,45 @@ static void _expire_per_second_stream_stats(struct ltntstools_stream_statistics_
 
 double ltntstools_bytestream_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	_expire_per_second_stream_stats(stream);
 	return stream->a324_mbps;
 }
 
 double ltntstools_ctp_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	_expire_per_second_stream_stats(stream);
 	return stream->a324_mbps;
 }
 
 double ltntstools_pid_stats_stream_get_mbps(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	_expire_per_second_stream_stats(stream);
 	return stream->mbps;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->ccErrors;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count_1hr(struct ltntstools_stream_statistics_s *stream)
 {
 	uint64_t val = 0;
+	if (!stream) {
+		return 0;
+	}
 	ltntstools_history_metric_collection_count_until_1hr(&stream->ccErrorHistory, &val);
 	return val;
 }
@@ -567,6 +800,9 @@ uint64_t ltntstools_pid_stats_stream_get_ccerror_count_1hr(struct ltntstools_str
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count_24hr(struct ltntstools_stream_statistics_s *stream)
 {
 	uint64_t val = 0;
+	if (!stream) {
+		return 0;
+	}
 	ltntstools_history_metric_collection_count_until_24hr(&stream->ccErrorHistory, &val);
 	return val;
 }
@@ -574,36 +810,54 @@ uint64_t ltntstools_pid_stats_stream_get_ccerror_count_24hr(struct ltntstools_st
 #if EXPERIMENTAL_REORDERING
 uint64_t ltntstools_pid_stats_stream_get_reorder_errors(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->reorderErrors;
 }
 #endif
 
 uint32_t ltntstools_pid_stats_stream_get_pps(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	_expire_per_second_stream_stats(stream);
 	return stream->pps;
 }
 
 uint32_t ltntstools_ctp_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	_expire_per_second_stream_stats(stream);
 	return stream->a324_bps;
 }
 
 uint32_t ltntstools_bytestream_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	_expire_per_second_stream_stats(stream);
 	return stream->a324_bps;
 }
 
 uint32_t ltntstools_pid_stats_stream_get_bps(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	_expire_per_second_stream_stats(stream);
 	return stream->pps * 188 * 8;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_packet_count(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->packetCount;
 }
 
@@ -621,21 +875,39 @@ static void _expire_per_second_pid_stats(struct ltntstools_pid_statistics_s *pid
 
 double ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 	_expire_per_second_pid_stats(pid);
 	return pid->mbps;
 }
 
 uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 	_expire_per_second_pid_stats(pid);
 	return pid->pps;
 }
 
 uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 	_expire_per_second_pid_stats(pid);
 	return pid->pps * 188 * 8;
 }
@@ -653,26 +925,65 @@ uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statis
 
 uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 	return pid->packetCount;
+}
+
+uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
+{
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
+	return pid->ccErrors;
 }
 
 void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	pidnr &= 0x1fff;
+
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr];
+	if (!pid) {
+		pid = ltntstools_pid_statistics_alloc(pidnr);
+		if (!pid) {
+			return;
+		}
+		stream->pids[pidnr] = pid;
+	}
 	pid->hasPCR = 1;
 	ltntstools_bitrate_calculator_init(stream, pidnr & 0x1fff);
 }
 
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 	return pid->hasPCR;
 }
 
 int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 
 	int64_t pcr = 0;
 	if (pid->hasPCR) {
@@ -684,32 +995,53 @@ int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *
 
 uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->ccErrors;
 }
 
 time_t ltntstools_pid_stats_stream_get_cc_error_time(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->last_cc_error;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->teiErrors;
 }
 
 time_t ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 	return pid->pps_last_update;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->scrambledCount;
 }
 
 int ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 1;
+	}
 	/* If the last _write cause the pcr's to be violated, exceeding 40ms, it's not always great. */
 	return stream->prev_pcrExceeds40ms != stream->pcrExceeds40ms;
 }
@@ -717,14 +1049,25 @@ int ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_
 int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
 	/* If the last _write cause the pcr's to be violated, exceeding 40ms, it's not always great. */
-
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 1;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 1;
+	}
 	return pid->prev_pcrExceeds40ms != pid->pcrExceeds40ms;
 }
 
 int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr, int64_t *driftMs)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return -1;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return -1;
+	}
 	if (!pid->hasPCR) {
 		return -1; /* Failed, not a PCR pid */
 	}
@@ -739,15 +1082,19 @@ void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream,
 	dprintf(fd, "----------PID ---------Pkts -----CCErrors --Mbps\n");
 
 	for (int i = 0; i < MAX_PID; i++) {
-		if (!stream->pids[i].enabled)
+		struct ltntstools_pid_statistics_s *pid = stream->pids[i];
+		if (!pid) {
+			continue;
+		}
+		if (!pid->enabled)
 			continue;
 
 		dprintf(fd, "0x%04x (%4d) %13" PRIu64 " %13" PRIu64 " %6.02f\n",
 			i,
 			i,
-			stream->pids[i].packetCount,
-			stream->pids[i].ccErrors,
-			stream->pids[i].mbps);
+			pid->packetCount,
+			pid->ccErrors,
+			pid->mbps);
 	}
 }
 
@@ -821,16 +1168,25 @@ void ltntstools_cc_reorder_table_print(struct ltntstools_cc_reorder_table_s *t)
 
 uint64_t ltntstools_pid_stats_stream_get_notmultipleofseven_errors(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->notMultipleOfSevenError;
 }
 
 time_t ltntstools_pid_stats_stream_get_notmultipleofseven_time(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->last_notMultipleOfSeven_error;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->iat_hwm_us_last_nsecond;
 }
 
@@ -904,9 +1260,15 @@ static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statisti
 
 		if (bcctx->pcrFirst > -1 && bcctx->pcrSecond > -1) {
 
-			double timeMsPerPCR = ltntstools_scr_diff(bcctx->pcrFirst, bcctx->pcrSecond) / 27000.0;
+			int64_t ticksPerPCR = ltntstools_scr_diff(bcctx->pcrFirst, bcctx->pcrSecond);
+			if (ticksPerPCR <= 0 || bcctx->packetsInbetween == 0) {
+				ltntstools_bitrate_calculator_reset(stream);
+				return 0; /* Success, but no useful measurement yet. */
+			}
+
+			double timeMsPerPCR = ticksPerPCR / 27000.0;
 			bcctx->bitrate = ((1000.0 / timeMsPerPCR) * bcctx->packetsInbetween) * 188 * 8;
-			bcctx->ticksPerPCR = ltntstools_scr_diff(bcctx->pcrFirst, bcctx->pcrSecond);
+			bcctx->ticksPerPCR = ticksPerPCR;
 			bcctx->ticksPerPacket = bcctx->ticksPerPCR / bcctx->packetsInbetween;
 
 #if 0
@@ -931,6 +1293,9 @@ static int ltntstools_bitrate_calculator_write(struct ltntstools_stream_statisti
 
 int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statistics_s *stream, double *bps)
 {
+	if (!stream || !bps) {
+		return -1;
+	}
 	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
 	if (0 && bcctx->running == 1) {
 		*bps = 0;
@@ -944,6 +1309,9 @@ int ltntstools_bitrate_calculator_query_bitrate(struct ltntstools_stream_statist
 
 int ltntstools_bitrate_calculator_query_ticks_per_packet(struct ltntstools_stream_statistics_s *stream, int64_t *ticks)
 {
+	if (!stream || !ticks) {
+		return -1;
+	}
 	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
 	if (0 && bcctx->running == 1) {
 		*ticks = 0;
@@ -957,6 +1325,9 @@ int ltntstools_bitrate_calculator_query_ticks_per_packet(struct ltntstools_strea
 
 int ltntstools_bitrate_calculator_query_stc(struct ltntstools_stream_statistics_s *stream, int64_t *stc)
 {
+	if (!stream || !stc) {
+		return -1;
+	}
 	struct ltntstools_bc_ctx_s *bcctx = (struct ltntstools_bc_ctx_s *)&stream->bc_ctx;
 	if (0 && bcctx->running == 1) {
 		*stc = 0;
@@ -970,11 +1341,20 @@ int ltntstools_bitrate_calculator_query_stc(struct ltntstools_stream_statistics_
 
 uint64_t ltntstools_pid_stats_stream_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream)
 {
+	if (!stream) {
+		return 0;
+	}
 	return stream->payloadPUSIErrors;
 }
 
 uint64_t ltntstools_pid_stats_pid_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	struct ltntstools_pid_statistics_s *pid = &stream->pids[pidnr & 0x1fff];
+	if (!stream) {
+		return 0;
+	}
+	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	if (!pid) {
+		return 0;
+	}
 	return pid->payloadPUSIErrors;
 }
