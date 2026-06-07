@@ -444,9 +444,15 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			/* Handle data */
 			pkt->data = malloc(pkt->dataLengthBytes);
 			if (pkt->data) {
-				for (int i = 0; i < pkt->dataLengthBytes; i++) {
-					*(pkt->data + i) = klbs_read_bits(bs, 8);
-					bits += 8;
+				if (bs->reg_used == 0 && pkt->dataLengthBytes <= klbs_get_byte_count_free(bs)) {
+					memcpy(pkt->data, bs->buf + bs->buflen_used, pkt->dataLengthBytes);
+					bs->buflen_used += pkt->dataLengthBytes;
+					bits += pkt->dataLengthBytes * 8;
+				} else {
+					for (int i = 0; i < pkt->dataLengthBytes; i++) {
+						*(pkt->data + i) = klbs_read_bits(bs, 8);
+						bits += 8;
+					}
 				}
 			} else {
 				pkt->dataLengthBytes = 0;
@@ -483,9 +489,15 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		}
 		pkt->data = malloc(pkt->PES_packet_length);
 		if (pkt->data) {
-			for (int i = 0; i < pkt->PES_packet_length; i++) {
-				*(pkt->data + i) = klbs_read_bits(bs, 8); /* PES_packet_data_byte */
-				bits += 8;
+			if (bs->reg_used == 0 && pkt->PES_packet_length <= klbs_get_byte_count_free(bs)) {
+				memcpy(pkt->data, bs->buf + bs->buflen_used, pkt->PES_packet_length);
+				bs->buflen_used += pkt->PES_packet_length;
+				bits += pkt->PES_packet_length * 8;
+			} else {
+				for (int i = 0; i < pkt->PES_packet_length; i++) {
+					*(pkt->data + i) = klbs_read_bits(bs, 8); /* PES_packet_data_byte */
+					bits += 8;
+				}
 			}
 		} else {
 			pkt->dataLengthBytes = 0;
