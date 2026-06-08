@@ -67,6 +67,29 @@ extern "C" {
 			continue; \
 		} else
 
+/*
+ * Iterate only over PIDs that have been discovered in the stream.
+ *
+ * This avoids scanning the full MAX_PID sparse PID table when the caller only
+ * needs active PID entries. The loop variable e receives the actual MPEG-TS PID
+ * value, not the compact array index, and pid receives stream->pids[e].
+ *
+ * Typical use:
+ *
+ *     struct ltntstools_pid_statistics_s *pid;
+ *     ltntstools_stats_for_each_discovered_pid(stream, pidnr, pid) {
+ *         printf("pid 0x%04x packets=%" PRIu64 "\n", pidnr, pid->packetCount);
+ *     }
+ */
+#define ltntstools_stats_for_each_discovered_pid(s, e, pid) \
+	for (int e##_idx = 0, e = 0; \
+		(s) && (s)->pids && (s)->pidArray && e##_idx < (s)->pidArrayCount && \
+		(((e) = (s)->pidArray[e##_idx]) || 1) && e < MAX_PID && (((pid) = (s)->pids[e]) || 1); \
+		e##_idx++) \
+		if (!(pid)) { \
+			continue; \
+		} else
+
 #define EXPERIMENTAL_REORDERING 0
 
 struct ltntstools_pid_statistics_s;
@@ -180,6 +203,9 @@ struct ltntstools_pid_statistics_s
 struct ltntstools_stream_statistics_s
 {
 	struct ltntstools_pid_statistics_s **pids;
+	uint16_t *pidArray;
+	uint16_t  pidArrayCount;
+
 	uint64_t packetCount;          /**< Total number of packets processed. */
 	uint64_t teiErrors;            /**< Total number of transport error indicator issues processed */
 	uint64_t ccErrors;             /**< Total number of continuity counter issues processed */

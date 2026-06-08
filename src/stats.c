@@ -13,6 +13,8 @@ int      ltntstools_cc_reorder_table_corelate(struct ltntstools_cc_reorder_table
 void     ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s *t);
 #endif
 static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *stream, struct timeval *ts);
+static void _pidArrayFree(struct ltntstools_stream_statistics_s *stream);
+static int _pidArrayAdd(struct ltntstools_stream_statistics_s *stream, uint16_t pidNr);
 void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid);
 
 static int ltntstools_bitrate_calculator_init(struct ltntstools_stream_statistics_s *stream, uint16_t pcrpidnr);
@@ -430,10 +432,15 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		uint16_t pidnr = ltntstools_pid(pkts + offset);
 		struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr];
 		if (pid == NULL) {
-			/* New pid arrived, may sire we have space for it */
+			/* New pid arrived, make sure we have space for it. */
 			stream->pids[pidnr] = ltntstools_pid_statistics_alloc(pidnr);
 			pid = stream->pids[pidnr];
 			if (!pid) {
+				continue;
+			}
+			if (_pidArrayAdd(stream, pidnr) < 0) {
+				ltntstools_pid_statistics_free(pid);
+				stream->pids[pidnr] = NULL;
 				continue;
 			}
 		}
@@ -645,6 +652,33 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	}
 }
 
+static void _pidArrayFree(struct ltntstools_stream_statistics_s *stream)
+{
+	if (!stream) {
+		return;
+	}
+
+	free(stream->pidArray);
+	stream->pidArray = NULL;
+	stream->pidArrayCount = 0;
+}
+
+static int _pidArrayAdd(struct ltntstools_stream_statistics_s *stream, uint16_t pidNr)
+{
+	if (!stream || stream->pidArrayCount >= MAX_PID) {
+		return -1;
+	}
+
+	uint16_t *p = realloc(stream->pidArray, (stream->pidArrayCount + 1) * sizeof(*stream->pidArray));
+	if (!p) {
+		return -1;
+	}
+
+	stream->pidArray = p;
+	stream->pidArray[stream->pidArrayCount++] = pidNr & 0x1fff;
+	return 0;
+}
+
 int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 {
 	*ctx = NULL;
@@ -697,6 +731,7 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 		free(stream->pids);
 		stream->pids = NULL;
 	}
+	_pidArrayFree(stream);
 
 	free(stream);
 }
@@ -720,6 +755,18 @@ struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntst
 	dst->packetIntervals = packetIntervals;
 	dst->pids = pids;
 	memset(dst->pids, 0, sizeof(*dst->pids) * MAX_PID);
+	dst->pidArray = NULL;
+	dst->pidArrayCount = 0;
+
+	if (src->pidArrayCount) {
+		dst->pidArray = malloc(src->pidArrayCount * sizeof(*dst->pidArray));
+		if (!dst->pidArray) {
+			ltntstools_pid_stats_free(dst);
+			return NULL;
+		}
+		memcpy(dst->pidArray, src->pidArray, src->pidArrayCount * sizeof(*dst->pidArray));
+		dst->pidArrayCount = src->pidArrayCount;
+	}
 
 	if (src->packetIntervals) {
 		struct ltn_histogram_s *h = ltntstools_histogram_clone(src->packetIntervals);
@@ -991,6 +1038,11 @@ void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statisti
 			return;
 		}
 		stream->pids[pidnr] = pid;
+		if (_pidArrayAdd(stream, pidnr) < 0) {
+			ltntstools_pid_statistics_free(pid);
+			stream->pids[pidnr] = NULL;
+			return;
+		}
 	}
 	pid->hasPCR = 1;
 	ltntstools_bitrate_calculator_init(stream, pidnr & 0x1fff);
