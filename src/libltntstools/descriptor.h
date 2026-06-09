@@ -28,6 +28,13 @@ struct ltntstools_descriptor_list_s
 	struct ltntstools_descriptor_entry_s array[LTNTSTOOLS_DESCRIPTOR_ENTRIES_MAX];
 };
 
+/**
+ * @brief       Convert an ISO/IEC 13818-1 descriptor tag to a human readable string.
+ * @param[in]   tag - descriptor_tag value.
+ * @return      Static string describing the descriptor tag.
+ */
+const char *ltntstools_descriptor_tag_description(uint8_t tag);
+
 int ltntstools_descriptor_list_add(struct ltntstools_descriptor_list_s *list, uint8_t tag, uint8_t *src, uint8_t lengthBytes);
 int ltntstools_descriptor_list_contains_scte35_cue_registration(struct ltntstools_descriptor_list_s *list);
 int ltntstools_descriptor_list_contains_smpte2038_registration(struct ltntstools_descriptor_list_s *list);
