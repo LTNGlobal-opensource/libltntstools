@@ -13,6 +13,7 @@ extern int usleep(useconds_t usec);
 extern int ltnpthread_setname_np(pthread_t thread, const char *name);
 static void * vbv_threadFunc(void *p);
 static int isValidFramerate(double framerate);
+static int64_t pktClock(const struct ltn_pes_packet_s *pkt);
 
 struct pkt_item_s
 {
@@ -58,6 +59,15 @@ struct vbv_ctx_s
 	struct vbv_statistics_s stats;
 	int64_t decoder_stc; /**< continiously incrementing value, goes beyond 33bits */
 	int64_t encoder_stc; /**< continiously incrementing value, goes beyond 33bits */
+
+	uint64_t diag_bytes_in;
+	uint64_t diag_bytes_out;
+	uint64_t diag_pkts_in;
+	uint64_t diag_pkts_out;
+	uint64_t diag_underflows;
+	struct timespec diag_last_ts;
+	struct timespec lastInputTs;
+	uint64_t resetGeneration;
 
 	pthread_t threadId;
 	int threadTerminate, threadCreated;
@@ -126,7 +136,8 @@ const char *ltntstools_vbv_event_name(enum ltntstools_vbv_event_e e)
 	case EVENT_VBV_UNDEFINED:     return "EVENT_VBV_UNDEFINED";
 	case EVENT_VBV_UNDERFLOW:     return "EVENT_VBV_UNDERFLOW";
 	case EVENT_VBV_OVERFLOW:      return "EVENT_VBV_OVERFLOW";
-	case EVENT_VBV_FULLNESS_PCT:  return "EVENT_VBV_FULLNESS_PCT";
+	case EVENT_VBV_FULLNESS_PCT_LT_10PCT: return "EVENT_VBV_FULLNESS_PCT_LT_10PCT";
+	case EVENT_VBV_FULLNESS_PCT_GT_90PCT: return "EVENT_VBV_FULLNESS_PCT_GT_90PCT";
 	case EVENT_VBV_BPS:           return "EVENT_VBV_BPS";
 	case EVENT_VBV_OOO_DTS:       return "EVENT_VBV_OOO_DTS";
 	default:                      return "EVENT_VBV_UNKNOWN";
@@ -158,7 +169,7 @@ static struct vbv_statistic_s *getStatisticForEvent(struct vbv_ctx_s *ctx, enum 
 	if (e == EVENT_VBV_OVERFLOW) {
 		return &ctx->stats.overflow;
 	} else
-	if (e == EVENT_VBV_FULLNESS_PCT) {
+	if (e == EVENT_VBV_FULLNESS_PCT_LT_10PCT || e == EVENT_VBV_FULLNESS_PCT_GT_90PCT) {
 		return &ctx->stats.fullness;
 	} else {
 		fprintf(stderr, MODULE_PREFIX "%s() no stat for event %s (%d), fixme\n",
@@ -187,6 +198,37 @@ static void raiseEvent(struct vbv_ctx_s *ctx, enum ltntstools_vbv_event_e e)
 	}
 }
 
+static void clearPktListLocked(struct vbv_ctx_s *ctx)
+{
+	while (!xorg_list_is_empty(&ctx->pktList)) {
+		struct pkt_item_s *item = xorg_list_first_entry(&ctx->pktList, struct pkt_item_s, list);
+		xorg_list_del(&item->list);
+		free(item);
+	}
+}
+
+static void resetModelLocked(struct vbv_ctx_s *ctx)
+{
+	clearPktListLocked(ctx);
+
+	ctx->usedBytes = 0;
+	ctx->dts_hwm = 0;
+	ctx->dts_lwm = INT64_MAX;
+	ctx->dts_last = INT64_MAX;
+	ctx->decoder_stc = INT64_MAX;
+	ctx->encoder_stc = 0;
+
+	ctx->diag_bytes_in = 0;
+	ctx->diag_bytes_out = 0;
+	ctx->diag_pkts_in = 0;
+	ctx->diag_pkts_out = 0;
+	ctx->diag_underflows = 0;
+	memset(&ctx->lastInputTs, 0, sizeof(ctx->lastInputTs));
+	clock_gettime(CLOCK_MONOTONIC, &ctx->diag_last_ts);
+
+	ctx->resetGeneration++;
+}
+
 /* Allocates memory from the VBV to store the PES and payload, if the action
  * of doing so would not overflow the VBV.
  * Trigger any notifications efficienly.
@@ -205,24 +247,27 @@ static int addItem(struct vbv_ctx_s *ctx, const struct ltn_pes_packet_s *pkt)
 	i->pkt.rawBuffer = NULL;
 	clock_gettime(CLOCK_REALTIME, &i->ts);
 
+	int64_t clk = pktClock(pkt);
 	int overflow = 1;
 	pthread_mutex_lock(&ctx->pktListMutex);
+
+	if (clk != 0 && ctx->dts_last != INT64_MAX && ctx->dts_last - clk >= 90000) {
+		printf(MODULE_PREFIX "pid 0x%04x clock reset detected, resetting VBV model last %" PRIi64 " current %" PRIi64 "\n",
+			ctx->pid, ctx->dts_last, clk);
+		resetModelLocked(ctx);
+	}
+
 	if (ctx->usedBytes + pkt->rawBufferLengthBytes < ctx->decoder_profile.vbv_buffer_size) {
 
 		xorg_list_append(&i->list, &ctx->pktList);
 		ctx->usedBytes += i->pkt.rawBufferLengthBytes;
+		ctx->diag_bytes_in += i->pkt.rawBufferLengthBytes;
+		ctx->diag_pkts_in++;
+		clock_gettime(CLOCK_MONOTONIC, &ctx->lastInputTs);
 
-		/* Assume no clock, then acquire either PTS or DTS */
-		int64_t clk = 0;
-		if ((pkt->PTS_DTS_flags & 0x03) == 1) {
-			/* PTS Only */
-			clk = pkt->PTS;
+		if (ctx->dts_last == INT64_MAX) {
+			ctx->encoder_stc = clk * 300;
 		} else
-		if ((pkt->PTS_DTS_flags & 0x03) == 3) {
-			/* PTS and DTS */
-			clk = pkt->DTS;
-		}
-
 		if (clk == ctx->dts_last) {
 			/* Repeated DTS - We're OK with this */
 			ctx->encoder_stc += (0 * 300);
@@ -282,7 +327,7 @@ uint32_t framerateToNs(double framerate)
 uint32_t framerateToUs(double framerate)
 {
 	double n = 1e6 / framerate;
-	return n * 1000;
+	return n;
 }
 
 uint32_t framerateToTicks(double framerate)
@@ -342,6 +387,7 @@ int ltntstools_vbv_alloc(void **hdl, uint16_t pid, vbv_callback cb, void *userCo
 	ctx->dts_last = INT64_MAX;
 	ctx->decoder_stc = INT64_MAX;
 	ctx->verbose = 0;
+	clock_gettime(CLOCK_MONOTONIC, &ctx->diag_last_ts);
 
 	statsReset(ctx);
 
@@ -365,11 +411,7 @@ void ltntstools_vbv_free(void *hdl)
 	}
 
 	pthread_mutex_lock(&ctx->pktListMutex);
-	while (!xorg_list_is_empty(&ctx->pktList)) {
-        struct pkt_item_s *item = xorg_list_first_entry(&ctx->pktList, struct pkt_item_s, list);
-        xorg_list_del(&item->list);
-        free(item);
-    }
+	clearPktListLocked(ctx);
 	pthread_mutex_unlock(&ctx->pktListMutex);
 
 	free(ctx);
@@ -390,6 +432,96 @@ int ltntstools_vbv_write(void *hdl, const struct ltn_pes_packet_s *pkt)
 	return 0; /* Success*/
 }
 
+int ltntstools_vbv_get_fullness(void *hdl, double *pct)
+{
+	struct vbv_ctx_s *ctx = (struct vbv_ctx_s *)hdl;
+	if (!ctx) {
+		return -1; /* Missing mandatory args */
+	}
+
+	uint32_t used_bytes;
+
+	pthread_mutex_lock(&ctx->pktListMutex);
+	used_bytes = ctx->usedBytes;
+	pthread_mutex_unlock(&ctx->pktListMutex);
+
+	double p = ((double)used_bytes / (double)ctx->decoder_profile.vbv_buffer_size) * 100.0;
+
+	*pct = p;
+	
+	return 0; /* Success */
+}
+
+static void printDiagnostics(struct vbv_ctx_s *ctx)
+{
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	int elapsed_ms = libltntstools_timespec_diff_ms(now, ctx->diag_last_ts);
+	if (elapsed_ms < 1000) {
+		return;
+	}
+
+	uint64_t bytes_in, bytes_out, pkts_in, pkts_out, underflows;
+	uint32_t used_bytes;
+
+	pthread_mutex_lock(&ctx->pktListMutex);
+	bytes_in = ctx->diag_bytes_in;
+	bytes_out = ctx->diag_bytes_out;
+	pkts_in = ctx->diag_pkts_in;
+	pkts_out = ctx->diag_pkts_out;
+	underflows = ctx->diag_underflows;
+	used_bytes = ctx->usedBytes;
+
+	ctx->diag_bytes_in = 0;
+	ctx->diag_bytes_out = 0;
+	ctx->diag_pkts_in = 0;
+	ctx->diag_pkts_out = 0;
+	ctx->diag_underflows = 0;
+	ctx->diag_last_ts = now;
+	pthread_mutex_unlock(&ctx->pktListMutex);
+
+	double seconds = (double)elapsed_ms / 1000.0;
+	double pct = ((double)used_bytes / (double)ctx->decoder_profile.vbv_buffer_size) * 100.0;
+	double in_bps = ((double)bytes_in * 8.0) / seconds;
+	double out_bps = ((double)bytes_out * 8.0) / seconds;
+	double in_pps = (double)pkts_in / seconds;
+	double out_pps = (double)pkts_out / seconds;
+
+	printf(MODULE_PREFIX "diag pid 0x%04x in %8.3f Mbps %6.2f pes/s, out %8.3f Mbps %6.2f pes/s, underflows %" PRIu64 ", fullness %u / %5.2f%%\n",
+		ctx->pid,
+		in_bps / 1000000.0, in_pps,
+		out_bps / 1000000.0, out_pps,
+		underflows,
+		used_bytes, pct);
+}
+
+static int64_t pktClock(const struct ltn_pes_packet_s *pkt)
+{
+	if (ltn_pes_packet_has_DTS((struct ltn_pes_packet_s *)pkt)) {
+		return pkt->DTS;
+	}
+	if (ltn_pes_packet_has_PTS((struct ltn_pes_packet_s *)pkt)) {
+		return pkt->PTS;
+	}
+
+	return 0;
+}
+
+static int64_t elapsedTicks90k(struct timespec start, struct timespec end)
+{
+	int64_t sec = end.tv_sec - start.tv_sec;
+	int64_t nsec = end.tv_nsec - start.tv_nsec;
+	if (nsec < 0) {
+		sec--;
+		nsec += 1000000000;
+	}
+
+	if (sec < 0) {
+		return 0;
+	}
+
+	return (sec * 90000) + ((nsec * 90000) / 1000000000);
+}
 
 /* Simulate a virtual video decoder, pulling frames from a EBn (with VBV policy)
  * one frame at a time.
@@ -402,23 +534,30 @@ static void * vbv_threadFunc(void *p)
 	//pthread_detach(ctx->threadId);
 	ltnpthread_setname_np(ctx->threadId, "thread-vbv");
 
-	struct timespec next_time;
 	struct timespec last_ooo_dts_time;
-	int decoder_stc_rebased = 0;
 
-	clock_gettime(CLOCK_MONOTONIC, &next_time);
-	last_ooo_dts_time = next_time;
+	clock_gettime(CLOCK_MONOTONIC, &last_ooo_dts_time);
 
 	/* simulate HRD, don't drain vbv until this amount of content exists */
 	/* 60% of a second into the VBV before we start to drain */
 	int initial_cpb_removal_delay = (90000 / 100) * 60;
 	int permit_vbv_drain = 0;
+	uint64_t resetGeneration = 0;
 
 	ctx->threadTerminate = 0;
 	while (!ctx->threadTerminate) {
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+
+		pthread_mutex_lock(&ctx->pktListMutex);
+		if (resetGeneration != ctx->resetGeneration) {
+			resetGeneration = ctx->resetGeneration;
+			permit_vbv_drain = 0;
+		}
+		pthread_mutex_unlock(&ctx->pktListMutex);
 		
-		if (libltntstools_timespec_diff_ms(next_time, last_ooo_dts_time) >= 50) {
-			last_ooo_dts_time = next_time;
+		if (libltntstools_timespec_diff_ms(now, last_ooo_dts_time) >= 50) {
+			last_ooo_dts_time = now;
 
 			/* Check the VBV and ensure DTS's are in order.
 			 * Or'd OK for the VBV DTS array to go back in time (loop / reset)
@@ -428,13 +567,18 @@ static void * vbv_threadFunc(void *p)
 		printf("dts_hwm %" PRIi64 " dts_lwm %" PRIi64 " diff %" PRIi64 "\n",
 			ctx->dts_hwm, ctx->dts_lwm, ctx->dts_hwm - ctx->dts_lwm);
 #endif
-		if (permit_vbv_drain == 0 &&
-			ctx->dts_lwm != INT64_MAX && ctx->dts_hwm != 0 &&
-			ctx->dts_hwm - ctx->dts_lwm > initial_cpb_removal_delay)
-		{
-			permit_vbv_drain = 1;
-			printf(MODULE_PREFIX "vbv initial level reached\n");
-			clock_gettime(CLOCK_MONOTONIC, &next_time);
+		if (permit_vbv_drain == 0) {
+			pthread_mutex_lock(&ctx->pktListMutex);
+			if (ctx->dts_lwm != INT64_MAX && ctx->dts_hwm != 0 &&
+				ctx->dts_hwm - ctx->dts_lwm > initial_cpb_removal_delay)
+			{
+				permit_vbv_drain = 1;
+			}
+			pthread_mutex_unlock(&ctx->pktListMutex);
+
+			if (permit_vbv_drain) {
+				printf(MODULE_PREFIX "vbv initial level reached\n");
+			}
 		}
 
 		if (!permit_vbv_drain) {
@@ -443,13 +587,35 @@ static void * vbv_threadFunc(void *p)
 		}
 
 		struct pkt_item_s *item = NULL;
+		int sleep_us = 0;
+		int underflow = 0;
+		uint32_t usedBytes = 0;
+
 		pthread_mutex_lock(&ctx->pktListMutex);
 		if (!xorg_list_is_empty(&ctx->pktList)) {
 			item = xorg_list_first_entry(&ctx->pktList, struct pkt_item_s, list);
-			if (item) {
+			int64_t item_stc = pktClock(&item->pkt);
+			int64_t dts_hwm = ctx->dts_hwm;
+			if (ctx->lastInputTs.tv_sec != 0 || ctx->lastInputTs.tv_nsec != 0) {
+				dts_hwm += elapsedTicks90k(ctx->lastInputTs, now);
+			}
+			int64_t due_stc = dts_hwm - initial_cpb_removal_delay;
+			int64_t ticks_until_due = item_stc - due_stc;
+			if (ticks_until_due <= 0) {
+				ctx->decoder_stc = item_stc;
 				xorg_list_del(&item->list);
 				ctx->usedBytes -= item->pkt.rawBufferLengthBytes;
+				ctx->diag_bytes_out += item->pkt.rawBufferLengthBytes;
+				ctx->diag_pkts_out++;
+				usedBytes = ctx->usedBytes;
+			} else {
+				item = NULL;
+				sleep_us = 5 * 1000;
 			}
+		} else {
+			ctx->diag_underflows++;
+			underflow = 1;
+			sleep_us = framerateToUs(ctx->decoder_profile.framerate);
 		}
 		pthread_mutex_unlock(&ctx->pktListMutex);
 
@@ -457,18 +623,7 @@ static void * vbv_threadFunc(void *p)
 
 		/* Cleanup */
 		if (item) {
-			if (decoder_stc_rebased == 0) {
-				decoder_stc_rebased = 1;
-				ctx->decoder_stc = item->pkt.DTS;
-				if (ctx->decoder_stc == 0) {
-					ctx->decoder_stc = item->pkt.PTS;
-				}
-				if (ctx->decoder_stc == 0) {
-					decoder_stc_rebased = 0;
-				}
-			}
-
-			double pct = ((double)ctx->usedBytes / (double)ctx->decoder_profile.vbv_buffer_size) * 100.0;
+			double pct = ((double)usedBytes / (double)ctx->decoder_profile.vbv_buffer_size) * 100.0;
 
 			if (ctx->verbose) {
 				struct timeval ts;
@@ -477,35 +632,30 @@ static void * vbv_threadFunc(void *p)
 					(int)ts.tv_sec, (int)ts.tv_usec,
 					ctx->decoder_stc,
 					item->pkt.PTS, item->pkt.DTS,
-					ctx->usedBytes, pct);
+					usedBytes, pct);
 			}
 			free(item);
 
-			if (pct <= 2.5 || pct >= 96.0) {
-				raiseEvent(ctx, EVENT_VBV_FULLNESS_PCT);
+			if (pct < 10.0) {
+				raiseEvent(ctx, EVENT_VBV_FULLNESS_PCT_LT_10PCT);
+			} else
+			if (pct > 90.0) {
+				raiseEvent(ctx, EVENT_VBV_FULLNESS_PCT_GT_90PCT);
 			}
-		} else {
+		} else
+		if (underflow) {
 			/* If the VBV is empty, what? */
 			/* If the decoder wants a DTS and its not present in the list, what? */
 			raiseEvent(ctx, EVENT_VBV_UNDERFLOW);
 		}
 
 		/* Track BPS used between DTS of one second and notify on this. */
-
-		/* Have a haba daba too time... sleep a frame duration */
-		uint32_t ns = framerateToUs(ctx->decoder_profile.framerate);
-		next_time.tv_nsec += ns;
-		while (next_time.tv_nsec >= 1000000000) {
-			next_time.tv_nsec -= 1000000000;
-			next_time.tv_sec += 1;
+		if (ctx->verbose) {
+			printDiagnostics(ctx);
 		}
-#ifdef __linux__
-		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next_time, NULL);
-#endif
-#ifdef __APPLE__
-		nanosleep(&next_time, NULL);
-#endif
-		ctx->decoder_stc += framerateToTicks(ctx->decoder_profile.framerate);
+		if (sleep_us > 0) {
+			usleep(sleep_us);
+		}
 	}
 
 	/* TODO: pthread detach else we'll cause a small leak in valgrind. */

@@ -38,7 +38,8 @@ extern "C" {
 
 enum ltntstools_vbv_event_e {
 	EVENT_VBV_UNDEFINED = 0,
-	EVENT_VBV_FULLNESS_PCT,   /**< triggered when fullnes < 10% or > 90% */
+	EVENT_VBV_FULLNESS_PCT_LT_10PCT, /**< triggered when fullness < 10% */
+	EVENT_VBV_FULLNESS_PCT_GT_90PCT, /**< triggered when fullness > 90% */
 	EVENT_VBV_BPS,
 	EVENT_VBV_UNDERFLOW,      /**< Buffering violation */
 	EVENT_VBV_OVERFLOW,       /**< Buffering violation */
@@ -117,10 +118,19 @@ int ltntstools_vbv_profile_defaults(struct vbv_decoder_profile_s *p, int codec, 
 
 /**
  * @brief       Increase debug verbosity level.
+ * @param[in]   void *hdl - Handle / context for further use.
  * @param[in]   uint32_t level - higher levels increase verbosity
  * @return      0 on success, else < 0.
  */
 int ltntstools_vbv_verbose(void *hdl, uint32_t level);
+
+/**
+ * @brief       Query the VBV fullness
+ * @param[in]   void *hdl - Handle / context for further use.
+ * @param[in]   double percent - percentage of fullness. below 10% and above 90% the stack starts to warn.
+ * @return      0 on success, else < 0.
+ */
+int ltntstools_vbv_get_fullness(void *hdl, double *pct);
 
 #ifdef __cplusplus
 };

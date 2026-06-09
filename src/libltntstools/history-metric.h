@@ -31,6 +31,7 @@ struct ltntstools_history_metric_collection_s
 	pthread_mutex_t lock;
 	struct xorg_list list;
 	const char *name;
+	int wasAlloc;
 };
 
 /**
