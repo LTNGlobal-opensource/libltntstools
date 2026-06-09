@@ -155,8 +155,8 @@ struct ltntstools_pid_statistics_s
 {
 	int      enabled;              /**< Boolean. is the pid available in the multiplex. */
 	uint16_t pidNr;                /**< ISO13818 Pid Number */
-	uint64_t packetCount;          /**< Number of packets processed. */
-	uint64_t ccErrors;             /**< Number of continuity counter issues processed */
+	uint64_t internal_packetCount;          /**< Number of packets processed. */
+	uint64_t internal_ccErrors;             /**< Number of continuity counter issues processed */
 	uint64_t teiErrors;            /**< Number of transport error indicator issues processed */
 	uint64_t scrambledCount;       /**< Number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Number of times the PCR interval has exceeded 40ms */
@@ -206,9 +206,9 @@ struct ltntstools_stream_statistics_s
 	uint16_t *pidArray;
 	uint16_t  pidArrayCount;
 
-	uint64_t packetCount;          /**< Total number of packets processed. */
+	uint64_t internal_packetCount;          /**< Total number of packets processed. */
 	uint64_t teiErrors;            /**< Total number of transport error indicator issues processed */
-	uint64_t ccErrors;             /**< Total number of continuity counter issues processed */
+	uint64_t internal_ccErrors;             /**< Total number of continuity counter issues processed */
 
 	struct ltntstools_history_metric_collection_s ccErrorHistory;
 

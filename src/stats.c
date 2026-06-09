@@ -154,8 +154,8 @@ int ltntstools_isPayloadPUSIInError(const uint8_t *pkt)
 void ltntstools_pid_statistics_reset(struct ltntstools_pid_statistics_s *pid)
 {
 	pid->enabled = 1;
-	pid->packetCount = 0;
-	pid->ccErrors = 0;
+	pid->internal_packetCount = 0;
+	pid->internal_ccErrors = 0;
 	pid->teiErrors = 0;
 	pid->scrambledCount = 0;
 	pid->pcrExceeds40ms = 0;
@@ -271,7 +271,7 @@ void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *s
 	time_t now;
 	time(&now);
 
-	stream->packetCount++;
+	stream->internal_packetCount++;
 	if (lengthBytes != (7 * 188)) {
 		stream->notMultipleOfSevenError++;
 		stream->last_notMultipleOfSeven_error = now;
@@ -306,7 +306,7 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 	uint16_t sequence_number = *(buf + 2) << 8 | *(buf + 3);
 	if (((stream->a324_sequence_number + 1) & 0xffff) != sequence_number) {
 		/* No CC error for the first packet. */
-		if (stream->packetCount) {
+		if (stream->internal_packetCount) {
 			_stream_increment_cc_errors(stream, NULL);
 		}
 	}
@@ -316,7 +316,7 @@ void ltntstools_ctp_stats_update(struct ltntstools_stream_statistics_s *stream, 
 	 * But some rounding down will occur.
 	 * TODO: Add a CTP correct mechanism.
 	 */
-	stream->packetCount++;
+	stream->internal_packetCount++;
 
 	/* Update / maintain bitrate */
 	if (now != stream->Bps_last_update) {
@@ -339,7 +339,7 @@ static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *s
 		gettimeofday(&now, NULL);
 	}
 
-	stream->ccErrors++;
+	stream->internal_ccErrors++;
 	stream->last_cc_error = now.tv_sec;
 
 	struct ltntstools_history_metric_s *m = ltntstools_history_metric_alloc(now.tv_sec, 1);
@@ -380,7 +380,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 	for (int i = 0; i < packetCount; i++) {
 		int offset = i * 188;
 		if (*(pkts + offset) == 0x47)
-			stream->packetCount++;
+			stream->internal_packetCount++;
 		else {
 			_stream_increment_cc_errors(stream, &ts);
 		}
@@ -446,7 +446,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		}
 
 		pid->enabled = 1;
-		pid->packetCount++;
+		pid->internal_packetCount++;
 
 		if (ltntstools_isPayloadPUSIInError(pkts + offset)) {
 			pid->payloadPUSIErrors++;
@@ -496,8 +496,8 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		uint8_t cc = ltntstools_continuity_counter(pkts + offset);
 		int isCCError = ltntstools_isCCInError(pkts + offset, pid->lastCC);
 		if (isCCError) {
-			if (pid->packetCount > 1 && pidnr != 0x1fff) {
-				pid->ccErrors++;
+			if (pid->internal_packetCount > 1 && pidnr != 0x1fff) {
+				pid->internal_ccErrors++;
 				_stream_increment_cc_errors(stream, &ts);
 			}
 		}
@@ -608,9 +608,9 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 		return;
 	}
 
-	stream->packetCount = 0;
+	stream->internal_packetCount = 0;
 	stream->teiErrors = 0;
-	stream->ccErrors = 0;
+	stream->internal_ccErrors = 0;
 	ltntstools_history_metric_collection_reset(&stream->ccErrorHistory);
 	stream->scrambledCount = 0;
 	stream->pcrExceeds40ms = 0;
@@ -848,7 +848,7 @@ uint64_t ltntstools_pid_stats_stream_get_ccerror_count(struct ltntstools_stream_
 	if (!stream) {
 		return 0;
 	}
-	return stream->ccErrors;
+	return stream->internal_ccErrors;
 }
 
 uint64_t ltntstools_pid_stats_stream_get_ccerror_count_1hr(struct ltntstools_stream_statistics_s *stream)
@@ -922,7 +922,7 @@ uint64_t ltntstools_pid_stats_stream_get_packet_count(struct ltntstools_stream_s
 	if (!stream) {
 		return 0;
 	}
-	return stream->packetCount;
+	return stream->internal_packetCount;
 }
 
 static void _expire_per_second_pid_stats(struct ltntstools_pid_statistics_s *pid)
@@ -996,7 +996,7 @@ uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_stat
 	if (!pid) {
 		return 0;
 	}
-	return pid->packetCount;
+	return pid->internal_packetCount;
 }
 
 uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
@@ -1008,7 +1008,7 @@ uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statist
 	if (!pid) {
 		return 0;
 	}
-	return pid->ccErrors;
+	return pid->internal_ccErrors;
 }
 
 uint64_t ltntstools_pid_stats_pid_get_tei_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
@@ -1083,7 +1083,7 @@ uint64_t ltntstools_pid_stats_stream_get_cc_errors(struct ltntstools_stream_stat
 	if (!stream) {
 		return 0;
 	}
-	return stream->ccErrors;
+	return stream->internal_ccErrors;
 }
 
 time_t ltntstools_pid_stats_stream_get_cc_error_time(struct ltntstools_stream_statistics_s *stream)
@@ -1178,8 +1178,8 @@ void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream,
 		dprintf(fd, "0x%04x (%4d) %13" PRIu64 " %13" PRIu64 " %6.02f\n",
 			i,
 			i,
-			pid->packetCount,
-			pid->ccErrors,
+			pid->internal_packetCount,
+			pid->internal_ccErrors,
 			pid->mbps);
 	}
 }
