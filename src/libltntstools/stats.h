@@ -62,7 +62,7 @@ extern "C" {
 #define MAX_PID 8192
 
 #define ltntstools_stats_for_each_pid(s, e, pid) \
-	for (int e = 0; (s) && (s)->pids && e < MAX_PID && (((pid) = (s)->pids[e]) || 1); e++) \
+	for (int e = 0; (s) && (s)->internal_pids && e < MAX_PID && (((pid) = (s)->internal_pids[e]) || 1); e++) \
 		if (!(pid)) { \
 			continue; \
 		} else
@@ -83,8 +83,8 @@ extern "C" {
  */
 #define ltntstools_stats_for_each_discovered_pid(s, e, pid) \
 	for (int e##_idx = 0, e = 0; \
-		(s) && (s)->pids && (s)->pidArray && e##_idx < (s)->pidArrayCount && \
-		(((e) = (s)->pidArray[e##_idx]) || 1) && e < MAX_PID && (((pid) = (s)->pids[e]) || 1); \
+		(s) && (s)->internal_pids && (s)->pidArray && e##_idx < (s)->pidArrayCount && \
+		(((e) = (s)->pidArray[e##_idx]) || 1) && e < MAX_PID && (((pid) = (s)->internal_pids[e]) || 1); \
 		e##_idx++) \
 		if (!(pid)) { \
 			continue; \
@@ -202,7 +202,7 @@ struct ltntstools_pid_statistics_s
  */
 struct ltntstools_stream_statistics_s
 {
-	struct ltntstools_pid_statistics_s **pids;
+	struct ltntstools_pid_statistics_s **internal_pids;
 	uint16_t *pidArray;
 	uint16_t  pidArrayCount;
 

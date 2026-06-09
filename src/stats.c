@@ -259,11 +259,11 @@ void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid)
 
 struct ltntstools_pid_statistics_s *ltntstools_pid_stats_get(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return NULL;
 	}
 	pidnr &= 0x1fff;
-	return stream->pids[pidnr];
+	return stream->internal_pids[pidnr];
 }
 
 void ltntstools_bytestream_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *buf, uint32_t lengthBytes)
@@ -353,7 +353,7 @@ static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *s
 
 void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, const uint8_t *pkts, uint32_t packetCount)
 {
-	if (!stream || !stream->pids || !pkts) {
+	if (!stream || !stream->internal_pids || !pkts) {
 		return;
 	}
 
@@ -430,17 +430,17 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 		int offset = i * 188;
 
 		uint16_t pidnr = ltntstools_pid(pkts + offset);
-		struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr];
+		struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr];
 		if (pid == NULL) {
 			/* New pid arrived, make sure we have space for it. */
-			stream->pids[pidnr] = ltntstools_pid_statistics_alloc(pidnr);
-			pid = stream->pids[pidnr];
+			stream->internal_pids[pidnr] = ltntstools_pid_statistics_alloc(pidnr);
+			pid = stream->internal_pids[pidnr];
 			if (!pid) {
 				continue;
 			}
 			if (_pidArrayAdd(stream, pidnr) < 0) {
 				ltntstools_pid_statistics_free(pid);
-				stream->pids[pidnr] = NULL;
+				stream->internal_pids[pidnr] = NULL;
 				continue;
 			}
 		}
@@ -687,9 +687,9 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 	if (!stream)
 		return -1;
 
-	/* We do lazy PID array allocation, so stream->pids[n] contains no pids initially. */
-	stream->pids = calloc(MAX_PID, sizeof(*stream->pids));
-	if (!stream->pids) {
+	/* We do lazy PID array allocation, so stream->internal_pids[n] contains no pids initially. */
+	stream->internal_pids = calloc(MAX_PID, sizeof(*stream->internal_pids));
+	if (!stream->internal_pids) {
 		free(stream);
 		return -1;
 	}
@@ -699,7 +699,7 @@ int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **ctx)
 	if (ret < 0) {
 		// Error
 		ltntstools_history_metric_collection_free(&stream->ccErrorHistory);
-		free(stream->pids);
+		free(stream->internal_pids);
 		free(stream);
 		return -1;
 	}
@@ -725,11 +725,11 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 	struct ltntstools_pid_statistics_s *pid;
 	ltntstools_stats_for_each_pid(stream, i, pid) {
 		ltntstools_pid_statistics_free(pid);
-		stream->pids[i] = NULL;
+		stream->internal_pids[i] = NULL;
 	}
-	if (stream->pids) {
-		free(stream->pids);
-		stream->pids = NULL;
+	if (stream->internal_pids) {
+		free(stream->internal_pids);
+		stream->internal_pids = NULL;
 	}
 	_pidArrayFree(stream);
 
@@ -738,7 +738,7 @@ void ltntstools_pid_stats_free(struct ltntstools_stream_statistics_s *stream)
 
 struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntstools_stream_statistics_s *src)
 {
-	if (!src || !src->pids) {
+	if (!src || !src->internal_pids) {
 		return NULL;
 	}
 
@@ -748,13 +748,13 @@ struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntst
 
 	struct ltntstools_history_metric_collection_s ccErrorHistory = dst->ccErrorHistory;
 	struct ltn_histogram_s *packetIntervals = dst->packetIntervals;
-	struct ltntstools_pid_statistics_s **pids = dst->pids;
+	struct ltntstools_pid_statistics_s **pids = dst->internal_pids;
 
 	memcpy(dst, src, sizeof(*dst));
 	dst->ccErrorHistory = ccErrorHistory;
 	dst->packetIntervals = packetIntervals;
-	dst->pids = pids;
-	memset(dst->pids, 0, sizeof(*dst->pids) * MAX_PID);
+	dst->internal_pids = pids;
+	memset(dst->internal_pids, 0, sizeof(*dst->internal_pids) * MAX_PID);
 	dst->pidArray = NULL;
 	dst->pidArrayCount = 0;
 
@@ -785,8 +785,8 @@ struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntst
 
 	struct ltntstools_pid_statistics_s *pid;
 	ltntstools_stats_for_each_pid(src, i, pid) {
-		dst->pids[i] = ltntstools_pid_statistics_clone(pid);
-		if (!dst->pids[i]) {
+		dst->internal_pids[i] = ltntstools_pid_statistics_clone(pid);
+		if (!dst->internal_pids[i]) {
 			ltntstools_pid_stats_free(dst);
 			return NULL;
 		}
@@ -939,10 +939,10 @@ static void _expire_per_second_pid_stats(struct ltntstools_pid_statistics_s *pid
 
 double ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -952,10 +952,10 @@ double ltntstools_pid_stats_pid_get_mbps(struct ltntstools_stream_statistics_s *
 
 uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -965,10 +965,10 @@ uint32_t ltntstools_pid_stats_pid_get_pps(struct ltntstools_stream_statistics_s 
 
 uint32_t ltntstools_pid_stats_pid_get_bps(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -989,10 +989,10 @@ uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statis
 
 uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -1001,10 +1001,10 @@ uint64_t ltntstools_pid_stats_pid_get_packet_count(struct ltntstools_stream_stat
 
 uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -1013,10 +1013,10 @@ uint64_t ltntstools_pid_stats_pid_get_cc_errors(struct ltntstools_stream_statist
 
 uint64_t ltntstools_pid_stats_pid_get_tei_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -1025,22 +1025,22 @@ uint64_t ltntstools_pid_stats_pid_get_tei_errors(struct ltntstools_stream_statis
 
 void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return;
 	}
 
 	pidnr &= 0x1fff;
 
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr];
 	if (!pid) {
 		pid = ltntstools_pid_statistics_alloc(pidnr);
 		if (!pid) {
 			return;
 		}
-		stream->pids[pidnr] = pid;
+		stream->internal_pids[pidnr] = pid;
 		if (_pidArrayAdd(stream, pidnr) < 0) {
 			ltntstools_pid_statistics_free(pid);
-			stream->pids[pidnr] = NULL;
+			stream->internal_pids[pidnr] = NULL;
 			return;
 		}
 	}
@@ -1050,10 +1050,10 @@ void ltntstools_pid_stats_pid_set_contains_pcr(struct ltntstools_stream_statisti
 
 int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -1062,10 +1062,10 @@ int ltntstools_pid_stats_pid_get_contains_pcr(struct ltntstools_stream_statistic
 
 int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -1104,10 +1104,10 @@ uint64_t ltntstools_pid_stats_stream_get_tei_errors(struct ltntstools_stream_sta
 
 time_t ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
@@ -1134,10 +1134,10 @@ int ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_
 int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
 	/* If the last _write cause the pcr's to be violated, exceeding 40ms, it's not always great. */
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 1;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 1;
 	}
@@ -1146,10 +1146,10 @@ int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_sta
 
 int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr, int64_t *driftMs)
 {
-	if (!stream || !stream->pids || !driftMs) {
+	if (!stream || !stream->internal_pids || !driftMs) {
 		return -1;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return -1;
 	}
@@ -1164,7 +1164,7 @@ int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_s
 
 void ltntstools_pid_stats_dprintf(struct ltntstools_stream_statistics_s *stream, int fd)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return;
 	}
 
@@ -1435,10 +1435,10 @@ uint64_t ltntstools_pid_stats_stream_get_pusi_payload_errors(struct ltntstools_s
 
 uint64_t ltntstools_pid_stats_pid_get_pusi_payload_errors(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr)
 {
-	if (!stream || !stream->pids) {
+	if (!stream || !stream->internal_pids) {
 		return 0;
 	}
-	struct ltntstools_pid_statistics_s *pid = stream->pids[pidnr & 0x1fff];
+	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
 		return 0;
 	}
