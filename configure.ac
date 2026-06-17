@@ -24,6 +24,16 @@ AC_C_INLINE
 AM_CONDITIONAL(LINUX, test `uname -s` = "Linux")
 AM_CONDITIONAL(APPLE, test `uname -s` = "Darwin")
 
+case "$host_os" in
+  darwin*)
+    LIBRT_LIBS=""
+    ;;
+  *)
+    LIBRT_LIBS="-lrt"
+    ;;
+esac
+AC_SUBST([LIBRT_LIBS])
+
 # We always build with -fPIC in case our static libraries end up
 # being linked into a consumer's shared library
 AC_MSG_CHECKING(whether fPIC compiler option is accepted)
@@ -66,4 +76,3 @@ AM_COND_IF(DEBUG,
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
-
