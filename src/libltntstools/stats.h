@@ -62,7 +62,7 @@ extern "C" {
 #define MAX_PID 8192
 
 #define ltntstools_stats_for_each_pid(s, e, pid) \
-	for (int e = 0; (s) && (s)->pids && e < MAX_PID && (((pid) = (s)->pids[e]) || 1); e++) \
+	for (int e = 0; (s) && (s)->internal_pids && e < MAX_PID && (((pid) = (s)->internal_pids[e]) || 1); e++) \
 		if (!(pid)) { \
 			continue; \
 		} else
@@ -83,8 +83,8 @@ extern "C" {
  */
 #define ltntstools_stats_for_each_discovered_pid(s, e, pid) \
 	for (int e##_idx = 0, e = 0; \
-		(s) && (s)->pids && (s)->pidArray && e##_idx < (s)->pidArrayCount && \
-		(((e) = (s)->pidArray[e##_idx]) || 1) && e < MAX_PID && (((pid) = (s)->pids[e]) || 1); \
+		(s) && (s)->internal_pids && (s)->pidArray && e##_idx < (s)->pidArrayCount && \
+		(((e) = (s)->pidArray[e##_idx]) || 1) && e < MAX_PID && (((pid) = (s)->internal_pids[e]) || 1); \
 		e##_idx++) \
 		if (!(pid)) { \
 			continue; \
@@ -155,8 +155,8 @@ struct ltntstools_pid_statistics_s
 {
 	int      enabled;              /**< Boolean. is the pid available in the multiplex. */
 	uint16_t pidNr;                /**< ISO13818 Pid Number */
-	uint64_t packetCount;          /**< Number of packets processed. */
-	uint64_t ccErrors;             /**< Number of continuity counter issues processed */
+	uint64_t internal_packetCount;          /**< Number of packets processed. */
+	uint64_t internal_ccErrors;             /**< Number of continuity counter issues processed */
 	uint64_t teiErrors;            /**< Number of transport error indicator issues processed */
 	uint64_t scrambledCount;       /**< Number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Number of times the PCR interval has exceeded 40ms */
@@ -202,13 +202,13 @@ struct ltntstools_pid_statistics_s
  */
 struct ltntstools_stream_statistics_s
 {
-	struct ltntstools_pid_statistics_s **pids;
+	struct ltntstools_pid_statistics_s **internal_pids;
 	uint16_t *pidArray;
 	uint16_t  pidArrayCount;
 
-	uint64_t packetCount;          /**< Total number of packets processed. */
+	uint64_t internal_packetCount;          /**< Total number of packets processed. */
 	uint64_t teiErrors;            /**< Total number of transport error indicator issues processed */
-	uint64_t ccErrors;             /**< Total number of continuity counter issues processed */
+	uint64_t internal_ccErrors;             /**< Total number of continuity counter issues processed */
 
 	struct ltntstools_history_metric_collection_s ccErrorHistory;
 
