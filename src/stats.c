@@ -55,12 +55,12 @@ static int ltntstools_history_metric_collection_clone_into(
 
 	pthread_mutex_lock(&src->lock);
 	xorg_list_for_each_entry(m, &src->list, list) {
-			struct ltntstools_history_metric_s *copy = ltntstools_history_metric_alloc(m->ts, m->count);
-			if (!copy) {
-				pthread_mutex_unlock(&src->lock);
-				ltntstools_history_metric_collection_reset(dst);
-				return -1;
-			}
+		struct ltntstools_history_metric_s *copy = ltntstools_history_metric_alloc(m->ts, m->count);
+		if (!copy) {
+			pthread_mutex_unlock(&src->lock);
+			ltntstools_history_metric_collection_reset(dst);
+			return -1;
+		}
 		ltntstools_history_metric_collection_add(dst, copy);
 	}
 	pthread_mutex_unlock(&src->lock);
@@ -343,7 +343,9 @@ static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *s
 	stream->last_cc_error = now.tv_sec;
 
 	struct ltntstools_history_metric_s *m = ltntstools_history_metric_alloc(now.tv_sec, 1);
-	ltntstools_history_metric_collection_add(&stream->ccErrorHistory, m);
+	if (m) {
+		ltntstools_history_metric_collection_add(&stream->ccErrorHistory, m);
+	}
 
 	if (stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb) {
 		stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb(stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].userContext, 
