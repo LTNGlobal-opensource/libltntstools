@@ -87,8 +87,8 @@ void ltntstools_history_metric_collection_add(struct ltntstools_history_metric_c
 		pthread_mutex_lock(&c->lock);
 		xorg_list_for_each_entry_safe(e, next, &c->list, list) {
 			if (e->ts < window) {
-				xorg_list_del(&m->list);
-				ltntstools_history_metric_free(m);
+				xorg_list_del(&e->list);
+				ltntstools_history_metric_free(e);
 			}
 		}
 		pthread_mutex_unlock(&c->lock);

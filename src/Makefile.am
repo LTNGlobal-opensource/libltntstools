@@ -3,7 +3,7 @@ AUTOMAKE_OPTIONS = foreign
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libltntstools.pc
-libltntstools_la_LDFLAGS  = -Wl,--no-as-needed -ldvbpsi -lrt
+libltntstools_la_LDFLAGS  = -Wl,--no-as-needed -ldvbpsi $(LIBRT_LIBS)
 
 lib_LTLIBRARIES = libltntstools.la
 
