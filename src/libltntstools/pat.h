@@ -214,13 +214,34 @@ const struct ltntstools_pmt_entry_s **ltntstools_pmt_enum_services_audio(const s
 
 /**
  * @brief       Look at the stream-type AND descriptors to determine if this is an audio pid.
- * @param[in]   uint8_t esPayloadType - pmt elementary stream type.
- * @return      - 0  if not audio
- *		- 1  if the stream_type indicates the codec
- *		- the descriptor tag of the matching audio descriptor (>1)
+ * @param[in]   const struct ltntstools_pmt_entry_s *pmt - pmt elementary stream type.
+ * @return      0,   if not audio
+ *              1,   if the stream_type indicates the codec
+ *              > 1, the descriptor tag of the matching audio descriptor (>1)
  * @see        ltntstools_is_ESPayloadType_Audio()
  */
 int ltntstools_pmt_entry_is_audio(const struct ltntstools_pmt_entry_s *pmt);
+
+/**
+ * @brief       Look at the stream-type AND descriptors to determine if this is a video pid.
+ * @param[in]   const struct ltntstools_pmt_entry_s *pe - pmt elementary stream type.
+ * @return      0 if not else 1 if true
+ */
+int ltntstools_pmt_entry_is_video(const struct ltntstools_pmt_entry_s *pe);
+
+/**
+ * @brief       Look at the stream-type AND descriptors to determine if this is a SCTE35 pid.
+ * @param[in]   const struct ltntstools_pmt_entry_s *pe - pmt elementary stream type.
+ * @return      0 if not else 1 if true
+ */
+int ltntstools_pmt_entry_is_scte35(const struct ltntstools_pmt_entry_s *pe);
+
+/**
+ * @brief       Look at the stream-type AND descriptors to determine if this is a SMPTE2038 pid.
+ * @param[in]   const struct ltntstools_pmt_entry_s *pe - pmt elementary stream type.
+ * @return      0 if not else 1 if true
+ */
+int ltntstools_pmt_entry_is_smpte2038(const struct ltntstools_pmt_entry_s *pe);
 
 #ifdef __cplusplus
 };

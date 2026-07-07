@@ -442,6 +442,41 @@ int ltntstools_pmt_entry_is_audio(const struct ltntstools_pmt_entry_s *pmt)
 	return 0;
 }
 
+int ltntstools_pmt_entry_is_video(const struct ltntstools_pmt_entry_s *pe)
+{
+	if (ltntstools_is_ESPayloadType_Video(pe->stream_type)) {
+		return 1;
+	}
+
+	/* In the future we'll flush this out with VVC and AV1 descriptors,
+	 * because the stream_type doesn't fully determined video payload.
+	 */
+
+	return 0;
+}
+
+int ltntstools_pmt_entry_is_scte35(const struct ltntstools_pmt_entry_s *pe)
+{
+	if (pe->stream_type != 0x86) {
+		return 0; /* false */
+	}
+
+	const struct ltntstools_descriptor_list_s *dl = &pe->descr_list;
+
+	return ltntstools_descriptor_list_contains_scte35_cue_registration((struct ltntstools_descriptor_list_s *)dl);
+}
+
+int ltntstools_pmt_entry_is_smpte2038(const struct ltntstools_pmt_entry_s *pe)
+{
+	if (pe->stream_type != 0x06) {
+		return 0; /* false */
+	}
+
+	const struct ltntstools_descriptor_list_s *dl = &pe->descr_list;
+
+	return ltntstools_descriptor_list_contains_smpte2038_registration((struct ltntstools_descriptor_list_s *)dl);
+}
+
 int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, struct ltntstools_pmt_s **pmtptr)
 {
 	if (!pmtptr || !e)
