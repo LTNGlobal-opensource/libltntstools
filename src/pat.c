@@ -455,15 +455,27 @@ int ltntstools_pmt_entry_is_video(const struct ltntstools_pmt_entry_s *pe)
 	return 0;
 }
 
-int ltntstools_pmt_entry_is_scte35(const struct ltntstools_pmt_entry_s *pe)
+int ltntstools_pmt_entry_is_scte35(const struct ltntstools_pmt_s *pmt, const struct ltntstools_pmt_entry_s *pe)
 {
 	if (pe->stream_type != 0x86) {
 		return 0; /* false */
 	}
 
+	/* The SCTE35 spec was original ambigious where the CUEI registration
+	 * descriptor should be placed. As a result some systems place the CUEI
+	 * in the OUTER PMT prorgam_info loop, and some in the inner ES_INFO loop.
+	 * Let detect both. However, this could lead to false positives if a
+	 * 0x86 type stream is present and IS NOT actually SCTE35.
+	 */
 	const struct ltntstools_descriptor_list_s *dl = &pe->descr_list;
 
-	return ltntstools_descriptor_list_contains_scte35_cue_registration((struct ltntstools_descriptor_list_s *)dl);
+	int ret = ltntstools_descriptor_list_contains_scte35_cue_registration((struct ltntstools_descriptor_list_s *)dl);
+	if (ret == 0) {
+		dl = &pmt->descr_list;
+		ret = ltntstools_descriptor_list_contains_scte35_cue_registration((struct ltntstools_descriptor_list_s *)dl);
+	}
+
+	return ret;
 }
 
 int ltntstools_pmt_entry_is_smpte2038(const struct ltntstools_pmt_entry_s *pe)

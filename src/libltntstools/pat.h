@@ -234,7 +234,7 @@ int ltntstools_pmt_entry_is_video(const struct ltntstools_pmt_entry_s *pe);
  * @param[in]   const struct ltntstools_pmt_entry_s *pe - pmt elementary stream type.
  * @return      0 if not else 1 if true
  */
-int ltntstools_pmt_entry_is_scte35(const struct ltntstools_pmt_entry_s *pe);
+int ltntstools_pmt_entry_is_scte35(const struct ltntstools_pmt_s *pmt, const struct ltntstools_pmt_entry_s *pe);
 
 /**
  * @brief       Look at the stream-type AND descriptors to determine if this is a SMPTE2038 pid.
