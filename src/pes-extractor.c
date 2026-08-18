@@ -5,6 +5,7 @@
 #include <libltntstools/ltntstools.h>
 #include "klringbuffer.h"
 #include "libltntstools/klbitstream_readwriter.h"
+#include "utils.h"
 
 #define LOCAL_DEBUG 0
 #define ORDERED_LIST_DEPTH 60
@@ -81,6 +82,9 @@ static void *notification_callback(struct pes_extractor_s *ctx, enum ltntstools_
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
 	struct pes_extractor_s *ctx = calloc(1, sizeof(*ctx));
+	if (!ctx) {
+		return -1;
+	}
 
 	if (buffer_min == -1)
 		buffer_min = 4 * 1048576;

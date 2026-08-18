@@ -40,12 +40,17 @@ void ltntstools_sectionextractor_free(void *hdl)
 int ltntstools_sectionextractor_alloc(void **hdl, uint16_t PID, uint8_t tableID)
 {
 	struct sectionextractor_ctx_s *ctx = calloc(1, sizeof(*ctx));
-	if (!ctx)
+	if (!ctx) {
 		return -1;
+	}
 
 	ctx->tableID = tableID;
 	ctx->PID = PID;
 	ctx->section = malloc(4096);
+	if (!ctx->section) {
+		free(ctx);
+		return -1;
+	}
 	*hdl = ctx;
 	return 0;
 }
