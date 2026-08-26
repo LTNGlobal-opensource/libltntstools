@@ -9,16 +9,6 @@
  * implementation anywhere in the repository (confirmed via grep across
  * src/ and rust/) and has no callers either. It cannot be linked, so it is
  * intentionally not exercised here.
- *
- * NOTE: one test below (test_queryPCR_pid_unaligned_offset) documents the
- * INTENDED behaviour of ltntstools_queryPCR_pid() with pktAligned=0 and
- * currently FAILS. Root cause: in src/ts.c, queryPCR_pid() declares
- * `int offset = 0;` at function scope, then inside `if (!pktAligned) { int
- * offset = ltntstools_findSyncPosition(...); ... }` declares a SECOND,
- * inner `offset` that shadows the outer one and goes out of scope at the
- * closing brace. The outer `offset` used by the scan loop is therefore
- * always 0 whenever pktAligned==0, regardless of where the sync byte
- * actually is. Confirmed with a standalone repro before writing this test.
  */
 
 #include <assert.h>
@@ -465,16 +455,16 @@ static void test_queryPCR_pid_aligned_finds_match(void)
 	CHECK(pos.offset == 188);
 }
 
-/* KNOWN BUG: see file header. queryPCR_pid() with pktAligned=0 discards the
- * discovered sync offset due to variable shadowing, so it always scans from
- * byte 0 -- it will fail to find PCRs in a buffer whose sync isn't already
- * at offset 0, even though pktAligned=0 exists specifically for that case. */
+/* ltntstools_queryPCR_pid() with pktAligned=0 must locate the true sync
+ * offset (via ltntstools_findSyncPosition(), which requires >= 3*188 bytes
+ * to detect alignment) and scan from there, not from byte 0. */
 static void test_queryPCR_pid_unaligned_offset(void)
 {
-	uint8_t buf[5 + 2 * 188];
+	uint8_t buf[5 + 3 * 188];
 	memset(buf, 0xAA, 5); /* leading junk before alignment */
 	build_pcr_packet(buf + 5, 0x100, 1111);
 	build_pcr_packet(buf + 5 + 188, 0x200, 2222);
+	build_pcr_packet(buf + 5 + 376, 0x300, 3333);
 
 	struct ltntstools_pcr_position_s pos;
 	ltntstools_pcr_position_reset(&pos);
