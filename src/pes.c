@@ -124,7 +124,7 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 		}
 
 		if (pkt->ESCR_flag) {
-			klbs_write_bits(bs, 0, 40); /* Not supported */
+			klbs_write_bits(bs, 0, 48); /* Not supported */
 			bits += 48;
 		}
 
@@ -169,25 +169,27 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 			}
 
 			if (pkt->pack_header_field_flag == 1) {
-				/* Not supported */
-//					bits += 8;
+				/* Not supported -- write a zero-length field so parse() stays aligned. */
+				klbs_write_bits(bs, 0, 8);
+				bits += 8;
 			}
 
 			if (pkt->program_packet_sequence_counter_flag == 1) {
 				/* Not supported */
-//				klbs_read_bits(bs, 16);
+				klbs_write_bits(bs, 0, 16);
 				bits += 16;
 			}
 
 			if (pkt->PSTD_buffer_flag == 1) {
-				/* Not supported */
-//				klbs_read_bits(bs, 2); /* '01' */
-//				pkt->PSTD_buffer_scale = klbs_read_bits(bs, 1);
-//				pkt->PSTD_buffer_size = klbs_read_bits(bs, 13);
+				klbs_write_bits(bs, 0x01, 2); /* '01' */
+				klbs_write_bits(bs, pkt->PSTD_buffer_scale, 1);
+				klbs_write_bits(bs, pkt->PSTD_buffer_size, 13);
 				bits += 16;
 			}
 
 			if (pkt->PES_extension_flag_2 == 1) {
+				klbs_write_bits(bs, 1, 1); /* marker bit */
+				klbs_write_bits(bs, pkt->PES_extension_field_length, 7);
 				bits += 8;
 				for (int i = 0; i < pkt->PES_extension_field_length; i++) {
 					klbs_write_bits(bs, 0xff, 8); /* Not supported */
@@ -213,12 +215,12 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 				klbs_write_bits(bs, *(pkt->data + i), 8);
 				bits += 8;
 			}
-		} else
-		if (pkt->stream_id == 0xBE /* padding_stream */) {
-			for (int i = 0; i < pkt->PES_packet_length; i++) {
-				klbs_write_bits(bs, 0xff, 8); /* padding */
-				bits += 8;
-			}
+		}
+	} else
+	if (pkt->stream_id == 0xBE /* padding_stream */) {
+		for (int i = 0; i < pkt->PES_packet_length; i++) {
+			klbs_write_bits(bs, 0xff, 8); /* padding */
+			bits += 8;
 		}
 	}
 
