@@ -27,6 +27,10 @@
         "missing": true,
         "depcomp": true,
         "**/core.*": true,
+        "**/*.dSYM": true,
+        "**/test_crc32": true,
+        "**/test_history_metric": true,
+        "**/test_ts": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
