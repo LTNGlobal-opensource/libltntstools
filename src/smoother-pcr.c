@@ -228,22 +228,6 @@ static inline uint64_t makeTimestampFromNow()
 	return makeTimestampFromTimeval(&now);
 }
 
-static inline uint64_t makeTimestampFrom1SecondAgo()
-{
-	struct timeval now;
-	gettimeofday(&now, NULL);
-	now.tv_sec--;
-	return makeTimestampFromTimeval(&now);
-}
-
-static inline uint64_t makeTimestampFrom2SecondAgo()
-{
-	struct timeval now;
-	gettimeofday(&now, NULL);
-	now.tv_sec--;
-	return makeTimestampFromTimeval(&now);
-}
-
 static void itemFree(struct smoother_pcr_item_s *item)
 {
 	if (item) {
