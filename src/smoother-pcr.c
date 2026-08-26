@@ -344,6 +344,9 @@ static int _queueProcess_makeloc(struct smoother_pcr_context_s *ctx, int64_t uS,
 			break; /* Everything beyond this point is in the future, don't service it yet. */
 		}
 	}
+
+	(void)redundantItems;
+
 	return count;
 }
 
@@ -477,8 +480,10 @@ static void * smoother_pcr_threadFunc(void *p)
 	ctx->threadTerminated = 0;
 	ctx->threadRunning = 1;
 
+#if LOCAL_DEBUG
 	int tocount = 0, rocount = 0, okcount = 0;
 	int q1count = 0, q2count = 0;
+#endif
 	int ret;
 
 	struct timespec abstime = { 0, 50 * 1000 };
@@ -495,11 +500,15 @@ static void * smoother_pcr_threadFunc(void *p)
 
 		if (ret == ETIMEDOUT) {
 			pthread_mutex_unlock(&ctx->listMutex);
+#if LOCAL_DEBUG
 			tocount++;
+#endif
 			continue;
 		} else
 		if (ret == 0) {
+#if LOCAL_DEBUG
 			okcount++;
+#endif
 
 			int64_t uS = makeTimestampFromNow();
 
@@ -508,13 +517,19 @@ static void * smoother_pcr_threadFunc(void *p)
 			 * The function eventually unlocks the mutex.
 			 */
 			if (_queueProcess(ctx, uS) < 0) {
+#if LOCAL_DEBUG
 				q1count++;
+#endif
 				usleep(1 * 1000);
 			} else {
+#if LOCAL_DEBUG
 				q2count++;
+#endif
 			}
 		} else {
+#if LOCAL_DEBUG
 			rocount++;
+#endif
 			pthread_mutex_unlock(&ctx->listMutex);
 		}
 	}
