@@ -11,6 +11,8 @@ config.log
 config.status
 config.sub
 configure
+configure~
+compile
 depcomp
 install-sh
 libtool
@@ -20,5 +22,6 @@ missing
 src/.deps/
 src/.libs/
 src/libltntstools.pc
+src/Makefile
 /Cargo.lock
 /target/
