@@ -584,7 +584,7 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 				pid->lastPCRWalltimeDriftMs = v;
 
 				/* Normalize to remove drift direction - needed for histogram */
-				v = abs(v);
+				v = llabs(v);
 				//printf("us %" PRIi64 "\n", v);
 				ltn_histogram_interval_update_with_value(pid->pcrWallDrift, v);
 
