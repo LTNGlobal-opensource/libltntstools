@@ -264,7 +264,7 @@ static inline void ltn_histogram_interval_print_buf(char **buf, struct ltn_histo
 		ctx->printLast = now; /* Implicit struct copy. */
 	}
 
-	sprintf(p + strlen(p), "Histogram '%s' (ms, count, last update time, pct)\n", ctx->name);
+	snprintf(p + strlen(p), blen - strlen(p), "Histogram '%s' (ms, count, last update time, pct)\n", ctx->name);
 
 	__int128 bucketTotals = 0;
 	uint64_t cnt = 0, measurements = 0;
@@ -279,10 +279,10 @@ static inline void ltn_histogram_interval_print_buf(char **buf, struct ltn_histo
 		double rankedPCT = ((double)bucketTotals / (double)ctx->totalCount) * 100.0;
 
 		char timestamp[128];
-		sprintf(timestamp, "%s", ctime(&b->lastUpdate.tv_sec));
+		snprintf(timestamp, sizeof(timestamp), "%s", ctime(&b->lastUpdate.tv_sec));
 		timestamp[strlen(timestamp) - 1] = 0; /* Trim trailing CR */
 
-		sprintf(p + strlen(p),
+		snprintf(p + strlen(p), blen - strlen(p),
 			"-> %5" PRIu64 " %'15" PRIu64 "  %s  %10.6f%%  %10.6f%%\n",
 			ctx->minValMs + i,
 			b->count,
@@ -300,10 +300,10 @@ static inline void ltn_histogram_interval_print_buf(char **buf, struct ltn_histo
 	}
 
 	if (ctx->bucketMissCount) {
-		sprintf(p + strlen(p), "%" PRIu64 " out-of-range bucket misses\n", ctx->bucketMissCount);
+		snprintf(p + strlen(p), blen - strlen(p), "%" PRIu64 " out-of-range bucket misses\n", ctx->bucketMissCount);
 	}
 
-	sprintf(p + strlen(p), "%" PRIu64 " distinct buckets with %'" PRIu64 " total measurements, range: %" PRIu64 " -> %" PRIu64 " ms\n",
+	snprintf(p + strlen(p), blen - strlen(p), "%" PRIu64 " distinct buckets with %'" PRIu64 " total measurements, range: %" PRIu64 " -> %" PRIu64 " ms\n",
 		cnt,
 		measurements,
 		ctx->minValMs, ctx->maxValMs);
@@ -340,7 +340,7 @@ static inline void ltn_histogram_interval_print(int fd, struct ltn_histogram_s *
 		double rankedPCT = ((double)bucketTotals / (double)ctx->totalCount) * 100.0;
 
 		char timestamp[128];
-		sprintf(timestamp, "%s", ctime(&b->lastUpdate.tv_sec));
+		snprintf(timestamp, sizeof(timestamp), "%s", ctime(&b->lastUpdate.tv_sec));
 		timestamp[strlen(timestamp) - 1] = 0; /* Trim trailing CR */
 
 		dprintf(fd,
@@ -384,7 +384,7 @@ static inline void ltn_histogram_summary_print(int fd, struct ltn_histogram_s *c
 
 	struct ltn_histogram_s *h;
 	char name[256];
-	sprintf(name, "%s - Summarized into buckets of %d ms", ctx->name, bucketSizeMs);
+	snprintf(name, sizeof(name), "%s - Summarized into buckets of %d ms", ctx->name, bucketSizeMs);
 	h = NULL;
 	if (ltn_histogram_alloc(&h, name, ctx->minValMs, ctx->maxValMs) < 0)
 		return;
