@@ -35,14 +35,17 @@ struct ltntstools_history_metric_collection_s
 };
 
 /**
- * @brief       Allocate a framework context capable of demuxing and parsing PES streams.
+ * @brief       Allocate and initialize a collection capable of holding a history
+ *              of time-bucketed metric values. Free via ltntstools_history_metric_collection_free().
  * @param[in]   const char * - Human readable name
  * @return      struct on success, else NULL.
  */
 struct ltntstools_history_metric_collection_s *ltntstools_history_metric_collection_alloc(const char *name);
 
 /**
- * @brief       Initialize context capable of demuxing and parsing PES streams.
+ * @brief       Initialize a caller-allocated (eg. stack or embedded) collection struct
+ *              in place. Use this instead of ltntstools_history_metric_collection_alloc()
+ *              when the struct memory is already owned by the caller.
  * @param[in]   struct ltntstools_history_metric_collection_s * - collection struct
  * @param[in]   const char * - Human readable name
  * @return      0 on success, else < 0
@@ -95,13 +98,14 @@ int ltntstools_history_metric_collection_count_until_24hr(struct ltntstools_hist
 int ltntstools_history_metric_collection_count_until(struct ltntstools_history_metric_collection_s *c, time_t window, uint64_t *count);
 
 /**
- * @brief       Allocate a framework context capable of demuxing and parsing PES streams.
- * @param[in]   void **hdl - Handle / context for further use.
- * @param[in]   uint16_t pid - MPEG TS transport PID to be de-muxed
- * @param[in]   vbv_callback cb - user supplied callback for PES frame delivery
- * @param[in]   void *userContext - user private context, passed back to caller during callback.
- * @param[in]   struct vbv_decoder_profile_s * - Expected decoder profile
- * @return      0 on success, else < 0.
+ * @brief       Allocate a single metric instance, a bucket holding one value at
+ *              one point in time. Hand this to ltntstools_history_metric_collection_add()
+ *              to add it to a collection; ownership of the metric then transfers to
+ *              the collection.
+ * @param[in]   time_t now - Timestamp this instance represents.
+ * @param[in]   uint64_t value - The value being recorded at this instant, eg. 1 for
+ *              a single new occurrence of a discrete event such as a cc_error.
+ * @return      struct on success, else NULL.
  */
 struct ltntstools_history_metric_s *ltntstools_history_metric_alloc(time_t now, uint64_t value);
 

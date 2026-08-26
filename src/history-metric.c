@@ -119,14 +119,12 @@ int ltntstools_history_metric_collection_count_until(struct ltntstools_history_m
 		return -1; /* Failed */
 	}
 
-	time_t now = time(NULL);
-
 	uint64_t total = 0;
 	struct ltntstools_history_metric_s *m = NULL;
 
 	pthread_mutex_lock(&c->lock);
 	xorg_list_for_each_entry(m, &c->list, list) {
-		if (now <= window) {
+		if (m->ts >= window) {
 			total += m->count;
 		}
 	}
