@@ -3,9 +3,20 @@ CFLAGS   ?= -Wall -O2 -g
 INCLUDES  = -I../src
 LDLIBS_HISTORY_METRIC = -lpthread
 
+# pat.c compiles directly against <dvbpsi/*.h> and links -ldvbpsi. Prefer
+# pkg-config (portable); fall back to this multi-repo checkout's shared
+# dependency sysroot (../../target-root), which is what this project's own
+# top-level ./configure already resolves to on this kind of checkout.
+DVBPSI_CFLAGS := $(shell pkg-config --cflags libdvbpsi 2>/dev/null)
+DVBPSI_LIBS   := $(shell pkg-config --libs libdvbpsi 2>/dev/null)
+ifeq ($(strip $(DVBPSI_CFLAGS)$(DVBPSI_LIBS)),)
+DVBPSI_CFLAGS := -I../../target-root/usr/include
+DVBPSI_LIBS   := -L../../target-root/usr/lib -ldvbpsi
+endif
+
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat
 	./test_crc32
 	./test_history_metric
 	./test_ts
@@ -13,6 +24,7 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 	./test_stats
 	./test_descriptor
 	./test_pes
+	./test_pat
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -35,5 +47,8 @@ test_descriptor: test_descriptor.c ../src/descriptor.c
 test_pes: test_pes.c ../src/pes.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_pes.c ../src/pes.c ../src/crc32.c
 
+test_pat: test_pat.c ../src/pat.c ../src/descriptor.c ../src/crc32.c ../src/ts.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(DVBPSI_CFLAGS) -o $@ test_pat.c ../src/pat.c ../src/descriptor.c ../src/crc32.c ../src/ts.c $(DVBPSI_LIBS)
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat

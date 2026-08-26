@@ -732,7 +732,7 @@ int ltntstools_pat_create_packet_ts(struct ltntstools_pat_s *pat, uint8_t cc, ui
 	p[i++] = pat->transport_stream_id >> 8;
 	p[i++] = pat->transport_stream_id;
 
-	p[i++] = 0xC0 | ((pat->version_number & 0x1f) < 1) | pat->current_next_indicator;
+	p[i++] = 0xC0 | ((pat->version_number & 0x1f) << 1) | pat->current_next_indicator;
 	p[i++] = 0x00; /* Section */
 	p[i++] = 0x00; /* last section */
 
@@ -789,7 +789,7 @@ int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *pmt, uint16_t pid, 
 
 	p[i++] = pmt->program_number >> 8;
 	p[i++] = pmt->program_number;
-	p[i++] = 0xC0 | ((pmt->version_number & 0x1f) < 1) | pmt->current_next_indicator;
+	p[i++] = 0xC0 | ((pmt->version_number & 0x1f) << 1) | pmt->current_next_indicator;
 	p[i++] = 0x00; /* section */
 	p[i++] = 0x00; /* last section */
 

@@ -35,6 +35,7 @@
         "**/test_stats": true,
         "**/test_descriptor": true,
         "**/test_pes": true,
+        "**/test_pat": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
