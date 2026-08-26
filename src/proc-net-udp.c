@@ -278,7 +278,7 @@ static int _tableBuilderSockets(struct ltntstools_proc_net_udp_ctx_s *ctx)
          * parsing into multiple stages for the local and remote addresses, so we'll do that too.
          * ..... after spending an hour trying to figure out what was wrong with sscanf.
          */
-        char locaddr[64], remaddr[64];
+        char locaddr[72], remaddr[72];
         memset(locaddr, 0, sizeof(locaddr)); // TODO: Necessary?
         memset(remaddr, 0, sizeof(remaddr)); // TODO: Necessary?
         int fields = sscanf(line, "%ld: %64[0-9A-Fa-f]:%X %64[0-9A-Fa-f]:%X %*X %*x:%*x %*x:%*x %*x %" PRIu64 "%*d %" PRIu64 " %*d %*x %" PRIu64,
