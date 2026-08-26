@@ -2,11 +2,10 @@
 #define _LIBLTNTSTOOLS_AC3_H
 
 /**
- * @file        segmentwriter.h
+ * @file        ac3.h
  * @author      Steven Toth <steven.toth@ltnglobal.com>
  * @copyright   Copyright (c) 2020-2022 LTN Global,Inc. All Rights Reserved.
- * @brief       A threaded file writer. Produces single or segmented recordings.
- *              Capable of supporting any kind of bytestream, targeted at MPEG-TS streams.
+ * @brief       Parse some basic AC3 codec details, small helper.
  */
 #include <time.h>
 #include <inttypes.h>
@@ -116,5 +115,3 @@ int ltntstools_ac3_header_parse(struct ltn_ac3_header_syncframe_s *sf, unsigned 
 #endif
 
 #endif /* _LIBLTNTSTOOLS_AC3_H */
-
-
