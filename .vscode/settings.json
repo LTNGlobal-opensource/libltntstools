@@ -31,6 +31,8 @@
         "**/test_crc32": true,
         "**/test_history_metric": true,
         "**/test_ts": true,
+        "**/test_reframer": true,
+        "**/test_stats": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

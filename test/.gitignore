@@ -4,3 +4,7 @@ test_history_metric
 test_history_metric.dSYM
 test_ts
 test_ts.dSYM
+test_reframer
+test_reframer.dSYM
+test_stats
+test_stats.dSYM
