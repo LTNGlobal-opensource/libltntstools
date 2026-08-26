@@ -5,12 +5,13 @@ LDLIBS_HISTORY_METRIC = -lpthread
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor
 	./test_crc32
 	./test_history_metric
 	./test_ts
 	./test_reframer
 	./test_stats
+	./test_descriptor
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -27,5 +28,8 @@ test_reframer: test_reframer.c ../src/reframer.c
 test_stats: test_stats.c ../src/stats.c ../src/clocks.c ../src/ts.c ../src/history-metric.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_stats.c ../src/stats.c ../src/clocks.c ../src/ts.c ../src/history-metric.c -lpthread
 
+test_descriptor: test_descriptor.c ../src/descriptor.c
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_descriptor.c ../src/descriptor.c
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor

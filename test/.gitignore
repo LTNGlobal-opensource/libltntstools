@@ -8,3 +8,5 @@ test_reframer
 test_reframer.dSYM
 test_stats
 test_stats.dSYM
+test_descriptor
+test_descriptor.dSYM

@@ -33,6 +33,7 @@
         "**/test_ts": true,
         "**/test_reframer": true,
         "**/test_stats": true,
+        "**/test_descriptor": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
