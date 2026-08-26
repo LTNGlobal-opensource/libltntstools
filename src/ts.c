@@ -413,7 +413,7 @@ int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstoo
 
 	if (!pktAligned) {
 		/* Find the SYNC byte offset in a buffer of potential transport packets. */
-		int offset = ltntstools_findSyncPosition(buf, lengthBytes);
+		offset = ltntstools_findSyncPosition(buf, lengthBytes);
 		if (offset < 0)
 			return -1;
 	}
