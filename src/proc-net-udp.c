@@ -281,7 +281,7 @@ static int _tableBuilderSockets(struct ltntstools_proc_net_udp_ctx_s *ctx)
         char locaddr[72], remaddr[72];
         memset(locaddr, 0, sizeof(locaddr)); // TODO: Necessary?
         memset(remaddr, 0, sizeof(remaddr)); // TODO: Necessary?
-        int fields = sscanf(line, "%ld: %64[0-9A-Fa-f]:%X %64[0-9A-Fa-f]:%X %*X %*x:%*x %*x:%*x %*x %" PRIu64 "%*d %" PRIu64 " %*d %*x %" PRIu64,
+        int fields = sscanf(line, "%" PRIu64 ": %64[0-9A-Fa-f]:%X %64[0-9A-Fa-f]:%X %*X %*x:%*x %*x:%*x %*x %" PRIu64 "%*d %" PRIu64 " %*d %*x %" PRIu64,
             &i->sl,
             &locaddr[0], (uint32_t *)&i->local_addr.sin_port,
             &remaddr[0], (uint32_t *)&i->remote_addr.sin_port,
