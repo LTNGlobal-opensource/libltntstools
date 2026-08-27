@@ -548,8 +548,12 @@ static void * smoother_pcr_threadFunc(void *p)
 int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callback cb,
 	int itemsPerSecond, int itemLengthBytes, uint16_t pcrPID, int latencyMS)
 {
+	if (pcrPID <= 16 || pcrPID > 0x1ffe || latencyMS < 50 || itemLengthBytes != (7*188)) {
+		return -1;
+	}
+
 	struct smoother_pcr_context_s *ctx = calloc(1, sizeof(*ctx));
-	if (!ctx || pcrPID <= 16 || pcrPID > 0x1ffe || latencyMS < 50 || itemLengthBytes != (7*188)) {
+	if (!ctx) {
 		return -1;
 	}
 
