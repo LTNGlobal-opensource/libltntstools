@@ -247,6 +247,9 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 	pkt->PES_packet_length = klbs_read_bits(bs, 16);
 
 	int byte_count_free = klbs_get_byte_count_free(bs);
+	if (byte_count_free < 0) {
+		byte_count_free = 0;
+	}
 	if (byte_count_free < pkt->PES_packet_length)
 	{
 		// Adjust packet length to match available data
@@ -412,6 +415,9 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			}
 		}
 
+		if (pkt->data) {
+			free(pkt->data);
+		}
 		pkt->dataLengthBytes = 0;
 		pkt->data = NULL;
 
@@ -489,8 +495,12 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			return bits;
 #endif
 		}
+		if (pkt->data) {
+			free(pkt->data);
+		}
 		pkt->data = malloc(pkt->PES_packet_length);
 		if (pkt->data) {
+			pkt->dataLengthBytes = pkt->PES_packet_length;
 			if (bs->reg_used == 0 && pkt->PES_packet_length <= klbs_get_byte_count_free(bs)) {
 				memcpy(pkt->data, bs->buf + bs->buflen_used, pkt->PES_packet_length);
 				bs->buflen_used += pkt->PES_packet_length;
@@ -538,7 +548,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 static void ltn_pes_packet_dump_internal(struct ltn_pes_packet_s *pkt, const char *indent, unsigned int opts)
 {
 	char i[32];
-	sprintf(i, "%s    ", indent);
+	snprintf(i, sizeof(i), "%s    ", indent);
 
 	if (opts & 0x01) {
 		DISPLAY_U32(indent, pkt->packet_start_code_prefix);
@@ -613,14 +623,35 @@ void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent)
 
 void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *src)
 {
+	unsigned char *oldData = dst->data;
+	unsigned char *oldRawBuffer = dst->rawBuffer;
+
 	memcpy(dst, src, sizeof(*src));
+	dst->data = NULL;
+	dst->rawBuffer = NULL;
+
+	if (oldData) {
+		free(oldData);
+	}
+	if (oldRawBuffer) {
+		free(oldRawBuffer);
+	}
+
 	if (src->data) {
 		dst->data = malloc(src->dataLengthBytes);
-		memcpy(dst->data, src->data, src->dataLengthBytes);
+		if (dst->data) {
+			memcpy(dst->data, src->data, src->dataLengthBytes);
+		} else {
+			dst->dataLengthBytes = 0;
+		}
 	}
 	if (src->rawBuffer) {
 		dst->rawBuffer = malloc(src->rawBufferLengthBytes);
-		memcpy(dst->rawBuffer, src->rawBuffer, src->rawBufferLengthBytes);
+		if (dst->rawBuffer) {
+			memcpy(dst->rawBuffer, src->rawBuffer, src->rawBufferLengthBytes);
+		} else {
+			dst->rawBufferLengthBytes = 0;
+		}
 	}
 }
 
