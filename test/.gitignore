@@ -48,3 +48,5 @@ test_nal_bitreader
 test_nal_bitreader.dSYM
 test_udp_receiver
 test_udp_receiver.dSYM
+test_xorg_list
+test_xorg_list.dSYM
