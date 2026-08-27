@@ -16,7 +16,7 @@ endif
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors
 	./test_crc32
 	./test_history_metric
 	./test_ts
@@ -31,6 +31,7 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 	./test_time
 	./test_throughput
 	./test_streammodel
+	./test_streammodel_extractors
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -74,5 +75,8 @@ test_throughput: test_throughput.c ../src/throughput.c
 test_streammodel: test_streammodel.c ../src/streammodel.c ../src/streammodel-extractors.c ../src/pat.c ../src/descriptor.c ../src/crc32.c ../src/ts.c ../src/sectionextractor.c ../src/stats.c ../src/clocks.c ../src/history-metric.c
 	$(CC) $(CFLAGS) $(INCLUDES) $(DVBPSI_CFLAGS) -o $@ test_streammodel.c ../src/streammodel.c ../src/streammodel-extractors.c ../src/pat.c ../src/descriptor.c ../src/crc32.c ../src/ts.c ../src/sectionextractor.c ../src/stats.c ../src/clocks.c ../src/history-metric.c $(DVBPSI_LIBS) -lpthread
 
+test_streammodel_extractors: test_streammodel_extractors.c ../src/streammodel-extractors.c ../src/sectionextractor.c ../src/ts.c ../src/crc32.c
+	$(CC) $(CFLAGS) $(INCLUDES) $(DVBPSI_CFLAGS) -o $@ test_streammodel_extractors.c ../src/streammodel-extractors.c ../src/sectionextractor.c ../src/ts.c ../src/crc32.c
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors

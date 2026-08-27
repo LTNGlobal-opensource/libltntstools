@@ -26,3 +26,5 @@ test_throughput
 test_throughput.dSYM
 test_streammodel
 test_streammodel.dSYM
+test_streammodel_extractors
+test_streammodel_extractors.dSYM
