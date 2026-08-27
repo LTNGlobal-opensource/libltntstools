@@ -52,6 +52,7 @@
         "**/test_klbitstream_readwriter": true,
         "**/test_tr101290": true,
         "**/test_nal_bitreader": true,
+        "**/test_udp_receiver": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
