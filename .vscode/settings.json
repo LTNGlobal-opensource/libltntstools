@@ -45,6 +45,7 @@
         "**/test_streammodel_extractors": true,
         "**/test_pes_extractor": true,
         "**/test_sei_timestamp": true,
+        "**/test_smoother_pcr": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

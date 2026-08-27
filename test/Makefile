@@ -16,7 +16,7 @@ endif
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr
 	./test_crc32
 	./test_history_metric
 	./test_ts
@@ -34,6 +34,7 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 	./test_streammodel_extractors
 	./test_pes_extractor
 	./test_sei_timestamp
+	./test_smoother_pcr
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -86,5 +87,8 @@ test_pes_extractor: test_pes_extractor.c ../src/pes-extractor.c ../src/klringbuf
 test_sei_timestamp: test_sei_timestamp.c ../src/sei-timestamp.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_sei_timestamp.c ../src/sei-timestamp.c
 
+test_smoother_pcr: test_smoother_pcr.c ../src/smoother-pcr.c ../src/ts.c ../src/utils.c
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_smoother_pcr.c ../src/smoother-pcr.c ../src/ts.c ../src/utils.c -lpthread
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr
