@@ -41,6 +41,7 @@
         "**/test_throughput_hires": true,
         "**/test_time": true,
         "**/test_throughput": true,
+        "**/test_streammodel": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
