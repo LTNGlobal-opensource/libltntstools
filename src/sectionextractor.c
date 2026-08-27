@@ -122,6 +122,11 @@ static ssize_t ltntstools_sectionextractor_write_packet(struct sectionextractor_
 			copylength = ctx->sectionLength - ctx->sectionLengthCurrent;
 		}
 	} else {
+		if (ctx->complete) {
+			/* A section is already complete and waiting to be queried --
+			 * don't discard it just because another packet arrived. */
+			return 0;
+		}
 		ctx->complete = 0;
 		ctx->appending = 0;
 		return -1;
@@ -194,12 +199,12 @@ int ltntstools_sectionextractor_query(void *hdl, uint8_t *dst, int lengthBytes)
 {
 	struct sectionextractor_ctx_s *ctx = (struct sectionextractor_ctx_s *)hdl;
 
-	if (!ctx->complete || !dst || lengthBytes < (ctx->sectionLength + 3))
+	if (!ctx->complete || !dst || lengthBytes < ctx->sectionLength)
 		return -1;
 
-	memcpy(dst, &ctx->section[0], ctx->sectionLength + 3);
+	memcpy(dst, &ctx->section[0], ctx->sectionLength);
 
 	ctx->complete = 0;
 	ctx->appending = 0;
-	return ctx->sectionLength + 3;
+	return ctx->sectionLength;
 }
