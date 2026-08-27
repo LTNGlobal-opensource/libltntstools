@@ -149,7 +149,7 @@ static void _tableHelperItemAddProcess(struct ltntstools_proc_net_udp_item_s *it
 
         /* Find the process by name */
         char fn[32];
-        sprintf(fn, "/proc/%" PRIu64 "/comm", pid);
+        snprintf(fn, sizeof(fn), "/proc/%" PRIu64 "/comm", pid);
         FILE *fh = fopen(fn, "r");
         if (fh) {
             if (fgets((char *)&item->pidList[item->pidListCount].comm[0],
@@ -182,7 +182,7 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
         }
 
         /* Find the file descriptors associate with this /proc/<blah>/fd. */
-        sprintf(&path[0], "/proc/%s/fd", de->d_name);
+        snprintf(&path[0], PATH_MAX, "/proc/%s/fd", de->d_name);
 
         DIR *fdDIR = opendir(path);
         if (!fdDIR)
@@ -194,7 +194,7 @@ static int _tableBuilderProcesses(struct ltntstools_proc_net_udp_ctx_s *ctx, str
                 continue;
             }
 
-            sprintf(&path[0], "/proc/%s/fd/%s", de->d_name, fd_de->d_name);
+            snprintf(&path[0], PATH_MAX, "/proc/%s/fd/%s", de->d_name, fd_de->d_name);
 
             ssize_t len = readlink(path, &link_path[0], PATH_MAX - 1);
 
@@ -294,8 +294,8 @@ static int _tableBuilderSockets(struct ltntstools_proc_net_udp_ctx_s *ctx)
 
         sscanf(locaddr, "%X", &i->local_addr.sin_addr.s_addr);
         sscanf(remaddr, "%X", &i->remote_addr.sin_addr.s_addr);
-        sprintf(i->locaddr, "%s:%d", inet_ntoa(i->local_addr.sin_addr), i->local_addr.sin_port);
-        sprintf(i->remaddr, "%s:%d", inet_ntoa(i->remote_addr.sin_addr), i->remote_addr.sin_port);
+        snprintf(i->locaddr, sizeof(i->locaddr), "%s:%d", inet_ntoa(i->local_addr.sin_addr), i->local_addr.sin_port);
+        snprintf(i->remaddr, sizeof(i->remaddr), "%s:%d", inet_ntoa(i->remote_addr.sin_addr), i->remote_addr.sin_port);
 
         struct ltntstools_proc_net_udp_item_s *e = ltntstools_proc_net_udp_find_inode(ctx->items, ctx->itemCount, i->inode);
         if (e) {
