@@ -47,6 +47,7 @@
         "**/test_sei_timestamp": true,
         "**/test_smoother_pcr": true,
         "**/test_probes": true,
+        "**/test_smoother_rtp": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

@@ -36,3 +36,5 @@ test_smoother_pcr
 test_smoother_pcr.dSYM
 test_probes
 test_probes.dSYM
+test_smoother_rtp
+test_smoother_rtp.dSYM
