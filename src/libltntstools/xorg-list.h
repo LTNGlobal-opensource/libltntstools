@@ -233,8 +233,18 @@ xorg_list_is_empty(struct xorg_list *head)
  * @return A pointer to the data struct containing the list head.
  */
 #ifndef container_of
+/* The outer parens around the whole cast-expression are required, not
+ * decorative: `(type *)(EXPR)` is not itself a postfix-expression in C, so
+ * without them, `container_of(...)->field` parses as
+ * `(type *)((EXPR)->field)` -- `->field` binding to the untyped `char *`
+ * arithmetic *before* the cast, not to the cast's result -- a hard compile
+ * error ("member reference base type 'char' is not a structure or
+ * union"), confirmed via a real build. Wrapping the whole expression in
+ * its own parens makes it a self-contained primary-expression first, so a
+ * trailing `->field` correctly binds to the cast result instead.
+ */
 #define container_of(ptr, type, member) \
-    (type *)((char *)(ptr) - offsetof(type, member))
+    ((type *)((char *)(ptr) - offsetof(type, member)))
 #endif
 
 /**
@@ -273,18 +283,44 @@ xorg_list_is_empty(struct xorg_list *head)
 #define xorg_list_last_entry(ptr, type, member) \
     xorg_list_entry((ptr)->prev, type, member)
 
-#ifdef HAVE_TYPEOF
+/* *** REAL, CONFIRMED BUG (fixed below): *** this project's build never
+ * defines HAVE_TYPEOF anywhere (checked: no config.h, no configure.ac
+ * reference), so every consumer of this header -- including the 5
+ * production .c files that use it (history-metric.c, stats.c,
+ * smoother-pcr.c, smoother-rtp.c, throughput_hires.c) -- has always been
+ * using the "has undefined behavior according to the C standard, but it
+ * works in many cases" fallback below unconditionally. It doesn't just
+ * theoretically have UB: a standalone repro (xorg_list_for_each_entry()
+ * over a 3-element list, the exact idiomatic usage shown in this file's
+ * own top-of-file example) reliably crashed (SIGBUS) under `-O2` with this
+ * project's actual compiler/platform, while passing under `-O0` -- classic
+ * optimizer-exploited-UB behavior (reading the *value* of the loop
+ * variable before its first assignment, even though the arithmetic
+ * mathematically cancels out, is UB per the standard regardless).
+ * `__typeof__` (the double-underscore spelling, portable even under
+ * -std=c99/-std=c11/-pedantic, unlike the bare `typeof` keyword) is
+ * supported by both gcc and clang -- the only two compilers realistically
+ * used to build this project -- so auto-detecting via __GNUC__/__clang__
+ * makes the always-safe typeof() path the one actually used in practice,
+ * rather than depending on an autotools variable nothing ever sets. The
+ * old undefined-behavior fallback is kept below as a last resort for any
+ * hypothetical compiler that defines neither.
+ */
+#if defined(HAVE_TYPEOF) || defined(__GNUC__) || defined(__clang__)
 #define __container_of(ptr, sample, member)			\
-    container_of(ptr, typeof(*sample), member)
+    container_of(ptr, __typeof__(*sample), member)
 #else
 /* This implementation of __container_of has undefined behavior according
  * to the C standard, but it works in many cases.  If your compiler doesn't
  * support typeof() and fails with this implementation, please try a newer
  * compiler.
  */
+/* Same reasoning as container_of()'s outer parens above: without them,
+ * a trailing `->field` on this macro's result would bind to the untyped
+ * pointer arithmetic before the cast, not to the cast's result. */
 #define __container_of(ptr, sample, member)                            \
-    (void *)((char *)(ptr)                                             \
-            - ((char *)&(sample)->member - (char *)(sample)))
+    ((void *)((char *)(ptr)                                            \
+            - ((char *)&(sample)->member - (char *)(sample))))
 #endif
 
 /**
