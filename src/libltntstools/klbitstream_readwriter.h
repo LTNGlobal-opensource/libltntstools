@@ -196,7 +196,15 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 #if KLBITSTREAM_ASSERT_ON_OVERRUN
 		assert(ctx->buflen_used <= ctx->buflen);
 #endif
-		*(ctx->buf + ctx->buflen_used++) = ctx->reg;
+		/* Guard the actual memory write independently of
+		 * KLBITSTREAM_RETURN_ON_OVERRUN: with that macro set to 0 (the
+		 * default), the overrun checks above only set ctx->overrun and
+		 * fall through -- without this guard, a write past a full
+		 * buffer proceeds anyway and corrupts memory beyond ctx->buf.
+		 */
+		if (ctx->buflen_used < ctx->buflen) {
+			*(ctx->buf + ctx->buflen_used++) = ctx->reg;
+		}
 		ctx->reg_used = 0;
 	}
 }
@@ -213,21 +221,16 @@ static inline void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bi
 		return;
 #endif
 
+	/* klbs_write_bit() already sets ctx->overrun precisely when an actual
+	 * overrun occurs (guarding the real memory access at the same time).
+	 * A redundant `buflen_used >= buflen` check here used to
+	 * false-positive whenever a stuff exactly filled the buffer's final
+	 * byte -- that condition means "no room for another byte", not "this
+	 * write just failed": the write that just landed here succeeded and
+	 * used the buffer's last byte correctly.
+	 */
 	while (ctx->reg_used > 0) {
 		klbs_write_bit(ctx, bit);
-		if (ctx->buflen_used >= ctx->buflen) {
-#if KLBITSTREAM_DEBUG
-			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Write Byte Stuff ctx->buflen_used %d >= ctx->buflen %d\n",
-					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
-#endif
-			ctx->overrun = 1;
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-			return;
-#endif
-		}
-#if KLBITSTREAM_ASSERT_ON_OVERRUN
-		assert(ctx->buflen_used <= ctx->buflen);
-#endif
 	}
 }
 
@@ -246,21 +249,15 @@ static inline void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, ui
 		return;
 #endif
 
+	/* klbs_write_bit() already sets ctx->overrun precisely when an actual
+	 * overrun occurs. A redundant `buflen_used >= buflen` check here used
+	 * to false-positive on any write that exactly filled the buffer's
+	 * final byte -- an extremely common, entirely valid case (e.g.
+	 * packing data into a precisely-sized destination buffer) that this
+	 * loop mistook for a failure.
+	 */
 	for (int i = (bitcount - 1); i >= 0; i--) {
 		klbs_write_bit(ctx, bits >> i);
-		if (ctx->buflen_used >= ctx->buflen) {
-#if KLBITSTREAM_DEBUG
-			fprintf(stderr, "KLBITSTREAM OVERRUN: (%s:%s:%d) Write Bits ctx->buflen_used %d >= ctx->buflen %d\n",
-					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
-#endif
-			ctx->overrun = 1;
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-			return;
-#endif
-		}
-#if KLBITSTREAM_ASSERT_ON_OVERRUN
-		assert(ctx->buflen_used <= ctx->buflen);
-#endif
 	}
 }
 
@@ -279,21 +276,23 @@ static inline void klbs_write_buffer_complete(struct klbs_context_s *ctx)
 #endif
 
 	if (ctx->reg_used > 0) {
-		for (int i = ctx->reg_used; i <= 8; i++) {
+		/* Exactly (8 - reg_used) zero bits complete the current partial
+		 * byte. The bound here used to be `i <= 8`, one iteration too
+		 * many: klbs_write_bit() flushes and resets reg_used to 0 once
+		 * the byte fills, so that extra iteration silently started a
+		 * *new* one-bit partial byte that this function never flushed --
+		 * leaving reg_used == 1 (not 0) afterwards, contrary to this
+		 * function's whole purpose ("ensures... dangling trailing bits
+		 * are properly stuffed and written"). Any bits written after a
+		 * call to this function would then land shifted by that stray
+		 * bit in the next flushed byte.
+		 */
+		/* klbs_write_bit() already sets ctx->overrun precisely when an
+		 * actual overrun occurs; see klbs_write_bits()'s identical
+		 * removed check for why a redundant one here would false-positive.
+		 */
+		for (int i = ctx->reg_used; i < 8; i++) {
 			klbs_write_bit(ctx, 0);
-			if (ctx->buflen_used >= ctx->buflen) {
-#if KLBITSTREAM_DEBUG
-				fprintf(stderr, "KLBITSTREAM OVERRUN: Write Buffer Complete (%s:%s:%d) ctx->buflen_used %d >= ctx->buflen %d\n",
-						__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
-#endif
-				ctx->overrun = 1;
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-				return;
-#endif
-			}
-#if KLBITSTREAM_ASSERT_ON_OVERRUN
-			assert(ctx->buflen_used <= ctx->buflen);
-#endif
 		}
 	}
 }
@@ -340,7 +339,19 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 #if KLBITSTREAM_ASSERT_ON_OVERRUN
 		assert(ctx->buflen_used <= ctx->buflen);
 #endif
-		ctx->reg = *(ctx->buf + ctx->buflen_used++);
+		/* Guard the actual memory read independently of
+		 * KLBITSTREAM_RETURN_ON_OVERRUN: with that macro set to 0 (the
+		 * default), the overrun check above only sets ctx->overrun and
+		 * falls through -- without this guard, a read past a full
+		 * buffer proceeds anyway and reads memory beyond ctx->buf.
+		 * reg_used is still set to 8 (rather than left at 0) so the
+		 * bit-extraction below doesn't underflow it on the next call.
+		 */
+		if (ctx->buflen_used < ctx->buflen) {
+			ctx->reg = *(ctx->buf + ctx->buflen_used++);
+		} else {
+			ctx->reg = 0;
+		}
 		ctx->reg_used = 8;
 	}
 
@@ -367,7 +378,14 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 #if KLBITSTREAM_ASSERT_ON_OVERRUN
 	assert(ctx->buflen_used <= ctx->buflen);
 #endif
-	return *(ctx->buf + ctx->buflen_used++);
+	/* Guard the actual memory read independently of
+	 * KLBITSTREAM_RETURN_ON_OVERRUN: see klbs_read_bit()'s identical
+	 * guard for why this can't be left to the overrun check above alone.
+	 */
+	if (ctx->buflen_used < ctx->buflen) {
+		return *(ctx->buf + ctx->buflen_used++);
+	}
+	return 0;
 }
 
 /**
@@ -387,26 +405,21 @@ static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitco
 	if (bitcount == 8 && ctx->reg_used == 0)
 		return klbs_read_byte_aligned(ctx);
 
+	/* klbs_read_bit()/klbs_read_byte_aligned() already set ctx->overrun
+	 * precisely when an actual overrun occurs. A redundant
+	 * `buflen_used >= buflen` check here used to false-positive the
+	 * instant the underlying byte buffer became fully consumed, even
+	 * though up to 7 still-valid bits could remain cached in the shift
+	 * register (reg_used) ready to satisfy the rest of this request --
+	 * an extremely common case for any read that consumes a buffer to
+	 * completion.
+	 */
 	for (uint32_t i = 1; i <= bitcount; i++) {
 		bits <<= 1;
 		bits |= klbs_read_bit(ctx);
-		if (ctx->overrun) {
 #if KLBITSTREAM_RETURN_ON_OVERRUN
+		if (ctx->overrun)
 			return bits;
-#endif
-		}
-		if (ctx->buflen_used >= ctx->buflen) {
-#if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Bits ctx->buflen_used %d >= ctx->buflen %d\n",
-					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
-#endif
-			ctx->overrun = 1;
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-			return bits;
-#endif
-		}
-#if KLBITSTREAM_ASSERT_ON_OVERRUN
-		assert(ctx->buflen_used <= ctx->buflen);
 #endif
 	}
 	return bits;
@@ -422,10 +435,20 @@ static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitco
  */
 static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitcount)
 {
-	if (ctx->buflen_used + bitcount >= ctx->buflen) {
+	/* buflen/buflen_used are BYTE counts, bitcount is a BIT count -- the
+	 * previous check (`buflen_used + bitcount >= buflen`) compared them
+	 * directly without converting units, so it over-flagged overrun by
+	 * roughly 8x (e.g. peeking a single byte, bitcount=8, out of a fresh
+	 * otherwise-roomy 4-byte buffer already tripped it: 0+8 >= 4). It
+	 * also ignored reg_used, the bits already buffered and immediately
+	 * available without consuming another byte. Compare against the
+	 * actual bit capacity remaining instead.
+	 */
+	uint64_t availableBits = ((uint64_t)(ctx->buflen - ctx->buflen_used) * 8) + ctx->reg_used;
+	if (bitcount > availableBits) {
 #if KLBITSTREAM_DEBUG
-		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Peek Bits ctx->buflen_used %d + bitcount %d >= ctx->buflen %d\n",
-				__FILE__, __func__, __LINE__, ctx->buflen_used, bitcount, ctx->buflen);
+		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Peek Bits bitcount %d > available %llu (buflen_used %d, buflen %d, reg_used %d)\n",
+				__FILE__, __func__, __LINE__, bitcount, (unsigned long long)availableBits, ctx->buflen_used, ctx->buflen, ctx->reg_used);
 #endif
 		ctx->overrun = 1;
 #if KLBITSTREAM_RETURN_ON_OVERRUN
@@ -433,7 +456,7 @@ static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitco
 #endif
 	}
 #if KLBITSTREAM_ASSERT_ON_OVERRUN
-	assert(ctx->buflen_used + bitcount <= ctx->buflen);
+	assert(bitcount <= availableBits);
 #endif
 	struct klbs_context_s copy = *ctx; /* Implicit struct copy */
 	return klbs_read_bits(&copy, bitcount);
@@ -451,21 +474,12 @@ static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
 		return;
 #endif
 
+	/* klbs_read_bit() already sets ctx->overrun precisely when an actual
+	 * overrun occurs; see klbs_read_bits()'s identical removed check for
+	 * why a redundant one here would false-positive.
+	 */
 	while (ctx->reg_used > 0) {
 		klbs_read_bit(ctx);
-		if (ctx->buflen_used >= ctx->buflen) {
-#if KLBITSTREAM_DEBUG
-			printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Byte Stuff ctx->buflen_used %d >= ctx->buflen %d\n",
-					__FILE__, __func__, __LINE__, ctx->buflen_used, ctx->buflen);
-#endif
-			ctx->overrun = 1;
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-			return;
-#endif
-		}
-#if KLBITSTREAM_ASSERT_ON_OVERRUN
-		assert(ctx->buflen_used <= ctx->buflen);
-#endif
 	}
 }
 
@@ -499,9 +513,6 @@ static inline struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t stor
 	if (!ctx)
 		return NULL;
 
-	klbs_init(ctx);
-	ctx->didAllocateStorage = 1;
-
 	uint8_t *buf = (uint8_t *)calloc(1, storageSizeBytes);
 	if (!buf) {
 		free(ctx);
@@ -512,6 +523,14 @@ static inline struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t stor
 		klbs_write_set_buffer(ctx, buf, storageSizeBytes);
 	else
 		klbs_read_set_buffer(ctx, buf, storageSizeBytes);
+
+	/* Must be set after klbs_write_set_buffer()/klbs_read_set_buffer():
+	 * both call klbs_init(), which memset()s the whole context to 0 --
+	 * setting this beforehand (as this used to do) got silently wiped
+	 * back to 0, so didAllocateStorage never actually reflected that
+	 * storage was allocated here.
+	 */
+	ctx->didAllocateStorage = 1;
 
 	return ctx;
 }
@@ -560,10 +579,17 @@ static inline void klbs_bitcopy(struct klbs_context_s *dst, struct klbs_context_
 	if (src->overrun)
 		return;
 #endif
-	if (src->buflen_used + bits >= src->buflen || dst->buflen_used + bits >= dst->buflen) {
+	/* buflen/buflen_used are BYTE counts, `bits` is a BIT count -- the
+	 * same unit mismatch already found and fixed in klbs_peek_bits()
+	 * (see its comment). Compare against actual remaining bit capacity,
+	 * on both src and dst, instead.
+	 */
+	uint64_t srcAvailableBits = ((uint64_t)(src->buflen - src->buflen_used) * 8) + src->reg_used;
+	uint64_t dstAvailableBits = ((uint64_t)(dst->buflen - dst->buflen_used) * 8) + dst->reg_used;
+	if (bits > srcAvailableBits || bits > dstAvailableBits) {
 #if KLBITSTREAM_DEBUG
-		fprintf(stderr, "KLBITSTREAM OVERRUN: Bitcopy (%s:%s:%d) src->buflen_used %d + bits %d >= src->buflen %d\n",
-				__FILE__, __func__, __LINE__, src->buflen_used, (int)bits, src->buflen);
+		fprintf(stderr, "KLBITSTREAM OVERRUN: Bitcopy (%s:%s:%d) bits %d > src available %llu or dst available %llu\n",
+				__FILE__, __func__, __LINE__, (int)bits, (unsigned long long)srcAvailableBits, (unsigned long long)dstAvailableBits);
 #endif
 		src->overrun = 1;
 		dst->overrun = 1;
