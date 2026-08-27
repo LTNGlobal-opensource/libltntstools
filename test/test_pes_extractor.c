@@ -1,6 +1,32 @@
 /* Copyright LTN Global Communications, Inc. All Rights Reserved. */
 
-/* Unit tests for src/pes-extractor.c / src/libltntstools/pes-extractor.h.
+/* Three real bugs were found and fixed in src/pes-extractor.c while writing
+ * this file's newest tests (confirmed with AddressSanitizer before the fix,
+ * re-confirmed clean after):
+ *  1. *** Critical, remotely triggerable from raw/untrusted TS input ***
+ *     ltntstools_pes_extractor_write() computed the payload offset as
+ *     `4 + 1 + ltntstools_adaption_field_length(pkt)` with no bounds check.
+ *     adaptation_field_length is a raw, attacker-controlled byte (0-255);
+ *     a single malformed packet (adaptation_field_control = 0b11, length
+ *     byte = 255) drives that offset past 188, making `wsize = 188 -
+ *     offset` negative -- which becomes a huge size_t once handed to
+ *     rb_write_with_state(). Confirmed: a single such packet produced a
+ *     ~4MB stack-buffer-underflow read starting from a wild pointer
+ *     (pkt + offset, itself already past the 188-byte packet). Fixed by
+ *     clamping offset to at most 188 right after it's computed.
+ *     test_write_malformed_adaptation_field_length_does_not_crash() below
+ *     is the regression test.
+ *  2. ltntstools_pes_extractor_alloc(): ctx->rb = rb_new(buffer_min,
+ *     buffer_max) was never NULL-checked. rb_new() returns NULL whenever
+ *     buffer_min == 0 or buffer_min > buffer_max; alloc() still reported
+ *     success, and the first write() dereferenced the NULL ctx->rb.
+ *     test_alloc_rejects_invalid_buffer_range() below is the regression
+ *     test.
+ *  3. _processRing(): ltn_pes_packet_alloc() and pes->rawBuffer = malloc()
+ *     were both used without a NULL check before being dereferenced /
+ *     memcpy()'d into (OOM-only, not independently regression tested here).
+ *
+ * Unit tests for src/pes-extractor.c / src/libltntstools/pes-extractor.h.
  * Builds against ../src/pes-extractor.c plus its dependencies:
  * ../src/klringbuffer.c (ring buffer), ../src/utils.c (pulled in via
  * "utils.h"), ../src/pes.c/../src/crc32.c (used to build+pack real PES
@@ -381,15 +407,106 @@ static void test_ordered_output_defers_until_free_flush(void)
 	free_captured();
 }
 
+/* -------- lifecycle: invalid buffer range -------- */
+
+/* Regression test for bug #2: buffer_min > buffer_max makes rb_new() return
+ * NULL internally; alloc() must fail cleanly rather than reporting success
+ * with a poisoned handle. */
+static void test_alloc_rejects_invalid_buffer_range(void)
+{
+	void *hdl = (void *)0x1; /* sentinel: alloc() must not leave this untouched-but-claim-success */
+	int ret = ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, 1000, 10);
+	CHECK(ret < 0);
+}
+
+/* -------- write(): adaptation field handling -------- */
+
+/* Regression test for bug #1 (critical): a single packet whose
+ * adaptation_field_control claims adaptation+payload and whose
+ * adaptation_field_length is the maximum possible value (255) leaves no
+ * room for any payload at all within the 188-byte packet. Before the fix,
+ * this drove the payload offset past 188 and crashed
+ * (AddressSanitizer: stack-buffer-underflow in rb_write_with_state(),
+ * called from ltntstools_pes_extractor_write()). The only correct,
+ * safe behavior is to treat it as carrying no payload -- write() must
+ * simply not crash and must still report packetCount handled. */
+static void test_write_malformed_adaptation_field_length_does_not_crash(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t pkt[188];
+	memset(pkt, 0xFF, sizeof(pkt));
+	pkt[0] = 0x47;
+	pkt[1] = 0x40 | ((0x100 >> 8) & 0x1f); /* PUSI = 1 */
+	pkt[2] = 0x100 & 0xff;
+	pkt[3] = 0x30; /* adaptation_field_control = 0b11 (adaptation + payload) */
+	pkt[4] = 0xFF; /* adaptation_field_length = 255: claims more space than the packet has */
+
+	ssize_t ret = ltntstools_pes_extractor_write(hdl, pkt, 1);
+	CHECK(ret == 1);
+	CHECK(g_capturedCount == 0); /* no payload bytes existed to form a PES from */
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
+/* A legitimate, small adaptation field on the leading TS packet of a PES
+ * must still parse correctly -- proves the bug #1 clamp doesn't break
+ * normal, well-formed adaptation-field usage. */
+static void test_write_legitimate_adaptation_field_still_reassembles(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t payload[10] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+	uint8_t buf[64];
+	int totalBytes = pack_pes(0xE0, payload, sizeof(payload), buf, sizeof(buf));
+
+	uint8_t packets[4][188];
+	uint8_t cc = 0;
+	int n = build_ts_packets(buf, totalBytes, 0x100, &cc, packets, 4);
+
+	/* Insert a legitimate 2-byte adaptation field (stuffing only, no
+	 * flags) ahead of the leading packet's PES bytes, shifting them over
+	 * within the same 188-byte packet. */
+	uint8_t *lead = packets[0];
+	uint8_t payloadPortion[184];
+	memcpy(payloadPortion, lead + 4, sizeof(payloadPortion));
+	lead[3] = 0x30 | (lead[3] & 0x0f); /* adaptation_field_control = 0b11 */
+	lead[4] = 1;                       /* adaptation_field_length = 1 */
+	lead[5] = 0x00;                    /* 1 stuffing/flags byte */
+	memcpy(lead + 6, payloadPortion, sizeof(payloadPortion) - 2);
+
+	build_trailer_packet(0x100, &cc, packets[n++]);
+
+	ltntstools_pes_extractor_write(hdl, &packets[0][0], n);
+
+	CHECK(g_capturedCount == 1);
+	if (g_capturedCount == 1) {
+		struct ltn_pes_packet_s *pes = g_captured[0];
+		CHECK(pes->dataLengthBytes == sizeof(payload));
+		CHECK(pes->data != NULL && memcmp(pes->data, payload, sizeof(payload)) == 0);
+	}
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
 int main(void)
 {
 	test_alloc_free_basic();
 	test_setters_return_success();
+	test_alloc_rejects_invalid_buffer_range();
 
 	test_write_ignores_other_pid_no_callback();
 	test_write_default_attaches_data_test_skip_data_true_omits_it();
 	test_write_large_pes_spanning_multiple_ts_packets_reassembles();
 	test_write_cc_error_discards_partial_pes_but_recovers();
+	test_write_malformed_adaptation_field_length_does_not_crash();
+	test_write_legitimate_adaptation_field_still_reassembles();
 
 	test_ordered_output_defers_until_free_flush();
 

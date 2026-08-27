@@ -92,6 +92,10 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 		buffer_max = 32 * 1048576;
 
 	ctx->rb = rb_new(buffer_min, buffer_max);
+	if (!ctx->rb) {
+		free(ctx);
+		return -1;
+	}
 	ctx->pid = pid;
 	ctx->streamId = streamId;
 	ctx->cb = cb;
@@ -363,6 +367,10 @@ static int _processRing(struct pes_extractor_s *ctx)
 			klbs_read_set_buffer(&bs, buf, rlen);
 
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
+			if (!pes) {
+				free(buf);
+				return -1;
+			}
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
 
 			pes->pcr = findPcrFromPosition(ctx, rb_get_read_pos(ctx->rb));
@@ -382,9 +390,12 @@ static int _processRing(struct pes_extractor_s *ctx)
 			}
 
 			if (!overrun && bitsProcessed && ctx->cb) {
-				
+
 				pes->rawBufferLengthBytes = rlen;
 				pes->rawBuffer = malloc(pes->rawBufferLengthBytes);
+				if (!pes->rawBuffer) {
+					ltn_pes_packet_free(pes);
+				} else {
 				memcpy(pes->rawBuffer, buf, pes->rawBufferLengthBytes);
 
 				if (ctx->orderedOutput) {
@@ -420,6 +431,7 @@ static int _processRing(struct pes_extractor_s *ctx)
 				} else {
 					ctx->cb(ctx->userContext, pes);
 					/* User owns the lifetime of the object */
+				}
 				}
 			} else
 			if (bitsProcessed) {
@@ -526,6 +538,16 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		if (ltntstools_has_adaption((uint8_t *)pkt)) {
 			offset++;
 			offset += ltntstools_adaption_field_length(pkt);
+		}
+		if (offset > 188) {
+			/* adaptation_field_length is an untrusted, attacker-controlled
+			 * byte (0-255): a corrupt or malicious packet can claim more
+			 * adaptation space than the 188-byte packet actually has.
+			 * There's no payload left to extract in that case -- clamp
+			 * instead of letting `188 - offset` go negative, which becomes
+			 * a huge size_t once handed to rb_write_with_state() below.
+			 */
+			offset = 188;
 		}
 
 		if (ltntstools_payload_unit_start_indicator(pkt) == 0 && ctx->appending == 1) {
