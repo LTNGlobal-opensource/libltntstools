@@ -346,7 +346,6 @@ static void *proc_net_udp_threadfunc(void *p)
 
     /* Give the User a fast rapid closedown mechanism */
     int queryPeriodMs = 0;
-	ctx->threadRunning = 1;
 	while (!ctx->threadTerminate) {
         usleep(20 * 1000);
         queryPeriodMs += 20;
@@ -373,6 +372,11 @@ int ltntstools_proc_net_udp_alloc(void **hdl)
     ctx->refreshPeriodMS = DEFAULT_REFRESH_MS;
     pthread_mutex_init(&ctx->mutex, NULL);
 
+    /* Set before pthread_create() returns to the caller, so a caller that
+     * frees the context immediately always sees threadRunning == 1 and
+     * performs the terminate-and-wait handshake in ltntstools_proc_net_udp_free().
+     */
+    ctx->threadRunning = 1;
     pthread_create(&ctx->threadId, NULL, proc_net_udp_threadfunc, ctx);
 
     *hdl = ctx;
