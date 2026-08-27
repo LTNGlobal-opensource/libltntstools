@@ -57,6 +57,7 @@
         "**/test_vbv": true,
         "**/test_proc_net_udp": true,
         "**/test_klringbuffer": true,
+        "**/test_ac3": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

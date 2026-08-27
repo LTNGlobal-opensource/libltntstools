@@ -190,18 +190,18 @@ void ltntstools_ac3_header_dprintf(int fd, struct ltn_ac3_header_syncframe_s *sf
 
 int ltntstools_ac3_header_parse(struct ltn_ac3_header_syncframe_s *sf, unsigned char *buf, int lengthBytes)
 {
-	struct klbs_context_s pbs, *bs = &pbs;
-	klbs_init(bs);
-	klbs_read_set_buffer(bs, buf, lengthBytes);
-
 	/* See A52-201212-17-2.pdf page 30 */
 
 	/* syninfo() length is 8 bytes.
 	 * bsi() length is a minimum of 5 bytes but probably a lot more to max 14 ish excluding bsil
 	 */
-	if (lengthBytes < (8 + 14)) {
+	if (!sf || !buf || lengthBytes < (8 + 14)) {
 		return -1; /* Invalid */
 	}
+
+	struct klbs_context_s pbs, *bs = &pbs;
+	klbs_init(bs);
+	klbs_read_set_buffer(bs, buf, lengthBytes);
 
 	/* syncinfo() */
 	sf->syncinfo.syncword    = klbs_read_bits(bs, 16);
@@ -343,5 +343,15 @@ int ltntstools_ac3_header_parse(struct ltn_ac3_header_syncframe_s *sf, unsigned 
 			b->dynrng = klbs_read_bits(bs, 8);
 		}
 	}
+
+	if (bs->overrun) {
+		/* The header's own fields (eg. addbsil, or the optional sections)
+		 * called for more data than lengthBytes actually contained. The
+		 * bitstream reader safely stopped reading, but the struct is only
+		 * partially populated -- don't report success.
+		 */
+		return -1;
+	}
+
 	return 0; /* Success */
 }

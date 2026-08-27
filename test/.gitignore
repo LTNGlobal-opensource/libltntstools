@@ -56,3 +56,5 @@ test_proc_net_udp
 test_proc_net_udp.dSYM
 test_klringbuffer
 test_klringbuffer.dSYM
+test_ac3
+test_ac3.dSYM
