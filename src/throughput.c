@@ -38,6 +38,9 @@ void ltntstools_throughput_reset(struct ltntstools_throughput_s *stream)
 	stream->byteCount = 0;
 	stream->mbps = 0;
 	stream->mBps = 0;
+	stream->Bps = 0;
+	stream->Bps_window = 0;
+	stream->Bps_last_update = 0;
 }
 
 static void _expire_per_second_stats(struct ltntstools_throughput_s *stream)
