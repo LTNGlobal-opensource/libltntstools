@@ -18,3 +18,5 @@ test_sectionextractor
 test_sectionextractor.dSYM
 test_ts_packetizer
 test_ts_packetizer.dSYM
+test_throughput_hires
+test_throughput_hires.dSYM
