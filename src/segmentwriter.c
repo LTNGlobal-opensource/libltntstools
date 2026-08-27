@@ -375,13 +375,16 @@ ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t len
 	struct ltntstools_segmentwriter_s *s = (struct ltntstools_segmentwriter_s *)hdl;
 
 #if USE_QUEUE_NOT_RING
-	ssize_t len = 0;
 	struct q_item_s *qi = q_item_malloc(buf, length);
 	if (!qi) {
 		return 0;
 	}
 	time(&qi->datetime);
 	klqueue_push(&s->q, qi);
+	/* Number of bytes queued -- this used to be left at 0 (its
+	 * initializer) in this code path, contradicting the documented
+	 * "return number of bytes queued" contract. */
+	ssize_t len = qi->lengthBytes;
 #else
 	pthread_mutex_lock(&s->mutex);
 	int didOverflow;
@@ -412,7 +415,10 @@ int ltntstools_segmentwriter_get_current_filename(void *hdl, char *dst, int leng
 	if (!s->fh)
 		return -1;
 
-	strncpy(dst, &s->filename[0], lengthBytes);
+	/* snprintf, not strncpy: strncpy doesn't null-terminate when the
+	 * source is >= lengthBytes, leaving dst as a non-terminated buffer
+	 * for any filename at or beyond the caller's supplied length. */
+	snprintf(dst, lengthBytes, "%s", s->filename);
 
 	return 0;
 }
