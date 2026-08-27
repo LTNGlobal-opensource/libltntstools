@@ -48,9 +48,8 @@ struct ltntstools_reframer_ctx_s
 struct ltntstools_reframer_ctx_s *ltntstools_reframer_alloc(void *userContext, uint32_t frameSizeBytes, ltntstools_reframer_callback cb);
 
 /**
- * @brief       Allocate a framework context capable of chunking streams of bytes into framed size of frameSizeBytes.
- *              Call the callback when a chunk is ready for processing. We use this to re-frame non 7*188 udp frames
- *              into something broadcast equipment likes (7 * 188) frames.
+ * @brief       Write a buffer of bytes into the reframer. Bytes are accumulated internally and the
+ *              callback is invoked each time frameSizeBytes worth of data has been collected.
  * @param[in]   struct ltntstools_reframer_ctx_s *ctx - object.
  * @param[in]   const uint8_t *buf - buffer of bytes
  * @param[in]   int lengthBytes - buffer length

@@ -22,7 +22,7 @@
  * 
  *    void *hdl;
  *    ltntstools_pes_extractor_alloc(&hdl, 0x31, 0xe0, myCB, NULL);
- *    ltntstools_pes_extractor_set_skip_data(hdl, 0); // Skip payload data
+ *    ltntstools_pes_extractor_set_skip_data(hdl, 1); // Skip payload data
  * 
  *    while (1) {
  *      ltntstools_pes_extractor_write(hdl, buf, 7);
@@ -44,7 +44,7 @@ typedef void (*pes_extractor_callback)(void *userContext, struct ltn_pes_packet_
 
 /**
  * @brief       Allocate a framework context capable of demuxing and parsing PES streams.
- * @param[in]   void **hdl - Handle / context for further use.
+ * @param[out]  void **hdl - Handle / context for further use.
  * @param[in]   uint16_t pid - MPEG TS transport PID to be de-muxed
  * @param[in]   uint8_t streamId - PES StreamID (Eg. 0xc0 for audio0, 0xe0 for video0)
  * @param[in]   pes_extractor_callback cb - user supplied callback for PES frame delivery
@@ -74,14 +74,13 @@ void ltntstools_pes_extractor_free(void *hdl);
 ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packetCount);
 
 /**
- * @brief       Ensure that the PES payload is attached to the PES struct during demuxing.
- *              By default it's not. This is for performance reasons, its heavier to
+ * @brief       Control whether the PES payload data is attached to the PES struct during demuxing.
+ *              By default it is (skip is off). This is for performance reasons, its heavier to
  *              add data to the pes (that without).
- *              No all sue cases need the PES data. If you specifically want it,
- *              enable it via this call.
+ *              Not all use cases need the PES data. If you don't want it, skip it via this call.
  * @param[in]   void *hdl - Handle / context.
- * @param[in]   int tf - Boolean. 1) add data 0) don't add data
- * @return      0 on success, else < 0.
+ * @param[in]   int tf - Boolean. 1) skip/don't add data 0) add data (default)
+ * @return      0 - Always succeeds.
  */
 int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf);
 
@@ -96,8 +95,8 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf);
  *              This is helpful if you want to assess metadata attached to video frames which could
  *              NOT be in temporal order.
  * @param[in]   void *hdl - Handle / context.
- * @param[in]   int tf - Boolean. 1) add data 0) don't add data
- * @return      0 on success, else < 0.
+ * @param[in]   int tf - Boolean. 1) enable ordered (PTS-sorted) output 0) disable (default)
+ * @return      0 - Always succeeds.
  */
 int ltntstools_pes_extractor_set_ordered_output(void *hdl, int tf);
 

@@ -19,9 +19,9 @@ extern "C" {
 
 /**
  * @brief       Allocate a framework context capable of table/section demux and extraction
- * @param[in]   void **hdl - Handle / context for further use.
+ * @param[out]  void **hdl - Handle / context for further use.
  * @param[in]   uint16_t pid - MPEG TS transport PID to be de-muxed
- * @param[in]   uint8_t tableId - Eg. 0xFC (SCTE35)
+ * @param[in]   uint8_t tableID - Eg. 0xFC (SCTE35)
  * @return      0 on success, else < 0.
  */
 int ltntstools_sectionextractor_alloc(void **hdl, uint16_t pid, uint8_t tableID);
@@ -33,10 +33,10 @@ int ltntstools_sectionextractor_alloc(void **hdl, uint16_t pid, uint8_t tableID)
  *              note of the fact the table was corrupt via crcValid.
  * @param[in]   void *hdl - Handle / context.
  * @param[in]   const uint8_t *pkts - one or more aligned transport packets
- * @param[in]   int packetCount - number of packets
+ * @param[in]   size_t packetCount - number of packets
  * @param[out]  int *complete - output flag boolean. zero when parsing, one when caller should call ltntstools_sectionextractor_query()
  * @param[out]  int *crcValid - boolean
- * @return      number of packets processed
+ * @return      number of section bytes consumed from the input packets during this call, or < 0 on error
  */
 ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkts, size_t packetCount, int *complete, int *crcValid);
 
@@ -47,11 +47,11 @@ ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkts, size_t
 void ltntstools_sectionextractor_free(void *hdl);
 
 /**
- * @brief       Allocate a framework context capable of table/section demux and extraction
- * @param[in]   void **hdl - Handle / context for further use.
+ * @brief       Copy the most recently completed table/section into a caller supplied buffer.
+ * @param[in]   void *hdl - Handle / context.
  * @param[out]  uint8_t *dst - user allocated buffer to contain the raw table/section
  * @param[in]   int lengthBytes - length of the destination buffer.
- * @return      number of bytes written
+ * @return      number of bytes written, else < 0 if no section is complete, dst is NULL, or lengthBytes is too small.
  */
 int ltntstools_sectionextractor_query(void *hdl, uint8_t *dst, int lengthBytes);
 

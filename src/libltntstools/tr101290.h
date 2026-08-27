@@ -79,8 +79,8 @@ struct ltntstools_tr101290_alarm_s
 
 /**
  * @brief       Helper function. Print to a file descriptor the contents of the alarm.
- * @param[in]   int - file descriptor
- * @param[in]   struct ltntstools_tr101290_alarm_s * - alarm
+ * @param[in]   int fd - file descriptor
+ * @param[in]   struct ltntstools_tr101290_alarm_s *alarm - alarm
  */
 void ltntstools_tr101290_event_dprintf(int fd, struct ltntstools_tr101290_alarm_s *alarm);
 
@@ -115,6 +115,9 @@ void    ltntstools_tr101290_free(void *hdl);
  *              Notifications/Errors generated as a result of these packets are passed to your application
  *              via the ltntstools_tr101290_event_callback mechanism.
  * @param[in]   void *hdl - Handle returned to the caller.
+ * @param[in]   const uint8_t *buf - Buffer containing one or more consecutive 188 byte transport packets.
+ * @param[in]   size_t packetCount - Number of transport packets contained in buf.
+ * @param[in]   struct timeval *timestamp - Timestamp to be associated with this batch of packets.
  * @return      The number of packets inspected, or < 0 on error.
  */
 ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCount, struct timeval *timestamp);
@@ -122,14 +125,14 @@ ssize_t ltntstools_tr101290_write(void *hdl, const uint8_t *buf, size_t packetCo
 /**
  * @brief       Convert an event id into a human readable string.
  *              The function will always return a string, regardless of input.
- * @param[in]   enum ltntstools_tr101290_event_e - event
+ * @param[in]   enum ltntstools_tr101290_event_e event - event
  * @return      const char * - label
  */
 const char *ltntstools_tr101290_event_name_ascii(enum ltntstools_tr101290_event_e event);
 
 /**
  * @brief       Query the TR101290 formal priority assigned to a specific event object.
- * @param[in]   enum ltntstools_tr101290_event_e - event
+ * @param[in]   enum ltntstools_tr101290_event_e event - event
  * @return      int - priority   (Typically 1, 2 or 3)
  */
 int ltntstools_tr101290_event_priority(enum ltntstools_tr101290_event_e event);
@@ -140,7 +143,7 @@ int ltntstools_tr101290_event_priority(enum ltntstools_tr101290_event_e event);
  *              event truly hasn't cleared. Generally you don't need to use the clear or
  *              raise APIs directly.
  * @param[in]   void *hdl - Handle returned to the caller.
- * @param[in]   enum ltntstools_tr101290_event_e - event
+ * @param[in]   enum ltntstools_tr101290_event_e event - event
  * @return      0 on success, else < 0.
  */
 int ltntstools_tr101290_event_clear(void *hdl, enum ltntstools_tr101290_event_e event);
@@ -149,7 +152,8 @@ int ltntstools_tr101290_event_clear(void *hdl, enum ltntstools_tr101290_event_e 
  * @brief       Permit the application to disable specific events.
  *              An example of this may be to disable CAT events when operating in the US.
  *              These events will no longer be monitored.
- * @param[in]   void **hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
+ * @param[in]   enum ltntstools_tr101290_event_e event - event to be disabled.
  * @return      0 on success, else error.
  */
 int ltntstools_tr101290_event_processing_disable(void *hdl, enum ltntstools_tr101290_event_e event);
@@ -158,21 +162,22 @@ int ltntstools_tr101290_event_processing_disable(void *hdl, enum ltntstools_tr10
  * @brief       Permit the application to enable specific events, including those unsupported
  *              events that could bring false hope. Thin ice, tread carefully.
  *              You generally don't want to use this API.
- * @param[in]   void **hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
+ * @param[in]   enum ltntstools_tr101290_event_e event - event to be enabled.
  * @return      0 on success, else error.
  */
 int ltntstools_tr101290_event_processing_enable(void *hdl, enum ltntstools_tr101290_event_e event);
 
 /**
  * @brief       Permit the application to disable all events.
- * @param[in]   void **hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
  * @return      0 on success, else error.
  */
 int ltntstools_tr101290_event_processing_disable_all(void *hdl);
 
 /**
  * @brief       Permit the application to enable all events, including those unsupported.
- * @param[in]   void **hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
  * @return      0 on success, else error.
  */
 int ltntstools_tr101290_event_processing_enable_all(void *hdl);
@@ -197,17 +202,17 @@ void ltntstools_tr101290_summary_item_dprintf(int fd, struct ltntstools_tr101290
  *              capability, and return the state of each event (clear or raised), and the last date this condition changed.
  *              This is considered a "polling helper" function, for simple application that don't want to track state
  *              and handle that complexity in their nominated callback notification handler.
- * @param[out]  void *hdl - Handle returned to the caller.
- * @param[in]   struct ltntstools_tr101290_alarm_s **items - Array of items returned, caller must free the allocation
- * @param[in]   int itemCount - Number of items in the array
+ * @param[in]   void *hdl - Handle returned to the caller.
+ * @param[out]  struct ltntstools_tr101290_summary_item_s **item - Array of items returned, caller must free the allocation
+ * @param[out]  int *itemCount - Number of items in the array
  * @return      0 on success else < 0.
  */
 int ltntstools_tr101290_summary_get(void *hdl, struct ltntstools_tr101290_summary_item_s **item, int *itemCount);
 
 /**
  * @brief       Produce a sumamry txt report of all events and statud to a file descriptor.
- * @param[out]  void *hdl - Handle returned to the caller.
- * @param[in]   int - file descriptor
+ * @param[in]   void *hdl - Handle returned to the caller.
+ * @param[in]   int fd - file descriptor
  * @return      0 on success else < 0.
  */
 int ltntstools_tr101290_summary_report_dprintf(void *hdl, int fd);
@@ -216,7 +221,7 @@ int ltntstools_tr101290_summary_report_dprintf(void *hdl, int fd);
  * @brief       Enable the creation of an alarm logfile, user supplied name.
  *              The log will include the raising and clearing of alarms, as they occur.
  *              Existing logs will be appended to on startup.
- * @param[out]  void *hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
  * @param[in]   const char *afname - Absolute filename that will be created or appended to.
  * @return      0 on success else < 0.
  */
@@ -225,7 +230,7 @@ int ltntstools_tr101290_log_enable(void *hdl, const char *afname);
 /**
  * @brief       Close the current logfile and rotate out.
  *              NOT YET SUPPORTED, WILL RETURN ERROR.
- * @param[out]  void *hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
  * @return      0 on success else < 0.
  */
 int ltntstools_tr101290_log_rotate(void *hdl);
@@ -234,7 +239,7 @@ int ltntstools_tr101290_log_rotate(void *hdl);
  * @brief       Place all alarms into the raised state, knowing that if the statemachines
  *              for analyzing conditions are working properly, these alarms will be subsequently
  *              placed into a 'clear' condition.
- * @param[out]  void *hdl - Handle returned to the caller.
+ * @param[in]   void *hdl - Handle returned to the caller.
  * @return      0 on success else < 0.
  */
 int ltntstools_tr101290_reset_alarms(void *hdl);

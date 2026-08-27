@@ -28,7 +28,7 @@ extern "C" {
 
 /**
  * @brief       Allocate a new latency probe, for use with all other calls.
- * @param[out]  void **handle - returned object.
+ * @param[out]  void **hdl - returned object.
  * @return      0 - Success
  * @return      < 0 - Error
  */
@@ -36,7 +36,7 @@ int  ltntstools_probe_ltnencoder_alloc(void **hdl);
 
 /**
  * @brief       Free a previously allocated probe.
- * @param[in]   void *handle - ltntstools_probe_ltnencoder_alloc()
+ * @param[in]   void *hdl - ltntstools_probe_ltnencoder_alloc()
  */
 void ltntstools_probe_ltnencoder_free(void *hdl);
 
@@ -44,7 +44,9 @@ void ltntstools_probe_ltnencoder_free(void *hdl);
  * @brief       Send a buffer of transport packets, or nals, into the query function.
  *              If the function detects the LTN Encoder timing SEI metadatadata, then
  *              timing information is extracted and cached into a context for later query.
- * @param[in]   void *handle - Context returned from ltntstools_probe_ltnencoder_alloc()
+ * @param[in]   void *hdl - Context returned from ltntstools_probe_ltnencoder_alloc()
+ * @param[in]   const unsigned char *buf - Buffer of transport packets, or nals, to search for timing SEI metadata.
+ * @param[in]   int lengthBytes - Length of buf, in bytes.
  * @return      0 - Success - Caller may query latency via ltntstools_probe_ltnencoder_get_total_latency()
  * @return      < 0 - Error, no timing information detected.
  */
@@ -54,15 +56,15 @@ int  ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned c
  * @brief       Query the detected latency between the frame arrival mechanism of the encoder and
  *              the walltime of this probe. Correct calculations assume bother the encoder and the
  *              platform running this probe are both NTP synced to the same clock.
- * @param[in]   void *handle - Context returned from ltntstools_probe_ltnencoder_alloc()
- * @return      > 0 - Success - Total latency between two measured points expresses in ms.
+ * @param[in]   void *hdl - Context returned from ltntstools_probe_ltnencoder_alloc()
+ * @return      >= 0 - Success - Total latency between two measured points expresses in ms.
  * @return      < 0 - Error, no timing information detected.
  */
 int64_t ltntstools_probe_ltnencoder_get_total_latency(void *hdl);
 
 /**
  * @brief       Allocate a new scheduler probe, for use with all other calls.
- * @param[out]  void **handle - returned object.
+ * @param[out]  void **hdl - returned object.
  * @return      0 - Success
  * @return      < 0 - Error
  */
@@ -70,21 +72,21 @@ int  ltntstools_probe_scheduler_alloc(void **hdl);
 
 /**
  * @brief       Free a previously allocated probe.
- * @param[in]   void *handle - ltntstools_probe_scheduler_alloc()
+ * @param[in]   void *hdl - ltntstools_probe_scheduler_alloc()
  */
 void ltntstools_probe_scheduler_free(void *hdl);
 
 /**
  * @brief       Query how many times the scheduker returns a 3ms or worse sleep for a 1ms request.
- * @param[in]   void *handle - ltntstools_probe_scheduler_alloc()
+ * @param[in]   void *hdl - ltntstools_probe_scheduler_alloc()
  * @return      < 0 - Error, else error count.
  */
 int64_t ltntstools_probe_scheduler_get_3ms_error_count(void *hdl);
 
 /**
  * @brief       Query a histogram report showing the sleep accuracy for a 1ms sleep
- * @param[in]   void *handle - ltntstools_probe_scheduler_alloc()
- * @param[in]   char ** - destination pointer that receives a new memory allocation. Caller is responsible for lifespan.
+ * @param[in]   void *hdl - ltntstools_probe_scheduler_alloc()
+ * @param[out]  char **buf - destination pointer that receives a new memory allocation. Caller is responsible for lifespan.
  * @return      0 - Success
  * @return      < 0 - Error
  */

@@ -3,7 +3,7 @@
 #define KL_RTP_ANALYZER_H
 
 /**
- * @file        rtp.h
+ * @file        rtp-analyzer.h
  * @author      Steven Toth <stoth@kernellabs.com>
  * @copyright   Copyright (c) 2017-2023 Kernel Labs Inc. All Rights Reserved.
  * @brief       A basic RTP analyzer, pulled from KL project into open source for the benefit of all mankind.
@@ -90,7 +90,7 @@ void rtp_analyzer_report_dprintf(struct rtp_hdr_analyzer_s *ctx, int fd);
 void rtp_analyzer_hdr_dprintf(const struct rtp_hdr *h, int fd);
 
 /**
- * @brief       Enumerator struct used with rtp_analyzer_queryFrames()
+ * @brief       Enumerator struct used with rtp_frame_queryPositions()
  */
 struct rtp_frame_position_s
 {

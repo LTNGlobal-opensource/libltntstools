@@ -2,7 +2,7 @@
 #define _THROUGHPUT_HIRES_H
 
 /**
- * @file        throughput-hirez.h
+ * @file        throughput_hires.h
  * @author      Steven Toth <steven.toth@ltnglobal.com>
  * @copyright   Copyright (c) 2020 LTN Global, Inc. All Rights Reserved.
  * @brief       A hiresolution scheme for tracking summable items over a usec accurate time window.
@@ -59,7 +59,7 @@ void throughput_hires_write_i64(void *hdl, uint32_t channel, int64_t value, stru
  *              small and less resource wasteful.
  * @param[in]   void *hdl - Handle / context.
  * @param[in]   struct timeval *ts - time of event, or, if NULL to represent 2 seconds ago.
- * @return      0 on success, else < 0.
+ * @return      Number of items expired.
  */
 int  throughput_hires_expire(void *hdl, struct timeval *ts);
 
@@ -69,7 +69,7 @@ int  throughput_hires_expire(void *hdl, struct timeval *ts);
  * @param[in]   uint32_t channel - items can be group into channels, categories. If you're not sure use value 0.
  * @param[in]   struct timeval *from - From is null then from default to 1 second ago.
  * @param[in]   struct timeval *to - end is null then end details to now.
- * @param[in]   struct timeval *ts - time of event, or, if NULL the framework assumed walltime.
+ * @return      The sum of all values recorded for the channel within the time window.
  */
 int64_t throughput_hires_sumtotal_i64(void *hdl, uint32_t channel, struct timeval *from, struct timeval *to);
 
@@ -79,10 +79,10 @@ int64_t throughput_hires_sumtotal_i64(void *hdl, uint32_t channel, struct timeva
  * @param[in]   uint32_t channel - items can be group into channels, categories. If you're not sure use value 0.
  * @param[in]   struct timeval *from - From is null then from default to 1 second ago.
  * @param[in]   struct timeval *to - end is null then end details to now.
- * @param[in]   struct timeval *ts - time of event, or, if NULL the framework assumed walltime.
- * @param[out]  int64_t *min - minimum value 
- * @param[out]  int64_t *max - maximum value
- * @param[out]  int64_t *avg - average value
+ * @param[out]  int64_t *vmin - minimum value
+ * @param[out]  int64_t *vmax - maximum value
+ * @param[out]  int64_t *vavg - average value, or -1 if no items were found in the time window.
+ * @return      0 on success, else < 0.
  */
 int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *from, struct timeval *to,
     int64_t *vmin,
@@ -90,7 +90,7 @@ int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *
     int64_t *vavg);
 
 /**
- * @brief       Free a previously allocate packet, and any attached payload
+ * @brief       Free a previously allocated context.
  * @param[in]   void *hdl - object
  */
 void throughput_hires_free(void *hdl);

@@ -22,7 +22,7 @@ extern "C" {
 
 /**
  * @brief       Allocate a new probe, for use with all other calls.
- * @param[out]  void **handle - returned object.
+ * @param[out]  void **hdl - returned object.
  * @return      0 - Success
  * @return      < 0 - Error
  */
@@ -30,7 +30,7 @@ int  ltntstools_proc_net_udp_alloc(void **hdl);
 
 /**
  * @brief       Free a previously allocated probe.
- * @param[in]   void *handle - ltntstools_probe_ltnencoder_alloc()
+ * @param[in]   void *hdl - ltntstools_proc_net_udp_alloc()
  */
 void ltntstools_proc_net_udp_free(void *hdl);
 
@@ -68,7 +68,9 @@ struct ltntstools_proc_net_udp_item_s
 /**
  * @brief       Query all known sockets and return in an array.
  *              User responsible for array destruction.
- * @param[in]   void *handle - Context returned from ltntstools_proc_net_udp_alloc()
+ * @param[in]   void *hdl - Context returned from ltntstools_proc_net_udp_alloc()
+ * @param[out]  struct ltntstools_proc_net_udp_item_s **array - new allocation containing arrayCount entries.
+ * @param[out]  int *arrayCount - number of entries in array.
  * @return      0 - Success
  * @return      < 0 - Error, undisclosed issue.
  */

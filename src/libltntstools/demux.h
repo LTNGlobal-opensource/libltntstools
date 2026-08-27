@@ -49,6 +49,9 @@ struct ltntstools_demux_callbacks
  *                The user then makes subsequent calls to ltntstools_demux_write() feeding the entire
  *                transport stream into this demux.
  * @param[out]    void **hdl - Unique API context handle
+ * @param[in]     void *userContext - Caller supplied context, passed back unmodified to callbacks
+ * @param[in]     const struct ltntstools_demux_callbacks *callbacks - Callback function pointers
+ * @param[in]     const struct ltntstools_pat_s *pat - PAT describing the stream to demultiplex, cloned internally
  * @return        0 - Success
  * @return      < 0 - Error
  */
@@ -67,7 +70,7 @@ void ltntstools_demux_free(void *hdl);
  *              any callbacks will fire (on this thread).
  * @param[in]   void *hdl - Handle / context.
  * @param[in]   const uint8_t *pkts - one or more aligned transport packets
- * @param[in]   int packetCount - number of packets
+ * @param[in]   uint32_t packetCount - number of packets
  * @return      number of packets processed, else < 0 on error.
  */
 ssize_t ltntstools_demux_write(void *hdl, const uint8_t *pkts, uint32_t packetCount);

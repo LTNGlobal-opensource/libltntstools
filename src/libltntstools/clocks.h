@@ -151,7 +151,7 @@ void ltntstools_clock_establish_timebase(struct ltntstools_clock_s *clk, int64_t
 int  ltntstools_clock_is_established_timebase(struct ltntstools_clock_s *clk);
 
 /**
- * @brief       Once the timebase bas been established (ltntstools_clock_reset()),
+ * @brief       Once the timebase bas been established (ltntstools_clock_establish_timebase()),
  *              syncronize 'ticks' (and absolute measurement of time in the establish timebase,
  *              to walltime (measured in us).
  *              This measns we'll be able to measure drift, in the future.
@@ -282,8 +282,8 @@ int64_t ltntstools_clock_compare_ms(struct ltntstools_clock_s *clock_a, struct l
  *              regardless of whether the clock will wrap or not.
  *              Supported for 27MHz and 90 kHz clocks.
  * @param[in]   struct ltntstools_clock_s *clk - context
- * @param[in]   int64_t ticks - timeA
- * @param[in]   int64_t ticks - timeB
+ * @param[in]   int64_t ticksnow - timeA
+ * @param[in]   int64_t ticksthen - timeB
  * @return      int64_t - ticks
  */
 int64_t ltntstools_clock_compute_delta(struct ltntstools_clock_s *clk, int64_t ticksnow, int64_t ticksthen);
@@ -308,15 +308,15 @@ struct ltntstools_corrected_clock_s
 /**
  * @brief       Initialize a corrected_clock context.
  *              Only 90000 hz values are supported.
- * @param[in]   struct ltntstools_clock_s *clk - context to be initialized
- * @param[in]   int64_t hz - Eg. 90,000, or 27,000,000
+ * @param[in]   struct ltntstools_corrected_clock_s *ctx - context to be initialized
+ * @param[in]   unsigned int hz - Eg. 90,000, or 27,000,000
  * @return      0 on success else < 0.
  */
 int ltntstools_corrected_clock_init(struct ltntstools_corrected_clock_s *ctx, unsigned int hz);
 
 /**
  * @brief       Update the correct clock model with a new tick value, typically a new PTS.
- * @param[in]   struct ltntstools_clock_s *clk - context
+ * @param[in]   struct ltntstools_corrected_clock_s *ctx - context
  * @param[in]   int64_t ticks - PTS value obtained by any other means.
  * @return      0 on success else < 0.
  */
@@ -325,7 +325,7 @@ int ltntstools_corrected_clock_update(struct ltntstools_corrected_clock_s *ctx, 
 /**
  * @brief       Query the corrected clock value in a uint64_t form. IE, query a long running corrected
  *              PTS which includes multiple wraps all added over time.
- * @param[in]   struct ltntstools_clock_s *clk - context
+ * @param[in]   const struct ltntstools_corrected_clock_s *ctx - context
  * @return      0 if error, or a valid clock value measured in units on Hz (during _init).
  */
 uint64_t ltntstools_corrected_clock_unwrapped(const struct ltntstools_corrected_clock_s *ctx);

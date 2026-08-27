@@ -61,8 +61,8 @@ struct vbv_decoder_profile_s
  * @brief       For a given codec, Eg. VBV_CODEC_H264, IDC and framrate, configure the VBV buffer profile.
  *              Do this before calling ltntstools_vbv_alloc(). Don't forget to validate the profile
  *              using ltntstools_vbv_profile_validate().
- * @param[in]   struct vbv_decoder_profile_s - VBV decoder profile
- * @return      True on value, else false,
+ * @param[in]   struct vbv_decoder_profile_s *dp - VBV decoder profile
+ * @return      True (1) if the profile is valid, else False (0).
  */
 int ltntstools_vbv_profile_validate(struct vbv_decoder_profile_s *dp);
 
@@ -72,7 +72,7 @@ int ltntstools_vbv_profile_validate(struct vbv_decoder_profile_s *dp);
  * @param[in]   uint16_t pid - MPEG TS transport PID to be de-muxed
  * @param[in]   vbv_callback cb - user supplied callback for PES frame delivery
  * @param[in]   void *userContext - user private context, passed back to caller during callback.
- * @param[in]   struct vbv_decoder_profile_s * - Expected decoder profile
+ * @param[in]   struct vbv_decoder_profile_s *p - Expected decoder profile
  * @return      0 on success, else < 0.
  */
 int ltntstools_vbv_alloc(void **hdl, uint16_t pid, vbv_callback cb, void *userContext, struct vbv_decoder_profile_s *p);
@@ -86,14 +86,14 @@ void ltntstools_vbv_free(void *hdl);
 /**
  * @brief       Send a PES into the VBV. update any internal statistics, fire any events if needed.
  * @param[in]   void *hdl - Handle / context for further use.
- * @param[in]   const struct ltn_pes_packet_s * - Timing and payload information
+ * @param[in]   const struct ltn_pes_packet_s *pkt - Timing and payload information
  * @return      0 on success, else < 0.
  */
 int ltntstools_vbv_write(void *hdl, const struct ltn_pes_packet_s *pkt);
 
 /**
  * @brief       Convert an event name into a human readable string.
- * @param[in]   enum ltntstools_vbv_event_e - eventId
+ * @param[in]   enum ltntstools_vbv_event_e e - Event identifier
  * @return      The event name. A string is guaranteed to be returned from the stack, in all cases.
  */
 const char *ltntstools_vbv_event_name(enum ltntstools_vbv_event_e e);
@@ -101,8 +101,8 @@ const char *ltntstools_vbv_event_name(enum ltntstools_vbv_event_e e);
 /**
  * @brief       For a given codec, Eg. VBV_CODEC_H264, lookup the VBV buffersize for a given IDC (level)
  * @param[in]   int codec - VBV_CODEC_H264
- * @param[in]   int levelX10 - The level, or ODC, Eg. for 3.1 use 31
- * @return      0 on success, else < 0.
+ * @param[in]   int levelX10 - The level, or IDC, Eg. for 3.1 use 31
+ * @return      The VBV buffer bitrate (bytes) for the given codec/level, else -1 if not found.
  */
 int ltntstools_vbv_bitrate_lookup(int codec, int levelX10);
 
@@ -110,8 +110,10 @@ int ltntstools_vbv_bitrate_lookup(int codec, int levelX10);
  * @brief       For a given codec, Eg. VBV_CODEC_H264, IDC and framrate, configure the VBV buffer profile.
  *              Do this before calling ltntstools_vbv_alloc(). Don't forget to validate the profile
  *              using ltntstools_vbv_profile_validate().
+ * @param[out]  struct vbv_decoder_profile_s *p - Decoder profile to be populated
  * @param[in]   int codec - VBV_CODEC_H264
- * @param[in]   int levelX10 - The level, or ODC, Eg. for 3.1 use 31
+ * @param[in]   int levelX10 - The level, or IDC, Eg. for 3.1 use 31
+ * @param[in]   double framerate - Decoder framerate, Eg. 23.98, 24, 25, 29.97, 30, 50, 59.94, or 60.
  * @return      0 on success, else < 0.
  */
 int ltntstools_vbv_profile_defaults(struct vbv_decoder_profile_s *p, int codec, int levelX10, double framerate);
@@ -127,7 +129,7 @@ int ltntstools_vbv_verbose(void *hdl, uint32_t level);
 /**
  * @brief       Query the VBV fullness
  * @param[in]   void *hdl - Handle / context for further use.
- * @param[in]   double percent - percentage of fullness. below 10% and above 90% the stack starts to warn.
+ * @param[out]  double *pct - populated with the percentage of fullness. below 10% and above 90% the stack starts to warn.
  * @return      0 on success, else < 0.
  */
 int ltntstools_vbv_get_fullness(void *hdl, double *pct);

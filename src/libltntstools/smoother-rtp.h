@@ -47,7 +47,7 @@ typedef int (*smoother_rtp_output_callback)(void *userContext, const unsigned ch
 
 /**
  * @brief       Allocate a framework context capable of smoothing MPEG-TS SPTS/MPTS multiplexes.
- * @param[in]   void **hdl - Handle / context for further use.
+ * @param[out]  void **hdl - Handle / context for further use.
  * @param[in]   void *userContext - user private context, passed back to caller during callback.
  * @param[in]   smoother_rtp_output_callback cb - user supplied callback for output delivery
  * @param[in]   int itemsPerSecond - Approximate number of write calls you intend to make per second.

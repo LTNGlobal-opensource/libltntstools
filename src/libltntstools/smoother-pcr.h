@@ -47,12 +47,12 @@ typedef int (*smoother_pcr_output_callback)(void *userContext, unsigned char *bu
 
 /**
  * @brief       Allocate a framework context capable of smoothing MPEG-TS SPTS/MPTS multiplexes.
- * @param[in]   void **hdl - Handle / context for further use.
+ * @param[out]  void **hdl - Handle / context for further use.
  * @param[in]   void *userContext - user private context, passed back to caller during callback.
  * @param[in]   smoother_pcr_output_callback cb - user supplied callback for output delivery
  * @param[in]   int itemsPerSecond - Approximate number of write calls you intend to make per second. Eg. 5000
  * @param[in]   int itemLengthBytes - Eg. 7*188
- * @param[in]   uint64_t pcrPID - transport packet identifier that will be used to pace the output. Mandatory, none zero.
+ * @param[in]   uint16_t pcrPID - transport packet identifier that will be used to pace the output. Mandatory, none zero.
  * @param[in]   int latencyMS - The expected latency you want to project for jitter. Mandatory, Eg. 100
  * @return      0 on success, else < 0.
  */
@@ -99,13 +99,13 @@ struct smoother_pcr_statistics
 	uint64_t totalItems;               /**< Number of list items created during initialization. Seeing growth here suggests undersized queues or unwanted caching / growth problems. */
 	uint64_t totalUserBytes;           /**< Number of user bytes stores (vs what was allocated totalAllocFootprintBytes) */
 	uint64_t qFreeCount;               /**< Number of items on the free list */
-	uint64_t qBusyCount;               /**< Number of items on the free list */
+	uint64_t qBusyCount;               /**< Number of items on the busy list */
 };
 
 /**
  * @brief       Return runtime statistics
  * @param[in]   void *hdl - Handle / context.
- * @param[in]   struct smoother_pcr_statistics - Framework exposes various stats
+ * @param[out]  struct smoother_pcr_statistics *s - Framework exposes various stats
  * @return      0 on success, else < 0 on error
  */
 int smoother_pcr_get_statistics(void *hdl, struct smoother_pcr_statistics *s);

@@ -29,7 +29,8 @@ extern "C" {
 
 /**
  * @brief         Allocate a context for use with other streammodel api calls.
- * @param[out]    void **hdl - Buffer of data, possibly containing none or more NAL packets.
+ * @param[out]    void **hdl - Handle / context for further use.
+ * @param[in]     void *userContext - user private context, passed back to caller during callbacks.
  * @return        0 - Success
  * @return      < 0 - Error
  */
@@ -53,6 +54,7 @@ void ltntstools_streammodel_free(void *hdl);
 /**
  * @brief         Get the current version currentModelVersion from the stream model context.
  * @param[in]     void *hdl - Previously allocate context handle.
+ * @return        Current model version number.
  */
 uint64_t ltntstools_streammodel_get_current_version(void *hdl);
 
@@ -63,9 +65,9 @@ uint64_t ltntstools_streammodel_get_current_version(void *hdl);
  * @param[in]     void *hdl - Previously allocate context handle.
  * @param[in]     const unsigned char *pkt - Buffer of transport packets, 1 or more.
  * @param[in]     int packetCount - Number of packets in the buffer.
- * @param[in]     struct timeval *timestamp - Timestamp of the first packet in the buffer.
  * @param[out]    int *complete - Result will contain 0 or 1. When 1, you are entitled to call _query_model()
  *                                to collect a fully formed PAT object, containing the entire PAT/PMT tree.
+ * @param[in]     struct timeval *timestamp - Timestamp of the first packet in the buffer.
  * @return        Number of transport packets processed.
  */
 size_t ltntstools_streammodel_write(void *hdl, const unsigned char *pkt, int packetCount, int *complete, struct timeval *timestamp);
@@ -83,7 +85,7 @@ void ltntstools_streammodel_dprintf(void *hdl, int fd);
  *                The caller is responsible for the object lifespan, free it once you're done.
  *                Don't call this function until your last _write call returns complete = 1.
  * @param[in]     void *hdl - Previously allocate context handle.
- * @param[in]     struct ltntstools_pat_s **pat - A full representation of the stream.
+ * @param[out]    struct ltntstools_pat_s **pat - A full representation of the stream.
  * @return        0 - Success
  * @return      < 0 - Error
  */
@@ -95,8 +97,7 @@ int ltntstools_streammodel_query_model(void *hdl, struct ltntstools_pat_s **pat)
  *                as to whether this represents a SPTS or MPTS stream.
  * @param[in]     void *hdl - Previously allocate context handle.
  * @param[in]     struct ltntstools_pat_s *pat - A full representation of the stream.
- * @return        0 - Success
- * @return      < 0 - Error
+ * @return        Boolean. 1 if the model represents a MPTS, else 0 (SPTS).
  */
 int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat);
 
@@ -106,6 +107,7 @@ int ltntstools_streammodel_is_model_mpts(void *hdl, struct ltntstools_pat_s *pat
  *                PMT and extract the PCR pid.
  * @param[in]     void *hdl - Previously allocate context handle.
  * @param[in]     struct ltntstools_pat_s *pat - A full representation of the stream.
+ * @param[out]    uint16_t *PCRPID - The PCR pid of the first valid program found.
  * @return        0 - Success
  * @return      < 0 - Error
  */
@@ -138,9 +140,8 @@ typedef void (*ltntstools_streammodel_callback)(void *userContext, struct stream
  * @brief         TR101290 helper function. Have the strem model check the
  *                PAT, PMT, NIT, BAT, SDT, EIT, TOT tables and ensure their CRCs are valid.
  *                Critical for a TR101290 P2.2 quality check.
- *                For a given pat object, typ[ically returned from _querymodel, find the first
- *                PMT and extract the PCR pid.
  * @param[in]     void *hdl - Previously allocate context handle.
+ * @param[in]     ltntstools_streammodel_callback cb - user supplied callback, fired for each section CRC check result.
  * @return        0 - Success, the request was activated.
  * @return      < 0 - Error
  */

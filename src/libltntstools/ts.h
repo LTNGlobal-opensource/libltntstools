@@ -107,7 +107,7 @@ static inline uint8_t ltntstools_transport_scrambling_control(const uint8_t *pkt
 }
 
 /**
- * @brief       For a given transport packet, query the transport scrambling control field.
+ * @brief       For a given transport packet, query the adaptation field control field.
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @return      two bit field.
  */
@@ -221,7 +221,7 @@ static inline int64_t ltntstools_pts_diff(int64_t from, int64_t to)
  * @brief       Helper function. For a given transport packet, return the PCR value contained
  *              in the packet, if a PCR is detected and present.
  * @param[in]   const uint8_t *pkt - Transport packet.
- * @param[in]   uint64_t *scr - PCR contained in packet.
+ * @param[out]  uint64_t *scr - PCR contained in packet.
  * @return      0 on success, < 0 on error.
  */
 int ltntstools_scr(const uint8_t *pkt, uint64_t *scr);
@@ -256,7 +256,7 @@ unsigned int ltntstools_get_section_tableid(const uint8_t *pkt);
  * @brief       For a PMT streamType field, lookup a friendly text description.
  *              The function will never return NULL, a string will be returned for every possible input.
  *              Eg. "ISO/IEC 11172 Video"
- * @param[in]   const uint8_t *pkt - Transport packet.
+ * @param[in]   uint8_t esPayloadType - pmt elementary stream type.
  * @return      const char * - Description
  */
 const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType);
@@ -278,7 +278,7 @@ int ltntstools_is_ESPayloadType_Audio(uint8_t esPayloadType);
 
 /**
  * @brief       For a given buffer atleast 188 bytes long, create a null padding packet.
- * @param[in]   uint8_t *pkt - Destination buffer.
+ * @param[out]  uint8_t *pkt - Destination buffer.
  */
 void ltntstools_generateNullPacket(uint8_t *pkt);
 
@@ -323,8 +323,8 @@ static inline void ltntstools_pcr_position_reset(struct ltntstools_pcr_position_
  * @param[in]   const uint8_t *buf - buffer of bytes, possibly transport packets, probably not aligned.
  * @param[in]   int lengthBytes - length of buffer in bytes.
  * @param[in]   uint64_t addr - deprecated, don't use.
- * @param[out]  struct ltntstools_pcr_position_s **array - length of buffer in bytes.
- * @param[in]   int *arrayLength - number of elements in the returned array.
+ * @param[out]  struct ltntstools_pcr_position_s **array - Array of PCR positions found, caller must free the allocation.
+ * @param[out]  int *arrayLength - number of elements in the returned array.
  * @return      0 on success else < 0.
  */
 int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, struct ltntstools_pcr_position_s **array, int *arrayLength);
@@ -336,7 +336,7 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
  *              If the packets contain RTP headers (12 bytes), they're automatically skipped.
  * @param[in]   const uint8_t *buf - buffer of bytes, possibly transport packets, probably not aligned.
  * @param[in]   int lengthBytes - length of buffer in bytes.
- * @param[in]   struct ltntstools_pcr_position_s *pos - enumerator
+ * @param[out]  struct ltntstools_pcr_position_s *pos - enumerator
  * @param[in]   uint16_t pcrPID - transport packet identifier
  * @param[in]   int pktAligned - boolean. Signal to the API if the buffer contains fully aligned transport packets (or not).
  * @return      0 on success else < 0.
@@ -347,10 +347,10 @@ int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstoo
  * @brief       Generate a fully formed legal packet containing a PCR structure.
  *              This is generally used by test tools that want to downstream inspect PCRs.
  *              The 'pkt' buffer needs to be 188 bytes long.
- * @param[in]   uint8_t *pkt - destination buffer.
+ * @param[out]  uint8_t *pkt - destination buffer.
  * @param[in]   int lengthBytes - length of buffer in bytes.
  * @param[in]   uint16_t pid - transport packet identifier
- * @param[in]   uint8_t *cc - Use and update the continuity counter pointer.
+ * @param[in,out] uint8_t *cc - Use and update the continuity counter pointer.
  * @param[in]   uint64_t pcr- Clock value that will be written into the packet.
  * @return      0 on success else < 0.
  */
@@ -369,10 +369,10 @@ int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid
  *              used to check that no bits have been flipped or data lost.
  *              This is generally used by test tools that want to downstream inspect PCRs.
  *              The 'pkt' buffer needs to be 188 bytes long.
- * @param[in]   uint8_t *pkt - destination buffer.
+ * @param[out]  uint8_t *pkt - destination buffer.
  * @param[in]   int lengthBytes - length of buffer in bytes.
  * @param[in]   uint16_t pid - transport packet identifier
- * @param[in]   uint8_t *cc - Use and update the continuity counter pointer.
+ * @param[in,out] uint8_t *cc - Use and update the continuity counter pointer.
  * @param[in]   uint64_t counter - a user specific count value (increment by 1) so packets are sequenced correctly.
  * @return      0 on success else < 0.
  */
@@ -389,11 +389,11 @@ int ltntstools_updatePacketWith64bCounter(unsigned char *pkt, int lengthBytes, u
  *              used to check that no bits have been flipped or data lost.
  *              This is generally used by test tools that want to downstream inspect PCRs.
  *              The 'pkt' buffer needs to be 188 bytes long.
- * @param[in]   uint8_t *pkt - destination buffer.
+ * @param[in]   uint8_t *pkt - source buffer to verify.
  * @param[in]   int lengthBytes - length of buffer in bytes.
  * @param[in]   uint16_t pid - transport packet identifier
  * @param[in]   uint64_t lastCounter - The previous 'currentCounter' so discontinuities can be measured.
- * @param[in]   uint64_t *currentCounter - a user specific count value (increment by 1) so packets are sequenced correctly.
+ * @param[out]  uint64_t *currentCounter - the counter value extracted from the packet, for validation against lastCounter.
  * @return      0 on success else < 0 indicating fault/damage to the packet.
  */
 int ltntstools_verifyPacketWith64bCounter(uint8_t *pkt, int lengthBytes, uint16_t pid, uint64_t lastCounter, uint64_t *currentCounter);
@@ -410,7 +410,7 @@ int ltntstools_file_estimate_bitrate(const char *filename, uint32_t *bps);
  * @brief       Convert a pcr into a human readibly string. Either pass a buffer of atleast 16 bytes,
  *              or pass NULL and a buffer will be allocated for you. If you pass NULL, you own the lifespan, don't
  *              leak it.
- * @param[out]  char **buf
+ * @param[in,out] char **buf
  * @param[in]   int64_t pcr - tick value
  */
 void ltntstools_pcr_to_ascii(char **buf, int64_t pcr);
@@ -419,7 +419,7 @@ void ltntstools_pcr_to_ascii(char **buf, int64_t pcr);
  * @brief       Convert a pts into a human readibly string. Either pass a buffer of atleast 16 bytes,
  *              or pass NULL and a buffer will be allocated for you. If you pass NULL, you own the lifespan, don't
  *              leak it.
- * @param[out]  char **buf
+ * @param[in,out] char **buf
  * @param[in]   int64_t pts - tick value
  */
 void ltntstools_pts_to_ascii(char **buf, int64_t pts);

@@ -131,11 +131,11 @@ enum ltntstools_notification_event_e {
 	EVENT_UPDATE_PID_PCR_WALLTIME,       /**< pid.lastPCRWalltimeDriftMs value changed. */
 
 	/* STREAMS */
-	EVENT_UPDATE_STREAM_CC_COUNT,        /**< stream.ccErrors changed. */
+	EVENT_UPDATE_STREAM_CC_COUNT,        /**< stream.internal_ccErrors changed. */
 	EVENT_UPDATE_STREAM_TEI_COUNT,       /**< stream.teiErrors changed. */
 	EVENT_UPDATE_STREAM_SCRAMBLED_COUNT, /**< stream.scrambledCount changed. */
 	EVENT_UPDATE_STREAM_MBPS,            /**< stream.mbps changed. */
-	EVENT_UPDATE_PCR_MBPS,               /**< stream.bc_ctx.mbps changed, query with ltntstools_bitrate_calculator_query_bitrate(). */
+	EVENT_UPDATE_PCR_MBPS,               /**< stream.bc_ctx.bitrate changed, query with ltntstools_bitrate_calculator_query_bitrate(). */
 	EVENT_UPDATE_STREAM_IAT_HWM,         /**< stream.iat_hwm_us changed. */
 	EVENT_NOTIFICATION_MAX
 };
@@ -297,7 +297,7 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream);
 
 /**
  * @brief       Allocate a new stats object instance.
- * @param[out]  struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
+ * @param[out]  struct ltntstools_stream_statistics_s **stream - Handle / context. Must not be NULL.
  * @return      0 - Success, else < 0 on error.
  */
 int ltntstools_pid_stats_alloc(struct ltntstools_stream_statistics_s **stream);
@@ -579,7 +579,7 @@ int64_t ltntstools_pid_stats_pid_get_pcr(struct ltntstools_stream_statistics_s *
  * @brief       Query the current pid PCR vs walltime drift, assuming this PID contains a PCR. Else, return -1.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @param[out]  int64_t driftMs - Amount of drift ahead of walltime, or behind walltime, the PCR is. Must not be NULL on success path.
+ * @param[out]  int64_t *driftMs - Amount of drift ahead of walltime, or behind walltime, the PCR is. Must not be NULL on success path.
  * @return      0 - Success, else < 0 if stream is NULL, PID has not been observed/allocated, or PID has no PCR.
  */
 int ltntstools_pid_stats_pid_get_pcr_walltime_driftms(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr, int64_t *driftMs);
@@ -618,8 +618,8 @@ uint64_t ltntstools_pid_stats_stream_get_iat_hwm_us(struct ltntstools_stream_sta
  *              ltntstools_notification_unregister_callbacks().
  *              Don't attempt to unregister during a callback.
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. Must not be NULL.
- * @param[in]   void * - User specific application context (optional)
- * @param[in]   enum ltntstools_notification_event_e - event id for callbacks. Must be in range.
+ * @param[in]   enum ltntstools_notification_event_e e - event id for callbacks. Must be in range.
+ * @param[in]   void *userContext - User specific application context (optional)
  * @param[in]   ltntstools_notification_callback cb - User specific application callback. Must not be NULL.
  * @return      0 - Success, else < 0 if stream is NULL, event is invalid, or cb is NULL.
  */

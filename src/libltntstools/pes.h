@@ -86,7 +86,7 @@ struct ltn_pes_packet_s
 
 /**
  * @brief       Allocate a pes packet, with no payload data.
- * @return      struct ltn_pes_packet_s *pkt - new allocation.
+ * @return      struct ltn_pes_packet_s *pkt - new allocation, or NULL on allocation failure.
  */
 struct ltn_pes_packet_s *ltn_pes_packet_alloc();
 
@@ -107,7 +107,7 @@ void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt);
  * @param[in]   struct ltn_pes_packet_s *pkt - object
  * @param[in]   struct klbs_context_s *bs - existing bytestream container
  * @param[in]   int skipData - Boolean. Should the parse avoid (for performance reasons) parsing the associated payload data?
- * @return      number of bits parsed, or < 0 on error.
+ * @return      number of bits parsed. 0 if the buffer didn't contain enough data to parse anything.
  */
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData);
 
@@ -139,7 +139,7 @@ void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *
 /**
  * @brief       Allocate a new PES packet and duplicate the src PES packet and any attached payload.
  * @param[in]   struct ltn_pes_packet_s *src - object
- * #return      duplicate PES or NULL
+ * @return      duplicate PES or NULL
  */
 struct ltn_pes_packet_s *ltn_pes_packet_clone(struct ltn_pes_packet_s *src);
 
@@ -167,7 +167,7 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pes, struct klbs_context_s 
 
 /**
  * @brief       Initialize a packet writer context.
- * @param[in]   struct ltn_pes_packet_writer_ctx *ctx - object
+ * @param[out]  struct ltn_pes_packet_writer_ctx *ctx - object
  * @param[in]   const char *dirname - base directory where file will be recorded.
  * @return      0 on success else < 0.
  */
@@ -175,6 +175,7 @@ int ltn_pes_packet_writer_init(struct ltn_pes_packet_writer_ctx *ctx, const char
 
 /**
  * @brief       Save the pes ES into a file, in dirname
+ * @param[in,out] struct ltn_pes_packet_writer_ctx *ctx - object
  * @param[in]   struct ltn_pes_packet_s *pes - object
  * @return      0 on success else < 0.
  */
@@ -182,6 +183,7 @@ int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes
 
 /**
  * @brief       Save the pes frame into a file, in dirname
+ * @param[in,out] struct ltn_pes_packet_writer_ctx *ctx - object
  * @param[in]   struct ltn_pes_packet_s *pes - object
  * @return      0 on success else < 0.
  */

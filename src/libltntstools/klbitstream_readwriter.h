@@ -63,7 +63,7 @@ struct klbs_context_s
  *              of how much data has been read/written.
  *              IE: The total allocation size of the underlying memory allocation.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
- * @return      Buffer address.
+ * @return      Total size of the buffer, in bytes.
  */
 #define klbs_get_buffer_size(ctx) ((ctx)->buflen)
 
@@ -73,7 +73,7 @@ struct klbs_context_s
  *              you're slowly draining a buffer and want to prevent peeking
  *              beyond the total allocate size.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
- * @return      Buffer address.
+ * @return      Number of unused/free bytes remaining in the buffer.
  */
 #define klbs_get_byte_count_free(ctx) (klbs_get_buffer_size(ctx) - klbs_get_byte_count(ctx))
 
@@ -130,7 +130,7 @@ static inline void klbs_init(struct klbs_context_s *ctx)
  *              Subsequent calls to klbs_write_bits() will write bit-by-bit to the contexts of buf.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  * @param[in]   uint8_t *buf  Buffer the bistream write calls will modify
- * @param[in]   uint32_t *buf  Buffer size in bytes.
+ * @param[in]   uint32_t lengthBytes  Buffer size in bytes.
  */
 static inline void klbs_write_set_buffer(struct klbs_context_s *ctx, uint8_t *buf, uint32_t lengthBytes)
 {
@@ -144,7 +144,7 @@ static inline void klbs_write_set_buffer(struct klbs_context_s *ctx, uint8_t *bu
  *              Subsequent calls to klbs_read_bits() will extract bit-by-bit the contexts of buf.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  * @param[in]   uint8_t *buf  Buffer the bistream will read from.
- * @param[in]   uint32_t *buf  Buffer size in bytes.
+ * @param[in]   uint32_t lengthBytes  Buffer size in bytes.
  */
 static inline void klbs_read_set_buffer(struct klbs_context_s *ctx, uint8_t *buf, uint32_t lengthBytes)
 {
@@ -391,6 +391,7 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 /**
  * @brief       Read between 1..64 bits from the bitstream.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
+ * @param[in]   uint32_t bitcount  number of bits to read
  * @return      uint64_t  bits
  */
 static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitcount)
@@ -431,6 +432,7 @@ static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitco
  *              original context. As a result, consecutive peek calls will always return
  *              the same content.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
+ * @param[in]   uint32_t bitcount  number of bits to peek
  * @return      uint64_t  bits
  */
 static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitcount)
@@ -489,6 +491,7 @@ static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
  *              original context. As a result, consecutive peek calls will always return
  *              the same content.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
+ * @param[in]   uint32_t bitcount  number of bits to peek and print
  */
 static inline void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32_t bitcount)
 {
@@ -540,7 +543,6 @@ static inline struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t stor
 * @param[in]   struct klbs_context_s *dst - destination
 * @param[in]   struct klbs_context_s *src - souce
 * @param[in]   size_t bits - number of bits to copy
-* @return      struct klbs_context_s *  The context itself, or NULL on error.
 */
 static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
 {
@@ -570,7 +572,6 @@ static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_
 * @param[in]   struct klbs_context_s *dst - destination
 * @param[in]   struct klbs_context_s *src - souce
 * @param[in]   size_t bits - number of bits to copy
-* @return      struct klbs_context_s *  The context itself, or NULL on error.
 */
 static inline void klbs_bitcopy(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
 {

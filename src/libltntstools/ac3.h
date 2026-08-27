@@ -95,15 +95,15 @@ struct ltn_ac3_header_syncframe_s {
 };
 
 /**
- * @brief       Print to a filedescriptor  the contents of struct ltn_ac3_header_syncframe_s 
+ * @brief       Print to a filedescriptor  the contents of struct ltn_ac3_header_syncframe_s
  * @param[in]   int fd - filedescriptor, or STDOUT_FILENO for console
- * @param[in]   struct ltn_ac3_header_syncframe_s *ptr - object
+ * @param[in]   struct ltn_ac3_header_syncframe_s *sf - object
  */
 void ltntstools_ac3_header_dprintf(int fd, struct ltn_ac3_header_syncframe_s *sf);
 
 /**
  * @brief       Parse an AC3 ES payload stream (beginning with 0x0b77 sequence) into an object
- * @param[in]   struct ltn_ac3_header_syncframe_s *ptr - object
+ * @param[out]  struct ltn_ac3_header_syncframe_s *sf - object, populated on success
  * @param[in]   unsigned char *buf - AC3 ES payload buffer
  * @param[in]   int lengthBytes - length of buffer in bytes
  * @return      0 on success, else < 0.

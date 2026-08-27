@@ -42,7 +42,7 @@ extern "C" {
  * @param[out]  uint8_t **pkts - output array
  * @param[out]  uint32_t *packetCount - number of elements in the output array
  * @param[in]   int packetSize - Typically 188
- * @param[in]   uint8_t *cc - user allocate storage where the CC counter will be maintained.
+ * @param[in,out] uint8_t *cc - user allocated storage holding the current CC value on input, updated as packets are generated.
  * @param[in]   uint16_t pid - transport packet identifier for the output packets.
  * @return      0 on success, else < 0.
  */
@@ -57,12 +57,12 @@ int ltntstools_ts_packetizer(const uint8_t *buf, unsigned int byteCount,
  * @param[out]  uint8_t **pkts - output array
  * @param[out]  uint32_t *packetCount - number of elements in the output array
  * @param[in]   int packetSize - Typically 188
- * @param[in]   uint8_t *cc - user allocate storage where the CC counter will be maintained.
+ * @param[in,out] uint8_t *cc - user allocated storage holding the current CC value on input, updated as packets are generated.
  * @param[in]   uint16_t pid - transport packet identifier for the output packets.
  * @param[in]   int64_t pcr - PCR value, may be larger than allowable PCR value, wrapping will truncate properly.
  *                            A valid of -1 indicates NOT to insert a PCR.
- * @param[in]   int - random_access_indicator flag
- * @param[in]   int - elementary_stream_priority_indicator
+ * @param[in]   int random_access_indicator - random_access_indicator flag
+ * @param[in]   int elementary_stream_priority_indicator - elementary_stream_priority_indicator flag
  * @return      0 on success, else < 0.
  */
 int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount,

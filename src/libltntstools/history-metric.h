@@ -22,7 +22,7 @@ extern "C" {
 struct ltntstools_history_metric_s
 {
 	struct xorg_list list;
-	time_t ts;   /**< Epoch minute this bucket represents */
+	time_t ts;   /**< Epoch timestamp (seconds) this bucket represents */
 	uint64_t count;  /**< A count of something  */
 };
 
@@ -111,7 +111,7 @@ struct ltntstools_history_metric_s *ltntstools_history_metric_alloc(time_t now, 
 
 /**
  * @brief       Free a previously allocated context.
- * @param[in]   void *hdl - Handle / context.
+ * @param[in]   struct ltntstools_history_metric_s *m - Handle / context.
  */
 void ltntstools_history_metric_free(struct ltntstools_history_metric_s *m);
 

@@ -17,7 +17,7 @@ extern "C" {
  *                CALLER OWNS the array memory allocation, make sure you free it after use.
  * @param[in]     const uint8_t *buf - Buffer of data, possibly containing none or more NAL packets.
  * @param[in]     int lengthBytes - Buffer length in bytes.
- * @param[in,out] struct ltn_nal_headers_s **array - Destination pointer for new array allocation
+ * @param[out]    struct ltn_nal_headers_s **array - Destination pointer for new array allocation
  * @param[out]    int *arrayLength - number of entries in the array.
  * @return          0 - Success
  * @return        < 0 - Error
@@ -28,7 +28,7 @@ int ltn_nal_h264_find_headers(const uint8_t *buf, int lengthBytes, struct ltn_na
  * @brief         Search buffer for the byte sequence 000001, a NAL header signature.
  * @param[in]     const uint8_t *buf - Buffer of data, possibly containing none or more NAL packets.
  * @param[in]     int lengthBytes - Buffer length in bytes.
- * @param[in,out] int offset - Enumerator. Caller MUST initalize to -1 before first call.
+ * @param[in,out] int *offset - Enumerator. Caller MUST initalize to -1 before first call.
  *                             Function will use the contents off offset to enumerate the
  *                             entire buffer over multiple calls.
  * @return          0 - Success
@@ -52,41 +52,41 @@ void *h264_slice_counter_alloc(uint16_t pid);
 
 /**
  * @brief         Query the pid assocuated with the current counter;
- * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     void *ctx - Context returned from the prior h264_slice_counter_alloc() call.
  * @return        0 thru 0x2000
  */
 uint16_t h264_slice_counter_get_pid(void *ctx);
 
 /**
  * @brief         A machanism to find h264 slices in a bitstream, count the number of respective I/P/B frames.
- * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     void *ctx - Context returned from the prior h264_slice_counter_alloc() call.
  */
 void h264_slice_counter_free(void *ctx);
 
 /**
  * @brief         Reset the internal I/P/B frame counts to zero.
- * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     void *ctx - Context returned from the prior h264_slice_counter_alloc() call.
  */
 void h264_slice_counter_reset(void *ctx);
 
 /**
  * @brief         Reset the internal I/P/B frame counts to zero, adn establish a pid to slice count;
- * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     void *ctx - Context returned from the prior h264_slice_counter_alloc() call.
  * @param[in]     uint16_t pid - Specific video pid to analyze. Use 0x2000 to analyze all pids.
  */
 void h264_slice_counter_reset_pid(void *ctx, uint16_t pid);
 
 /**
  * @brief         Reset the internal I/P/B frame counts to zero.
- * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @param[in]     void *ctx - Context returned from the prior h264_slice_counter_alloc() call.
  * @param[in]     int fd - file descriptor that the prinf will occur to.
  * @param[in]     int printZeroCounts - Ensure totals that are zero are printed (1) or discarded(0)
  */
 void h264_slice_counter_dprintf(void *ctx, int fd, int printZeroCounts);
 
 /**
- * @brief         Scan the buffer, update the I/P/B counts based on slices found within the buffer. 
- * @param[in]     void *s - Context returned from the prior h264_slice_counter_alloc() call.
+ * @brief         Scan the buffer, update the I/P/B counts based on slices found within the buffer.
+ * @param[in]     void *ctx - Context returned from the prior h264_slice_counter_alloc() call.
  * @param[in]     const unsigned char *pkts - A fully aligned buffer of transport packets.
  * @param[in]     int packetCount - Number of 188 bytes transport packets in the buffer.
  */
@@ -115,7 +115,7 @@ int h264_is_slice_type_pframe(unsigned int sliceType);
 
 /**
  * @brief         Return the AVC slice_type ror a given nal structure.
- * @param[in]     struct ltn_nal_headers_s *s - nal header.
+ * @param[in]     struct ltn_nal_headers_s *hdr - nal header.
  * @param[out]    unsigned int *sliceType - A valid slice_type as identified in the AVC specification.
  * @return        0 on success else < 0
  */
@@ -129,7 +129,7 @@ const char *ltn_sei_h264_lookupName(int seiType);
 /**
  * @brief         Strip the RBSP emulation prevents bytes from a nal header. Necessary for SEI processing typically.
  *                The ptr field buffer and lengthBytes fields are adjusted.
- * @param[in]     struct ltn_nal_headers_s *h - Nal to modify
+ * @param[in,out] struct ltn_nal_headers_s *h - Nal to modify
  * @return          0 - Success
  * @return        < 0 - Error
  */

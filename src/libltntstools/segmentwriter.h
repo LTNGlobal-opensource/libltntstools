@@ -19,8 +19,8 @@ extern "C" {
 #define SEGMENTEDWRITER_SEGMENTED   1
 
 /**
- * @brief       Allocate a framework context capable of smoothing MPEG-TS SPTS/MPTS multiplexes.
- * @param[in]   void **hdl - Handle / context for further use.
+ * @brief       Allocate a threaded file writer context, producing single or segmented recordings.
+ * @param[out]  void **hdl - Handle / context for further use.
  * @param[in]   const char *filenamePrefix - Eg '/tmp/myrecording-'
  * @param[in]   const char *filenameSuffix - Eg. '.pcap'
  * @param[in]   int writeMode - SEGMENTEDWRITER_SEGMENTED or SEGMENTEDWRITER_SINGLE_FILE
@@ -50,7 +50,7 @@ int     ltntstools_segmentwriter_set_header(void *hdl, const uint8_t *buf, size_
 ssize_t ltntstools_segmentwriter_write(void *hdl, const uint8_t *buf, size_t lengthBytes);
 
 /**
- * @brief       Free a previously allocate packet, and any attached payload
+ * @brief       Free a previously allocated context.
  * @param[in]   void *hdl - object
  */
 void    ltntstools_segmentwriter_free(void *hdl);
@@ -58,7 +58,7 @@ void    ltntstools_segmentwriter_free(void *hdl);
 /**
  * @brief       Query the current filename being written
  * @param[in]   void *hdl - Handle / context for further use.
- * @param[in]   car *buf - destination
+ * @param[out]  char *dst - destination
  * @param[in]   int lengthBytes - destination length in bytes
  * @return      0 on success, else < 0.
  */
@@ -102,10 +102,10 @@ time_t  ltntstools_segmentwriter_get_recording_start_time(void *hdl);
  *              You are free to write data to *dst up to lengthBytes
  *              before you queue this for writing.
  * @param[in]   void *hdl - Handle / context for further use.
- * @param[in]   size_t lengthBytes - Handle / context for further use.
- * @param[in]   void **obj - 
- * @param[in]   uint8_t **dst - 
- * @return      time_t time
+ * @param[in]   size_t lengthBytes - Number of bytes to allocate for the object's data buffer.
+ * @param[out]  void **obj - Opaque object handle, pass to ltntstools_segmentwriter_object_write() once populated.
+ * @param[out]  uint8_t **dst - Pointer to the allocated data buffer, writable up to lengthBytes.
+ * @return      0 on success, else < 0.
  */
 int     ltntstools_segmentwriter_object_alloc(void *hdl, size_t lengthBytes, void **obj, uint8_t **dst);
 
@@ -113,7 +113,7 @@ int     ltntstools_segmentwriter_object_alloc(void *hdl, size_t lengthBytes, voi
  * @brief       Queue object data to the writer for later I/O to storage.
  * @param[in]   void *hdl - Handle / context for further use.
  * @param[in]   void *object - allocated previously via ltntstools_segmentwriter_object_alloc()
- * @return      0 on success, else < 0
+ * @return      number of bytes queued
  */
 int     ltntstools_segmentwriter_object_write(void *hdl, void *object);
 
