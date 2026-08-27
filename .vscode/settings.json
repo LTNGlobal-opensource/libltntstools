@@ -43,6 +43,7 @@
         "**/test_throughput": true,
         "**/test_streammodel": true,
         "**/test_streammodel_extractors": true,
+        "**/test_pes_extractor": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

@@ -28,3 +28,5 @@ test_streammodel
 test_streammodel.dSYM
 test_streammodel_extractors
 test_streammodel_extractors.dSYM
+test_pes_extractor
+test_pes_extractor.dSYM
