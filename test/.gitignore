@@ -30,3 +30,5 @@ test_streammodel_extractors
 test_streammodel_extractors.dSYM
 test_pes_extractor
 test_pes_extractor.dSYM
+test_sei_timestamp
+test_sei_timestamp.dSYM

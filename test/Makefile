@@ -16,7 +16,7 @@ endif
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp
 	./test_crc32
 	./test_history_metric
 	./test_ts
@@ -33,6 +33,7 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 	./test_streammodel
 	./test_streammodel_extractors
 	./test_pes_extractor
+	./test_sei_timestamp
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -82,5 +83,8 @@ test_streammodel_extractors: test_streammodel_extractors.c ../src/streammodel-ex
 test_pes_extractor: test_pes_extractor.c ../src/pes-extractor.c ../src/klringbuffer.c ../src/utils.c ../src/pes.c ../src/crc32.c ../src/stats.c ../src/clocks.c ../src/ts.c ../src/history-metric.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_pes_extractor.c ../src/pes-extractor.c ../src/klringbuffer.c ../src/utils.c ../src/pes.c ../src/crc32.c ../src/stats.c ../src/clocks.c ../src/ts.c ../src/history-metric.c -lpthread
 
+test_sei_timestamp: test_sei_timestamp.c ../src/sei-timestamp.c
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_sei_timestamp.c ../src/sei-timestamp.c
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp
