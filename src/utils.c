@@ -178,8 +178,8 @@ char *network_stream_ascii(struct iphdr *iphdr, struct udphdr *udphdr)
 #endif
 
 	char *str = malloc(256);
-	sprintf(str, "%s:%d", inet_ntoa(srcaddr), src_port);
-	sprintf(str + strlen(str), " -> %s:%d", inet_ntoa(dstaddr), dst_port);
+	snprintf(str, 256, "%s:%d", inet_ntoa(srcaddr), src_port);
+	snprintf(str + strlen(str), 256 - strlen(str), " -> %s:%d", inet_ntoa(dstaddr), dst_port);
 
 	return str;
 }
