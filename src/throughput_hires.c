@@ -194,8 +194,8 @@ int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *
 
 	uint64_t begin, end;
 	*vmin = INT64_C(1) << 62;
-	*vmax = -1;
-	*vavg = -1;
+	*vmax = INT64_MIN;
+	*vavg = 0;
 	int64_t items = 0;
 
 	if (from)
@@ -220,7 +220,7 @@ int throughput_hires_minmaxavg_i64(void *hdl, uint32_t channel, struct timeval *
 
 			*vavg += e->value_i64;
 		}
-		if (e->timestamp < end)
+		if (e->timestamp < begin)
 			break;
 	}
 
