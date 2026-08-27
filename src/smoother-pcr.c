@@ -594,7 +594,19 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	}
 	pthread_mutex_unlock(&ctx->listMutex);
 
-	/* Spawn a thread that manages the scheduled output queue. */
+	/* Spawn a thread that manages the scheduled output queue.
+	 * threadRunning must be set here, synchronously, before the thread is
+	 * created: smoother_pcr_threadFunc() also sets it (redundantly) once
+	 * it actually starts running, but smoother_pcr_free() gates its
+	 * "wait for the thread to terminate" logic on this flag. If free() is
+	 * called before the new thread gets scheduled for the first time,
+	 * threadRunning would still read 0, free() would skip the wait
+	 * entirely, and the thread would go on to dereference ctx after
+	 * free() has already freed it -- a real, easily reproducible
+	 * use-after-free (confirmed via a plain alloc() immediately followed
+	 * by free(), no other calls in between).
+	 */
+	ctx->threadRunning = 1;
 	pthread_create(&ctx->threadId, NULL, smoother_pcr_threadFunc, ctx);
 
 	*hdl = ctx;
