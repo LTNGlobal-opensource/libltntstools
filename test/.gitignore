@@ -16,3 +16,5 @@ test_pat
 test_pat.dSYM
 test_sectionextractor
 test_sectionextractor.dSYM
+test_ts_packetizer
+test_ts_packetizer.dSYM
