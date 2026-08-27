@@ -54,6 +54,7 @@
         "**/test_nal_bitreader": true,
         "**/test_udp_receiver": true,
         "**/test_xorg_list": true,
+        "**/test_vbv": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

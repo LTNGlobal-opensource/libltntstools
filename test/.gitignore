@@ -50,3 +50,5 @@ test_udp_receiver
 test_udp_receiver.dSYM
 test_xorg_list
 test_xorg_list.dSYM
+test_vbv
+test_vbv.dSYM
