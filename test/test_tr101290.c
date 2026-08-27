@@ -398,6 +398,16 @@ static void *alloc_real(void)
 	int ret = ltntstools_tr101290_alloc(&hdl, notify_cb, NULL);
 	if (ret != 0)
 		return NULL;
+
+	/* The background thread's very first action is an unconditional
+	 * ltntstools_tr101290_alarm_raise_all(), before it ever enters its main
+	 * loop. Give it a moment to complete before any caller writes/queries,
+	 * so that burst can't race with (and spuriously flip) state a test is
+	 * about to check -- confirmed flaky (~1/5 runs) without this. Also
+	 * covers file header note #1: threadRunning is set inside that same
+	 * thread, so this also ensures free() always sees it set. */
+	usleep(50 * 1000);
+
 	return hdl;
 }
 
@@ -521,7 +531,12 @@ static void test_summary_get_returns_all_events_matching_defaults(void)
 	if (idx >= 0) {
 		CHECK(items[idx].priorityNr == 1);
 		CHECK(items[idx].enabled == 1);
-		CHECK(items[idx].raised == 0);
+		/* Not 0: the background thread's very first action is an
+		 * unconditional ltntstools_tr101290_alarm_raise_all(), before this
+		 * test has sent any traffic at all -- every alarm starts raised by
+		 * design (see ltntstools_tr101290_reset_alarms()'s doc comment),
+		 * cleared only once real traffic proves the stream healthy. */
+		CHECK(items[idx].raised == 1);
 	}
 
 	free(items);
@@ -734,6 +749,581 @@ static void test_write_without_pat_raises_pat_error_then_clears_with_good_pat_af
 	ltntstools_tr101290_free(hdl);
 }
 
+/* ============================================================================
+ * The above covers tr101290.c/-events.c/-alarms.c/-timers.c/-summary.c
+ * thoroughly. p1.c and p2.c (the actual per-check state machines: sync
+ * loss, sync byte error, PAT error, CC error, PMT/PID error, transport
+ * error, CRC error, PCR error, CAT error) were, until here, only touched by
+ * the single PAT-error scenario above. Everything below fills that gap.
+ *
+ * A "medium" context (event_tbl + a real streamStatistics, no thread/
+ * streammodel) is used for p2.c's functions, none of which touch smHandle.
+ * p1.c's only entry point, p1_write(), unconditionally calls
+ * ltntstools_streammodel_write(s->smHandle, ...) internally (via
+ * p1_process_p1_56()), so p1.c coverage below goes through the real public
+ * API instead (alloc_real()/ltntstools_tr101290_write()), same as the PAT
+ * test above.
+ *
+ * *** ANOTHER REAL BUG FOUND, NOT FIXED (same "no changes to tr101290-*"
+ * constraint as the file header's existing list) ***
+ * 6. p2_process_p2_3() (tr101290-p2.c) builds a "0x%04x " pid list into
+ *    `msg` via `snprintf(msg + strlen(msg), s - strlen(msg), ...)` where
+ *    `s` is a *local* `int s = strlen(msg);` declared immediately above --
+ *    shadowing the function's own `struct ltntstools_tr101290_s *s`
+ *    parameter for the rest of that block. Since that local `s` always
+ *    equals `strlen(msg)` at the point it's read, the computed size is
+ *    always `strlen(msg) - strlen(msg)` == 0, so snprintf() writes nothing,
+ *    every time, regardless of which/how many pids violated PCR timing.
+ *    Actual (tested) behavior: E101290_P2_3__PCR_ERROR/_3a are raised
+ *    correctly, but their `arg` is always empty, never the intended pid
+ *    list. test_p2_write_pcr_error_raised_after_violation() below asserts
+ *    the real (empty-arg) behavior rather than the obviously-intended one.
+ * ============================================================================
+ */
+
+/* -------- "medium" context: event_tbl + real streamStatistics -------- */
+
+static struct ltntstools_tr101290_s *build_medium_ctx(void)
+{
+	struct ltntstools_tr101290_s *s = calloc(1, sizeof(*s));
+	s->event_tbl = ltntstools_tr101290_event_table_copy();
+	ltntstools_pid_stats_alloc(&s->streamStatistics);
+	return s;
+}
+
+static void free_medium_ctx(struct ltntstools_tr101290_s *s)
+{
+	ltntstools_pid_stats_free(s->streamStatistics);
+	free(s->event_tbl);
+	free(s);
+}
+
+/* Mirrors exactly what ltntstools_tr101290_write() does around p2_write():
+ * snapshot the pre-write TEI/scrambled counts, update the real stats, then
+ * call p2_write(). Lets p2_write() be exercised directly (fast, no thread)
+ * while still honoring the delta-based semantics its caller is responsible
+ * for computing. */
+static void call_p2_write(struct ltntstools_tr101290_s *s, const uint8_t *buf, size_t packetCount, struct timeval *time_now)
+{
+	s->preTEIErrors = ltntstools_pid_stats_stream_get_tei_errors(s->streamStatistics);
+	s->preScrambledCount = ltntstools_pid_stats_stream_get_scrambled_count(s->streamStatistics);
+	ltntstools_pid_stats_update(s->streamStatistics, buf, packetCount);
+	p2_write(s, buf, packetCount, time_now);
+}
+
+static void build_pkt_with_flags(uint8_t *pkt, uint16_t pid, int tei, int scrambled, uint8_t cc)
+{
+	memset(pkt, 0xFF, 188);
+	pkt[0] = 0x47;
+	pkt[1] = (tei ? 0x80 : 0) | ((pid >> 8) & 0x1f);
+	pkt[2] = pid & 0xff;
+	pkt[3] = (uint8_t)((scrambled ? 0x80 : 0) | 0x10 | (cc & 0x0f)); /* payload only */
+}
+
+/* -------- p2.c: pure/direct-call functions -------- */
+
+static void test_p2_process_pat_model_sets_contains_pcr_only_for_pcr_pid(void)
+{
+	struct ltntstools_tr101290_s *s = build_medium_ctx();
+
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+	struct ltntstools_pat_program_s *pp1 = &pat->programs[pat->program_count++];
+	memset(pp1, 0, sizeof(*pp1));
+	pp1->program_number = 1;
+	pp1->program_map_PID = 0x100;
+	pp1->pmt.PCR_PID = 0x101;
+
+	struct ltntstools_pat_program_s *pp2 = &pat->programs[pat->program_count++];
+	memset(pp2, 0, sizeof(*pp2));
+	pp2->program_number = 2;
+	pp2->program_map_PID = 0x200;
+	pp2->pmt.PCR_PID = 0; /* no PCR for this program */
+
+	p2_process_pat_model(s, pat);
+
+	CHECK(ltntstools_pid_stats_pid_get_contains_pcr(s->streamStatistics, 0x101) == 1);
+	CHECK(ltntstools_pid_stats_pid_get_contains_pcr(s->streamStatistics, 0x200) == 0);
+
+	ltntstools_pat_free(pat);
+	free_medium_ctx(s);
+}
+
+/* See file header note #3 (this file's original notes) and note #6 above:
+ * documents the actual (dead-code) behavior -- unconditionally returns
+ * before ever touching s->p2.* or raising anything. */
+static void test_p2_process_p2_2_is_dead_code_noop(void)
+{
+	struct ltntstools_tr101290_s *s = build_light_ctx();
+	s->now.tv_sec = 1700000000;
+	/* Every s->p2.lastXXX field is already maximally stale (zeroed). If the
+	 * staleness-window logic actually ran, this would raise P2.2. */
+
+	p2_process_p2_2(s);
+
+	CHECK(s->event_tbl[E101290_P2_2__CRC_ERROR].raised == 0);
+
+	free_light_ctx(s);
+}
+
+static void test_p2_streammodel_callback_ignores_non_crc_status(void)
+{
+	struct ltntstools_tr101290_s *s = build_light_ctx();
+	s->now.tv_sec = 1700000000;
+
+	struct streammodel_callback_args_s args;
+	memset(&args, 0, sizeof(args));
+	args.status = 0; /* not STREAMMODEL_CB_CRC_STATUS */
+	args.context = STREAMMODEL_CB_CONTEXT_PAT;
+	args.arg = CRC_ARG_INVALID;
+
+	p2_streammodel_callback(s, &args);
+
+	CHECK(s->event_tbl[E101290_P2_2__CRC_ERROR].raised == 0);
+	CHECK(s->p2.lastPAT.tv_sec == 0); /* untouched: the status guard returns first */
+
+	free_light_ctx(s);
+}
+
+struct p2_context_case_s {
+	uint32_t context;
+	const char *name;
+};
+
+static void test_p2_streammodel_callback_raises_for_every_context(void)
+{
+	struct p2_context_case_s cases[] = {
+		{ STREAMMODEL_CB_CONTEXT_PAT, "PAT" },
+		{ STREAMMODEL_CB_CONTEXT_PMT, "PMT" },
+		{ STREAMMODEL_CB_CONTEXT_CAT, "CAT" },
+		{ STREAMMODEL_CB_CONTEXT_SDT, "SDT" },
+		{ STREAMMODEL_CB_CONTEXT_BAT, "BAT" },
+		{ STREAMMODEL_CB_CONTEXT_NIT, "NIT" },
+		{ STREAMMODEL_CB_CONTEXT_TOT, "TOT" },
+		{ STREAMMODEL_CB_CONTEXT_EIT, "EIT" },
+	};
+
+	for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		struct ltntstools_tr101290_s *s = build_light_ctx();
+		s->now.tv_sec = 1700000000;
+
+		struct streammodel_callback_args_s args;
+		memset(&args, 0, sizeof(args));
+		args.status = STREAMMODEL_CB_CRC_STATUS;
+		args.context = cases[i].context;
+		args.arg = CRC_ARG_INVALID;
+
+		p2_streammodel_callback(s, &args);
+
+		CHECK(s->event_tbl[E101290_P2_2__CRC_ERROR].raised == 1);
+		CHECK(strcmp(s->event_tbl[E101290_P2_2__CRC_ERROR].arg, cases[i].name) == 0);
+
+		free_light_ctx(s);
+	}
+}
+
+static void test_p2_streammodel_callback_clears_after_debounce(void)
+{
+	struct ltntstools_tr101290_s *s = build_light_ctx();
+	struct timeval t0 = { 1700000000, 0 };
+	s->now = t0;
+
+	struct streammodel_callback_args_s args;
+	memset(&args, 0, sizeof(args));
+	args.status = STREAMMODEL_CB_CRC_STATUS;
+	args.context = STREAMMODEL_CB_CONTEXT_PAT;
+	args.arg = CRC_ARG_INVALID;
+	p2_streammodel_callback(s, &args);
+	CHECK(s->event_tbl[E101290_P2_2__CRC_ERROR].raised == 1);
+
+	/* 6s later, past the 5000ms debounce: a valid PAT clears it. */
+	struct timeval t1 = { 1700000006, 0 };
+	s->now = t1;
+	args.arg = CRC_ARG_VALID;
+	p2_streammodel_callback(s, &args);
+	CHECK(s->event_tbl[E101290_P2_2__CRC_ERROR].raised == 0);
+	CHECK(s->p2.lastPAT.tv_sec == t1.tv_sec);
+
+	free_light_ctx(s);
+}
+
+/* -------- p2.c: p2_write() (P2.1 transport error, P2.6 CAT error) -------- */
+
+static void test_p2_write_transport_error_raises_and_clears(void)
+{
+	struct ltntstools_tr101290_s *s = build_medium_ctx();
+	struct timeval t0 = { 1700000000, 0 };
+
+	uint8_t clean[188];
+	build_pkt_with_flags(clean, 0x100, 0, 0, 0);
+	call_p2_write(s, clean, 1, &t0);
+	CHECK(s->event_tbl[E101290_P2_1__TRANSPORT_ERROR].raised == 0);
+
+	uint8_t tei[188];
+	build_pkt_with_flags(tei, 0x100, 1, 0, 1);
+	call_p2_write(s, tei, 1, &t0);
+	CHECK(s->event_tbl[E101290_P2_1__TRANSPORT_ERROR].raised == 1);
+
+	/* 6s later, past the debounce, with no further TEI packets: clears. */
+	struct timeval t1 = { 1700000006, 0 };
+	uint8_t clean2[188];
+	build_pkt_with_flags(clean2, 0x100, 0, 0, 2);
+	call_p2_write(s, clean2, 1, &t1);
+	CHECK(s->event_tbl[E101290_P2_1__TRANSPORT_ERROR].raised == 0);
+
+	free_medium_ctx(s);
+}
+
+static void test_p2_write_cat_error_when_no_recent_cat_and_scrambled_traffic(void)
+{
+	struct ltntstools_tr101290_s *s = build_medium_ctx();
+	/* s->p2.lastCAT starts at the zero timeval: any "now" well past epoch
+	 * is trivially outside the 500ms "recent CAT" window. */
+	struct timeval t0 = { 1700000000, 0 };
+
+	uint8_t clean[188];
+	build_pkt_with_flags(clean, 0x100, 0, 0, 0);
+	call_p2_write(s, clean, 1, &t0);
+	CHECK(s->event_tbl[E101290_P2_6__CAT_ERROR].raised == 0); /* no scrambled traffic yet */
+
+	uint8_t scrambled[188];
+	build_pkt_with_flags(scrambled, 0x100, 0, 1, 1);
+	call_p2_write(s, scrambled, 1, &t0);
+	CHECK(s->event_tbl[E101290_P2_6__CAT_ERROR].raised == 1);
+
+	/* 6s later, past the debounce, with no further new scrambled traffic: clears. */
+	struct timeval t1 = { 1700000006, 0 };
+	uint8_t clean2[188];
+	build_pkt_with_flags(clean2, 0x100, 0, 0, 2);
+	call_p2_write(s, clean2, 1, &t1);
+	CHECK(s->event_tbl[E101290_P2_6__CAT_ERROR].raised == 0);
+
+	free_medium_ctx(s);
+}
+
+static void test_p2_write_cat_error_cleared_when_cat_recent(void)
+{
+	struct ltntstools_tr101290_s *s = build_medium_ctx();
+	struct timeval t0 = { 1700000000, 0 };
+	s->p2.lastCAT = t0; /* simulate a CAT table having just arrived (normally done by p2_streammodel_callback) */
+
+	uint8_t scrambled[188];
+	build_pkt_with_flags(scrambled, 0x100, 0, 1, 0);
+	call_p2_write(s, scrambled, 1, &t0);
+
+	/* Even with brand-new scrambled traffic, a recently-seen CAT means
+	 * P2.6 is never raised at all. */
+	CHECK(s->event_tbl[E101290_P2_6__CAT_ERROR].raised == 0);
+
+	free_medium_ctx(s);
+}
+
+/* -------- p2.c: p2_process_p2_3() (P2.3/2.3a PCR error) -------- */
+
+static void test_p2_process_p2_3_packetcount_guard_skips_processing(void)
+{
+	/* packetCount >= 31 hits the "avoiding overrun, fix me" early return
+	 * in p2_process_p2_3() -- no raise, no clear, left exactly as-is. */
+	struct ltntstools_tr101290_s *s = build_medium_ctx();
+	s->event_tbl[E101290_P2_3__PCR_ERROR].raised = 1; /* pre-set, to prove it's untouched */
+
+	uint8_t buf[31 * 188];
+	for (int i = 0; i < 31; i++) {
+		build_pkt_with_flags(buf + i * 188, 0x100, 0, 0, (uint8_t)i);
+	}
+	struct timeval t0 = { 1700000000, 0 };
+	call_p2_write(s, buf, 31, &t0);
+
+	CHECK(s->event_tbl[E101290_P2_3__PCR_ERROR].raised == 1); /* left alone */
+
+	free_medium_ctx(s);
+}
+
+/* seenPCR must exceed 100 before the PCR violation detector goes live (see
+ * test_stats.c's test_get_pcr_before_and_after_warmup()). See file header
+ * note #6 above for why `arg` is asserted empty rather than pid-list-shaped. */
+static void test_p2_write_pcr_error_raised_after_violation(void)
+{
+	struct ltntstools_tr101290_s *s = build_medium_ctx();
+	uint16_t pcrPid = 0x101;
+	ltntstools_pid_stats_pid_set_contains_pcr(s->streamStatistics, pcrPid);
+
+	uint8_t cc = 0;
+	uint64_t pcr = 0;
+	uint8_t pkt[188];
+	struct timeval t = { 1700000000, 0 };
+
+	/* 3.33ms spacing, well under the 40ms violation threshold. */
+	for (int i = 0; i < 101; i++) {
+		ltntstools_generatePCROnlyPacket(pkt, sizeof(pkt), pcrPid, &cc, pcr);
+		call_p2_write(s, pkt, 1, &t);
+		pcr += 90000;
+	}
+	CHECK(s->event_tbl[E101290_P2_3__PCR_ERROR].raised == 0);
+
+	/* 50ms gap: exceeds the 40ms violation threshold. */
+	pcr += 27000ULL * 50;
+	ltntstools_generatePCROnlyPacket(pkt, sizeof(pkt), pcrPid, &cc, pcr);
+	call_p2_write(s, pkt, 1, &t);
+
+	CHECK(s->event_tbl[E101290_P2_3__PCR_ERROR].raised == 1);
+	CHECK(s->event_tbl[E101290_P2_3a__PCR_REPETITION_ERROR].raised == 1);
+	CHECK(s->event_tbl[E101290_P2_3__PCR_ERROR].arg[0] == 0); /* bug #6: arg is always empty */
+
+	free_medium_ctx(s);
+}
+
+/* -------- p1.c: sync loss / sync byte error (P1.1/P1.2) -------- */
+
+static void test_p1_sync_byte_error_and_ts_sync_loss_raise_then_clear(void)
+{
+	void *hdl = alloc_real();
+	CHECK(hdl != NULL);
+
+	struct timeval t0;
+	gettimeofday(&t0, NULL);
+
+	/* SYNC_LOSS_THRESHOLD is 2: two consecutive bad-sync-byte packets in
+	 * one write() raises both P1.2 (every bad packet) and P1.1 (once the
+	 * consecutive-error threshold is reached). */
+	uint8_t bad[2][188];
+	build_junk_packet(bad[0], 0x101, 0);
+	build_junk_packet(bad[1], 0x101, 1);
+	bad[0][0] = 0x46;
+	bad[1][0] = 0x46;
+	CHECK(ltntstools_tr101290_write(hdl, &bad[0][0], 2, &t0) == 2);
+
+	struct ltntstools_tr101290_summary_item_s *items = NULL;
+	int count = 0;
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	int idx1 = summary_find(items, count, E101290_P1_1__TS_SYNC_LOSS);
+	int idx2 = summary_find(items, count, E101290_P1_2__SYNC_BYTE_ERROR);
+	CHECK(idx1 >= 0 && items[idx1].raised == 1);
+	CHECK(idx2 >= 0 && items[idx2].raised == 1);
+	free(items);
+
+	/* 6s later, past the 5000ms debounce: 6 good packets (> the
+	 * consecutiveSyncBytes > 5 clear threshold) in one write() clears both. */
+	struct timeval sixSeconds = { 6, 0 };
+	struct timeval t1;
+	timeradd(&t0, &sixSeconds, &t1);
+
+	uint8_t good[6][188];
+	for (int i = 0; i < 6; i++) {
+		build_junk_packet(good[i], 0x101, (uint8_t)(2 + i));
+	}
+	CHECK(ltntstools_tr101290_write(hdl, &good[0][0], 6, &t1) == 6);
+
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	idx1 = summary_find(items, count, E101290_P1_1__TS_SYNC_LOSS);
+	idx2 = summary_find(items, count, E101290_P1_2__SYNC_BYTE_ERROR);
+	CHECK(idx1 >= 0 && items[idx1].raised == 0);
+	CHECK(idx2 >= 0 && items[idx2].raised == 0);
+	free(items);
+
+	usleep(20 * 1000);
+	ltntstools_tr101290_free(hdl);
+}
+
+/* -------- p1.c: PAT error variants beyond "no PAT at all" (P1.3/1.3a) -------- */
+
+static void test_p1_pat_error_scrambled_variant_raises_then_clears(void)
+{
+	void *hdl = alloc_real();
+	CHECK(hdl != NULL);
+
+	struct timeval t0;
+	gettimeofday(&t0, NULL);
+
+	uint8_t pat[188];
+	build_pat_packet(pat, 0);
+	pat[3] |= 0x80; /* set transport_scrambling_control non-zero on PID 0x0000 */
+	CHECK(ltntstools_tr101290_write(hdl, pat, 1, &t0) == 1);
+
+	struct ltntstools_tr101290_summary_item_s *items = NULL;
+	int count = 0;
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	int idx = summary_find(items, count, E101290_P1_3__PAT_ERROR);
+	CHECK(idx >= 0 && items[idx].raised == 1);
+	free(items);
+
+	struct timeval sixSeconds = { 6, 0 };
+	struct timeval t1;
+	timeradd(&t0, &sixSeconds, &t1);
+	uint8_t goodpat[188];
+	build_pat_packet(goodpat, 1);
+	CHECK(ltntstools_tr101290_write(hdl, goodpat, 1, &t1) == 1);
+
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	idx = summary_find(items, count, E101290_P1_3__PAT_ERROR);
+	CHECK(idx >= 0 && items[idx].raised == 0);
+	free(items);
+
+	usleep(20 * 1000);
+	ltntstools_tr101290_free(hdl);
+}
+
+static void test_p1_pat_error_bad_tableid_variant_raises(void)
+{
+	void *hdl = alloc_real();
+	CHECK(hdl != NULL);
+
+	struct timeval t0;
+	gettimeofday(&t0, NULL);
+
+	uint8_t pat[188];
+	build_pat_packet(pat, 0);
+	pat[5] = 0x42; /* PID 0x0000 must carry table_id 0x00 */
+	CHECK(ltntstools_tr101290_write(hdl, pat, 1, &t0) == 1);
+
+	struct ltntstools_tr101290_summary_item_s *items = NULL;
+	int count = 0;
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	int idx = summary_find(items, count, E101290_P1_3__PAT_ERROR);
+	CHECK(idx >= 0 && items[idx].raised == 1);
+	free(items);
+
+	usleep(20 * 1000);
+	ltntstools_tr101290_free(hdl);
+}
+
+/* -------- p1.c: continuity counter error (P1.4) -------- */
+
+static void test_p1_continuity_counter_error_raises_then_clears(void)
+{
+	void *hdl = alloc_real();
+	CHECK(hdl != NULL);
+
+	struct timeval t0;
+	gettimeofday(&t0, NULL);
+
+	/* Baseline call: establishes CCCounterLastWrite with zero errors so far. */
+	uint8_t pkt0[188];
+	build_junk_packet(pkt0, 0x101, 0);
+	CHECK(ltntstools_tr101290_write(hdl, pkt0, 1, &t0) == 1);
+
+	/* CC jumps 0 -> 5: a new CC error is counted during this write. */
+	uint8_t pkt1[188];
+	build_junk_packet(pkt1, 0x101, 5);
+	CHECK(ltntstools_tr101290_write(hdl, pkt1, 1, &t0) == 1);
+
+	struct ltntstools_tr101290_summary_item_s *items = NULL;
+	int count = 0;
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	int idx = summary_find(items, count, E101290_P1_4__CONTINUITY_COUNTER_ERROR);
+	CHECK(idx >= 0 && items[idx].raised == 1);
+	free(items);
+
+	/* 6s later, past the debounce, correctly-sequenced CC (no new error
+	 * since the last write): clears. */
+	struct timeval sixSeconds = { 6, 0 };
+	struct timeval t1;
+	timeradd(&t0, &sixSeconds, &t1);
+	uint8_t pkt2[188];
+	build_junk_packet(pkt2, 0x101, 6);
+	CHECK(ltntstools_tr101290_write(hdl, pkt2, 1, &t1) == 1);
+
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	idx = summary_find(items, count, E101290_P1_4__CONTINUITY_COUNTER_ERROR);
+	CHECK(idx >= 0 && items[idx].raised == 0);
+	free(items);
+
+	usleep(20 * 1000);
+	ltntstools_tr101290_free(hdl);
+}
+
+/* -------- p1.c: PMT error / PID error (P1.5/1.5a/1.6) -------- */
+
+/* Builds a 1-program PAT -> PMT pid 0x100, ES video 0x101 (carries PCR) and
+ * ES audio 0x102, and drives it through a real PAT+PMT+traffic write() so
+ * the streammodel completes synchronously (same timing rule established by
+ * test_streammodel.c: a write() timestamp far past the model's epoch
+ * completes it within that single call). Deliberately never sends any
+ * packet for 0x102, so it reads as "inactive" for P1.6 -- isPIDActive()
+ * checks real wall-clock last-update time, not this test's synthetic
+ * `now`, and a pid that's literally never been seen has a last-update of 0,
+ * which is always "stale" relative to any real now. No sleeping required. */
+static void test_p1_pmt_and_pid_errors_raise_then_clear(void)
+{
+	void *hdl = alloc_real();
+	CHECK(hdl != NULL);
+
+	struct timeval t0;
+	gettimeofday(&t0, NULL);
+
+	struct ltntstools_pat_s *inPat = ltntstools_pat_alloc();
+	struct ltntstools_pat_program_s *pp = &inPat->programs[inPat->program_count++];
+	memset(pp, 0, sizeof(*pp));
+	pp->program_number = 1;
+	pp->program_map_PID = 0x100;
+	pp->pmt.program_number = 1;
+	pp->pmt.PCR_PID = 0x101;
+	struct ltntstools_pmt_entry_s *es1 = &pp->pmt.streams[pp->pmt.stream_count++];
+	memset(es1, 0, sizeof(*es1));
+	es1->stream_type = 0x1b;
+	es1->elementary_PID = 0x101;
+	struct ltntstools_pmt_entry_s *es2 = &pp->pmt.streams[pp->pmt.stream_count++];
+	memset(es2, 0, sizeof(*es2));
+	es2->stream_type = 0x0f;
+	es2->elementary_PID = 0x102;
+
+	uint8_t buf[3][188];
+	CHECK(ltntstools_pat_create_packet_ts(inPat, 0, buf[0], 188) == 0);
+	CHECK(ltntstools_pmt_create_packet_ts(&pp->pmt, 0x100, 0, buf[1], 188) == 0);
+	build_junk_packet(buf[2], 0x101, 0); /* traffic on the video ES pid, keeps it "active" */
+
+	CHECK(ltntstools_tr101290_write(hdl, &buf[0][0], 3, &t0) == 3);
+	ltntstools_pat_free(inPat);
+
+	struct ltntstools_tr101290_summary_item_s *items = NULL;
+	int count = 0;
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	int idx = summary_find(items, count, E101290_P1_6__PID_ERROR);
+	CHECK(idx >= 0);
+	if (idx >= 0) {
+		CHECK(items[idx].raised == 1);                   /* 0x102 never got any traffic */
+		CHECK(strstr(items[idx].arg, "0x0102") != NULL);
+		CHECK(strstr(items[idx].arg, "0x0101") == NULL); /* 0x101 IS active */
+	}
+	free(items);
+
+	/* PMT timer: 501ms later, with no further traffic on the PMT pid
+	 * 0x100 itself, the "PMT at least every 500ms" timer expires -> P1.5/1.5a. */
+	struct timeval interval501ms = { 0, 501 * 1000 };
+	struct timeval t1;
+	timeradd(&t0, &interval501ms, &t1);
+	uint8_t unrelated[188];
+	build_junk_packet(unrelated, 0x999, 0);
+	CHECK(ltntstools_tr101290_write(hdl, unrelated, 1, &t1) == 1);
+
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	idx = summary_find(items, count, E101290_P1_5__PMT_ERROR);
+	CHECK(idx >= 0 && items[idx].raised == 1);
+	int idxA = summary_find(items, count, E101290_P1_5a__PMT_ERROR_2);
+	CHECK(idxA >= 0 && items[idxA].raised == 1);
+	free(items);
+
+	/* 5501ms further on (past both the PMT's own 500ms window and the
+	 * alarm's 5000ms clear debounce, measured from when P1.5 was raised at
+	 * t1), traffic on pid 0x100 refreshes the PMT timer and clears it
+	 * within this same write() call. */
+	struct timeval interval5501ms = { 5, 501 * 1000 };
+	struct timeval t2;
+	timeradd(&t1, &interval5501ms, &t2);
+	uint8_t pmtTraffic[188];
+	build_junk_packet(pmtTraffic, 0x100, 0);
+	CHECK(ltntstools_tr101290_write(hdl, pmtTraffic, 1, &t2) == 1);
+
+	ltntstools_tr101290_summary_get(hdl, &items, &count);
+	idx = summary_find(items, count, E101290_P1_5__PMT_ERROR);
+	CHECK(idx >= 0 && items[idx].raised == 0);
+	idxA = summary_find(items, count, E101290_P1_5a__PMT_ERROR_2);
+	CHECK(idxA >= 0 && items[idxA].raised == 0);
+	free(items);
+
+	usleep(20 * 1000);
+	ltntstools_tr101290_free(hdl);
+}
+
 int main(void)
 {
 	test_event_table_copy_matches_known_defaults();
@@ -769,6 +1359,25 @@ int main(void)
 	test_event_dprintf_and_summary_item_dprintf_do_not_crash();
 
 	test_write_without_pat_raises_pat_error_then_clears_with_good_pat_after_debounce();
+
+	test_p2_process_pat_model_sets_contains_pcr_only_for_pcr_pid();
+	test_p2_process_p2_2_is_dead_code_noop();
+	test_p2_streammodel_callback_ignores_non_crc_status();
+	test_p2_streammodel_callback_raises_for_every_context();
+	test_p2_streammodel_callback_clears_after_debounce();
+
+	test_p2_write_transport_error_raises_and_clears();
+	test_p2_write_cat_error_when_no_recent_cat_and_scrambled_traffic();
+	test_p2_write_cat_error_cleared_when_cat_recent();
+
+	test_p2_process_p2_3_packetcount_guard_skips_processing();
+	test_p2_write_pcr_error_raised_after_violation();
+
+	test_p1_sync_byte_error_and_ts_sync_loss_raise_then_clear();
+	test_p1_pat_error_scrambled_variant_raises_then_clears();
+	test_p1_pat_error_bad_tableid_variant_raises();
+	test_p1_continuity_counter_error_raises_then_clears();
+	test_p1_pmt_and_pid_errors_raise_then_clear();
 
 	if (g_failures == 0) {
 		printf("PASS: all tr101290 tests passed\n");
