@@ -36,23 +36,44 @@ int ltntstools_ts_packetizer(const uint8_t *buf, unsigned int byteCount,
 	unsigned int offset = 0;
 
 	int max = packetSize - 4;
-	int packets = ((byteCount / max) + 1) * packetSize;
+	int packets = (byteCount / max) + 1;
 	int cnt = 0;
 
 	uint8_t *arr = calloc(packets, packetSize);
+	if (!arr)
+		return -1;
 
 	unsigned int rem = byteCount - offset;
 	while (rem) {
-		if (rem > max)
+		int shortPacket = (rem < (unsigned int)max);
+		if (rem > (unsigned int)max)
 			rem = max;
 
 		uint8_t *p = arr + (cnt * packetSize);
 		*(p + 0) = 0x47;
 		*(p + 1) = pid >> 8;
 		*(p + 2) = pid;
-		*(p + 3) = 0x10 | ((*cc) & 0x0f);
-		memcpy(p + 4, buf + offset, rem);
-		memset(p + 4 + rem, 0xff, packetSize - rem - 4);
+
+		int payload_offset = 4;
+		if (shortPacket) {
+			/* Not enough payload to fill this packet. Use a proper
+			 * adaptation field to stuff the remainder, rather than
+			 * appending raw padding bytes to a payload-only packet
+			 * (which a compliant decoder would misread as ES data).
+			 */
+			int adaptation_field_length = (packetSize - 4 - 1) - rem;
+			*(p + 3) = 0x30 | ((*cc) & 0x0f); /* adaptation + payload */
+			*(p + 4) = adaptation_field_length;
+			payload_offset = 4 + 1 + adaptation_field_length;
+			if (adaptation_field_length > 0) {
+				*(p + 5) = 0x00; /* no adaptation flags */
+				memset(p + 6, 0xff, adaptation_field_length - 1);
+			}
+		} else {
+			*(p + 3) = 0x10 | ((*cc) & 0x0f); /* payload only */
+		}
+
+		memcpy(p + payload_offset, buf + offset, rem);
 		offset += rem;
 		(*cc)++;
 
