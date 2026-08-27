@@ -14,20 +14,30 @@ int ltn_nal_h265_find_headers(const uint8_t *buf, int lengthBytes, struct ltn_na
 		return -1;
 
 	int offset = -1;
-	struct ltn_nal_headers_s *curr = a, *prev = a;
 	while (ltn_nal_h265_findHeader(buf, lengthBytes, &offset) == 0) {
-		curr->ptr = buf + offset;
-		curr->nalType = (buf[offset + 3] >> 1) & 0x3f;
-		curr->nalName = h265Nals_lookupName(curr->nalType);
-		if (curr != prev) {
-			prev->lengthBytes = curr->ptr - prev->ptr;
+		if (idx >= maxitems) {
+			maxitems *= 2;
+			struct ltn_nal_headers_s *temp = realloc(a, sizeof(struct ltn_nal_headers_s) * maxitems);
+			if (!temp) {
+				free(a);
+				return -1;
+			}
+			a = temp;
 		}
-		
-		prev = curr;
-		curr++;
+
+		a[idx].ptr = buf + offset;
+		a[idx].nalType = (buf[offset + 3] >> 1) & 0x3f;
+		a[idx].nalName = h265Nals_lookupName(a[idx].nalType);
+		if (idx > 0) {
+			a[idx - 1].lengthBytes = a[idx].ptr - a[idx - 1].ptr;
+		}
+
 		idx++;
 	}
-	prev->lengthBytes = (buf + lengthBytes) - prev->ptr;
+
+	if (idx > 0) {
+		a[idx - 1].lengthBytes = (buf + lengthBytes) - a[idx - 1].ptr;
+	}
 
 	*array = a;
 	*arrayLength = idx;
@@ -104,13 +114,24 @@ static struct hevcNal_s {
 	[40] = { "SUFFIX_SEI" },
 };
 
+/* nalType is a 6-bit field (0-63) taken straight from the bitstream, but
+ * hevcNals[] only covers the types actually assigned meaning (0-40).
+ * Values above that are legal on the wire (reserved/unspecified), so this
+ * must bounds-check rather than index directly. Confirmed OOB global-buffer-overflow via ASan otherwise.
+ */
 const char *h265Nals_lookupName(int nalType)
 {
+	if (nalType < 0 || nalType >= (int)(sizeof(hevcNals) / sizeof(hevcNals[0]))) {
+		return "RESERVED/UNKNOWN";
+	}
 	return hevcNals[nalType].name;
 }
 
 const char *h265Nals_lookupType(int nalType)
 {
+	if (nalType < 0 || nalType >= (int)(sizeof(hevcNals) / sizeof(hevcNals[0]))) {
+		return "";
+	}
 	return hevcNals[nalType].type;
 }
 
@@ -167,6 +188,9 @@ static struct h265_slice_data_s slice_defaults[MAX_H265_SLICE_TYPES] = {
 
 const char *h265_slice_name_ascii(int slice_type)
 {
+	if (slice_type < 0) {
+		return "?";
+	}
 	return &slice_defaults[ slice_type % MAX_H265_SLICE_TYPES ].name[0];
 }
 
@@ -176,7 +200,7 @@ struct h265_slice_counter_s
 	struct h265_slice_data_s slice[MAX_H265_SLICE_TYPES];
 
 	int nextHistoryPos;
-    char sliceHistory[H265_SLICE_COUNTER_HISTORY_LENGTH];
+    char sliceHistory[H265_SLICE_COUNTER_HISTORY_LENGTH + 1];
 
 	/* SPS */
 	uint32_t spsValid;
@@ -201,7 +225,15 @@ void h265_slice_counter_reset(void *ctx)
 	for (int i = 0; i < H265_SLICE_COUNTER_HISTORY_LENGTH; i++) {
 		s->sliceHistory[i] = ' ';
 	}
-	s->sliceHistory[H265_SLICE_COUNTER_HISTORY_LENGTH - 1] = 0;
+	/* This index is the array's dedicated +1 slot, never written by the '% LENGTH' ring -- a live ring slot would rotate this NUL into the middle of query()'s %s output. */
+	s->sliceHistory[H265_SLICE_COUNTER_HISTORY_LENGTH] = 0;
+
+	/* Struct is malloc()'d, not calloc()'d; leaving this uninitialized lets '%' below go negative. */
+	s->nextHistoryPos = 0;
+
+	/* Discard SPS/PPS state from whatever pid was tracked before this reset (or, at alloc time, uninitialized garbage). */
+	s->spsValid = 0;
+	s->ppsValid = 0;
 }
 
 void *h265_slice_counter_alloc(uint16_t pid)
@@ -343,7 +375,7 @@ static void h265_slice_counter_write_packet(void *ctx, const unsigned char *pkt)
 				}
 				// End of parsing */
 
-				if (slice_type < MAX_H265_SLICE_TYPES) {
+				if (slice_type >= 0 && slice_type < MAX_H265_SLICE_TYPES) {
 					h265_slice_counter_update(s, slice_type);
 					//h265_slice_counter_dprintf(s, 0, 0);
 				} else {

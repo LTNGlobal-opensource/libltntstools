@@ -25,8 +25,8 @@ int ltn_nal_h264_strip_emulation_prevention(struct ltn_nal_headers_s *h)
 			h->ptr[i + 1] == 0x00 &&
 			h->ptr[i + 2] == 0x03)
 		{
-				/* Convert 00 00 03 to 00 00 */
-				memcpy((unsigned char *)&h->ptr[i + 2], &h->ptr[i + 3], h->lengthBytes - i - 3);
+				/* Convert 00 00 03 to 00 00. Source/dest overlap by all but one byte -- memmove, not memcpy. */
+				memmove((unsigned char *)&h->ptr[i + 2], &h->ptr[i + 3], h->lengthBytes - i - 3);
 				dropped++;
 		}
 	}
@@ -130,13 +130,24 @@ static struct h264Nal_s {
 	[21] = { "CSEDV", .type = "" },
 };
 
+/* nalType is a 5-bit field (0-31) taken straight from the bitstream, but
+ * h264Nals[] only covers the types actually assigned meaning (0-21).
+ * Values 22-31 are legal on the wire (reserved/unspecified), so this must
+ * bounds-check rather than index directly. Confirmed OOB global-buffer-overflow via ASan otherwise.
+ */
 const char *h264Nals_lookupName(int nalType)
 {
+	if (nalType < 0 || nalType >= (int)(sizeof(h264Nals) / sizeof(h264Nals[0]))) {
+		return "RESERVED/UNKNOWN";
+	}
 	return h264Nals[nalType].name;
 }
 
 const char *h264Nals_lookupType(int nalType)
 {
+	if (nalType < 0 || nalType >= (int)(sizeof(h264Nals) / sizeof(h264Nals[0]))) {
+		return "";
+	}
 	return h264Nals[nalType].type;
 }
 
@@ -239,6 +250,9 @@ int h264_is_slice_type_bframe(unsigned int sliceType)
 
 const char *h264_slice_name_ascii(int slice_type)
 {
+	if (slice_type < 0) {
+		return "?";
+	}
 	return &slice_defaults[ slice_type % MAX_H264_SLICE_TYPES ].name[0];
 }
 
@@ -259,6 +273,9 @@ void h264_slice_counter_reset(void *ctx)
 		s->sliceHistory[i] = ' ';
 	}
 	s->sliceHistory[H264_SLICE_COUNTER_HISTORY_LENGTH] = 0;
+
+	/* Struct is malloc()'d, not calloc()'d; leaving this uninitialized lets '%' below go negative. */
+	s->nextHistoryPos = 0;
 }
 
 void *h264_slice_counter_alloc(uint16_t pid)
@@ -311,7 +328,7 @@ int h264_nal_get_slice_type_for_nal(struct ltn_nal_headers_s *hdr, unsigned int 
 		NALBitReader_init(&br, hdr->ptr + 4, 4);
 		NALBitReader_read_ue(&br); /* first_mb_in_slice */
 		int st = NALBitReader_read_ue(&br);
-		if (st < MAX_H264_SLICE_TYPES) {
+		if (st >= 0 && st < MAX_H264_SLICE_TYPES) {
 			*sliceType = st;
 			ret = 0;
 		}
@@ -338,7 +355,7 @@ int h264_nal_get_slice_type(const struct ltn_nal_headers_s *hdr, char *sliceType
 			NALBitReader_init(&br, hdr->ptr + 4, 4);
 			NALBitReader_read_ue(&br); /* first_mb_in_slice */
 			int slice_type = NALBitReader_read_ue(&br);
-			if (slice_type < MAX_H264_SLICE_TYPES) {
+			if (slice_type >= 0 && slice_type < MAX_H264_SLICE_TYPES) {
 				strcpy(sliceType, h264_slice_name_ascii(slice_type));
 			} else {
 				/* Malformed stream, not a video stream probably.
@@ -401,7 +418,7 @@ static void h264_slice_counter_write_packet(void *ctx, const unsigned char *pkt)
 				NALBitReader_init(&br, pkt + offset + 4, 4);
 				NALBitReader_read_ue(&br); /* first_mb_in_slice */
 				int slice_type = NALBitReader_read_ue(&br);
-				if (slice_type < MAX_H264_SLICE_TYPES) {
+				if (slice_type >= 0 && slice_type < MAX_H264_SLICE_TYPES) {
 					h264_slice_counter_update(s, slice_type);
 					//h264_slice_counter_dprintf(s, 0, 0);
 				} else {

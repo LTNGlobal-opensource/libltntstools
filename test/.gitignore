@@ -46,6 +46,10 @@ test_tr101290
 test_tr101290.dSYM
 test_nal_bitreader
 test_nal_bitreader.dSYM
+test_nal_h264
+test_nal_h264.dSYM
+test_nal_h265
+test_nal_h265.dSYM
 test_udp_receiver
 test_udp_receiver.dSYM
 test_xorg_list
