@@ -36,6 +36,7 @@
         "**/test_descriptor": true,
         "**/test_pes": true,
         "**/test_pat": true,
+        "**/test_sectionextractor": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

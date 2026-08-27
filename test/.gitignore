@@ -14,3 +14,5 @@ test_pes
 test_pes.dSYM
 test_pat
 test_pat.dSYM
+test_sectionextractor
+test_sectionextractor.dSYM

@@ -16,7 +16,7 @@ endif
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor
 	./test_crc32
 	./test_history_metric
 	./test_ts
@@ -25,6 +25,7 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 	./test_descriptor
 	./test_pes
 	./test_pat
+	./test_sectionextractor
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -50,5 +51,8 @@ test_pes: test_pes.c ../src/pes.c ../src/crc32.c
 test_pat: test_pat.c ../src/pat.c ../src/descriptor.c ../src/crc32.c ../src/ts.c
 	$(CC) $(CFLAGS) $(INCLUDES) $(DVBPSI_CFLAGS) -o $@ test_pat.c ../src/pat.c ../src/descriptor.c ../src/crc32.c ../src/ts.c $(DVBPSI_LIBS)
 
+test_sectionextractor: test_sectionextractor.c ../src/sectionextractor.c ../src/ts.c ../src/crc32.c
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_sectionextractor.c ../src/sectionextractor.c ../src/ts.c ../src/crc32.c
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor
