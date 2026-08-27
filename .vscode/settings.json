@@ -39,6 +39,7 @@
         "**/test_sectionextractor": true,
         "**/test_ts_packetizer": true,
         "**/test_throughput_hires": true,
+        "**/test_time": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

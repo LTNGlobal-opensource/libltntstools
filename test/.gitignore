@@ -20,3 +20,5 @@ test_ts_packetizer
 test_ts_packetizer.dSYM
 test_throughput_hires
 test_throughput_hires.dSYM
+test_time
+test_time.dSYM
