@@ -443,18 +443,24 @@ int smoother_rtp_alloc(void **hdl, void *userContext, smoother_rtp_output_callba
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	/* Spawn a thread that manages the scheduled output queue.
-	 * threadRunning must be set here, synchronously, before the thread is
-	 * created: _threadFunc() also sets it (redundantly) once it actually
-	 * starts running, but smoother_rtp_free() gates its "wait for the
-	 * thread to terminate" logic on this flag. If free() is called before
-	 * the new thread gets scheduled for the first time, threadRunning
-	 * would still read 0, free() would skip the wait entirely, and the
-	 * thread would go on to dereference ctx after free() has already
-	 * freed it -- the same use-after-free class already found and fixed
-	 * in smoother-pcr.c and probes.c's identical threadRunning pattern.
+	 * threadRunning must be set here, synchronously in the parent,
+	 * immediately after a successful pthread_create() -- not left for
+	 * _threadFunc() to set (redundantly) once it actually starts running.
+	 * smoother_rtp_free() gates its "wait for the thread to terminate"
+	 * logic on this flag: if free() were called before the new thread got
+	 * scheduled for the first time, threadRunning would still read 0,
+	 * free() would skip the wait entirely, and the thread would go on to
+	 * dereference ctx after free() has already freed it -- the same
+	 * use-after-free class already found and fixed in smoother-pcr.c and
+	 * probes.c's identical threadRunning pattern. Setting it only on
+	 * success (rather than unconditionally before pthread_create()) also
+	 * avoids a hang in free(): if pthread_create() itself fails, no
+	 * thread exists to ever set threadTerminated, so threadRunning must
+	 * stay 0.
 	 */
-	ctx->threadRunning = 1;
-	pthread_create(&ctx->threadId, NULL, _threadFunc, ctx);
+	if (pthread_create(&ctx->threadId, NULL, _threadFunc, ctx) == 0) {
+		ctx->threadRunning = 1;
+	}
 
 	*hdl = ctx;
 

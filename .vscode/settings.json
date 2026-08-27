@@ -48,6 +48,7 @@
         "**/test_smoother_pcr": true,
         "**/test_probes": true,
         "**/test_smoother_rtp": true,
+        "**/test_segmentwriter": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

@@ -38,3 +38,5 @@ test_probes
 test_probes.dSYM
 test_smoother_rtp
 test_smoother_rtp.dSYM
+test_segmentwriter
+test_segmentwriter.dSYM
