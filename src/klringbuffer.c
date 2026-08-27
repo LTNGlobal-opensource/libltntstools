@@ -167,7 +167,8 @@ size_t rb_write_with_state(KLRingBuffer *buf, const char *from, size_t bytes, in
 	assert(buf);
 	assert(from);
 
-	*didOverflow = 0;
+	if (didOverflow)
+		*didOverflow = 0;
 	RB_LOCK(buf);
 	if (bytes > _rb_remain_in_seg(buf)) {
 		if (_rb_grow(buf, bytes * 128) < 0) {
@@ -175,29 +176,48 @@ size_t rb_write_with_state(KLRingBuffer *buf, const char *from, size_t bytes, in
 
 			/* Don't fail the write just because we've exceeded the maximum
 			 * amount of storage, instead, raise an overflow and store the data anyway.
+			 * Never discard more than the ring currently holds -- fill is
+			 * unsigned and would otherwise wrap.
 			 */
-			rb_discard(buf, bytes);
+			rb_discard(buf, bytes > buf->size ? buf->size : bytes);
 			if (didOverflow)
 				*didOverflow = 1;
+
+			RB_LOCK(buf);
 		}
 	}
 
-	unsigned char *tail = buf->data + ((buf->head + buf->fill) % buf->size);
-	unsigned char *write_end = buf->data + ((buf->head + buf->fill + bytes) % buf->size);
-
-	if (tail <= write_end) {
-		memcpy(tail, from, bytes);
-	} else {
-		unsigned char *end = buf->data + buf->size;
-        
-		size_t first_write = end - tail;
-		memcpy(tail, from, first_write);
-        
-		size_t second_write = bytes - first_write;
-		memcpy(buf->data, from + first_write, second_write);
+	/* A single write can never physically fit more than the ring's current
+	 * allocation; if it's larger, only the trailing portion of it survives
+	 * (matches this ring's documented "truncate on overflow" contract).
+	 */
+	const char *store_from = from;
+	size_t store_bytes = bytes;
+	if (store_bytes > buf->size) {
+		store_from += (store_bytes - buf->size);
+		store_bytes = buf->size;
 	}
 
-	_advance_tail(buf, bytes);
+	size_t tail_offset = (buf->head + buf->fill) % buf->size;
+	unsigned char *tail = buf->data + tail_offset;
+	size_t to_end = buf->size - tail_offset;
+
+	/* Decide on byte counts, not on comparing tail/write_end pointers: a
+	 * write whose length is an exact multiple of buf->size wraps write_end
+	 * back around to equal tail, making that comparison ambiguous between
+	 * "nothing to copy" and "wraps all the way around".
+	 */
+	if (store_bytes <= to_end) {
+		memcpy(tail, store_from, store_bytes);
+	} else {
+		size_t first_write = to_end;
+		memcpy(tail, store_from, first_write);
+
+		size_t second_write = store_bytes - first_write;
+		memcpy(buf->data, store_from + first_write, second_write);
+	}
+
+	_advance_tail(buf, store_bytes);
 	RB_UNLOCK(buf);
 	return bytes;
 }
@@ -248,7 +268,11 @@ static inline void _advance_head(KLRingBuffer *buf, size_t bytes)
 void rb_discard(KLRingBuffer *rb, size_t bytes)
 {
 	RB_LOCK(rb);
-	_advance_head(rb, bytes); 
+	/* Never discard more than is actually held -- fill is unsigned and
+	 * would otherwise wrap, permanently corrupting the ring's accounting. */
+	if (bytes > _rb_used(rb))
+		bytes = _rb_used(rb);
+	_advance_head(rb, bytes);
 	RB_UNLOCK(rb);
 }
 
