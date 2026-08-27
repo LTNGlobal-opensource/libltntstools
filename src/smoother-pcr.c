@@ -4,7 +4,7 @@
 #include <sys/errno.h>
 
 #include "libltntstools/ltntstools.h"
-#include "xorg-list.h"
+#include "libltntstools/xorg-list.h"
 
 #define LOCAL_DEBUG 0
 

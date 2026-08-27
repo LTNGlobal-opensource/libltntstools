@@ -7,8 +7,7 @@ libltntstools_la_LDFLAGS  = -Wl,--no-as-needed -ldvbpsi $(LIBRT_LIBS)
 
 lib_LTLIBRARIES = libltntstools.la
 
-libltntstools_la_SOURCES  = xorg-list.h
-libltntstools_la_SOURCES += ts_packetizer.c
+libltntstools_la_SOURCES  = ts_packetizer.c
 libltntstools_la_SOURCES += libltntstools/ts_packetizer.h
 libltntstools_la_SOURCES += klringbuffer.h
 libltntstools_la_SOURCES += klringbuffer.c

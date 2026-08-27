@@ -17,7 +17,7 @@
 #include "libltntstools/pat.h"
 #include "libltntstools/timeval.h"
 
-#include "xorg-list.h"
+#include "libltntstools/xorg-list.h"
 
 #define MODULE_PREFIX "demux: "
 #define MAX_PIDS 8192

@@ -1,7 +1,7 @@
 /* Copyright LiveTimeNet, Inc. 2017. All Rights Reserved. */
 
 #include "libltntstools/ltntstools.h"
-#include "xorg-list.h"
+#include "libltntstools/xorg-list.h"
 
 /* Forward defines */
 #if EXPERIMENTAL_REORDERING

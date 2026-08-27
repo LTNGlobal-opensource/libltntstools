@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "libltntstools/history-metric.h"
-#include "xorg-list.h"
 
 struct ltntstools_history_metric_s *ltntstools_history_metric_alloc(time_t now, uint64_t value)
 {

@@ -4,20 +4,22 @@
  * inline/macro), no other .c dependency.
  *
  * A REAL maintenance defect was found while writing these tests and has
- * been FIXED: this project ships TWO copies of this file -- the public
- * src/libltntstools/xorg-list.h (tested here, the one any external
- * consumer of this library would #include) and a private src/xorg-list.h
- * that 5 .c files in this codebase (history-metric.c, stats.c,
- * smoother-pcr.c, smoother-rtp.c, throughput_hires.c) actually include via
- * quote-form #include "xorg-list.h" (which resolves to the same-directory
- * private copy, not the public one). The two had silently drifted apart:
- * the public copy defined xorg_list_for_each_entry_reverse(), the private
- * copy did not (confirmed via `diff`, a single-macro difference). Fixed by
- * adding the missing macro to the private copy; the two files are now
- * byte-identical (`diff` exits 0). This is exactly the kind of "vendored
- * file edited in only one of its two locations" drift that's easy to miss
- * and easy to prevent by testing whichever copy is public/canonical, which
- * is what this file does.
+ * since been FIXED: this project used to ship TWO copies of this file --
+ * the public src/libltntstools/xorg-list.h (tested here, the one any
+ * external consumer of this library would #include) and a private
+ * src/xorg-list.h that 5 .c files in this codebase (history-metric.c,
+ * stats.c, smoother-pcr.c, smoother-rtp.c, throughput_hires.c) actually
+ * included via quote-form #include "xorg-list.h" (which resolved to the
+ * same-directory private copy, not the public one). The two had silently
+ * drifted apart: the public copy defined
+ * xorg_list_for_each_entry_reverse(), the private copy did not (confirmed
+ * via `diff`, a single-macro difference). This is exactly the kind of
+ * "vendored file edited in only one of its two locations" drift that's
+ * easy to miss and easy to prevent by testing whichever copy is
+ * public/canonical, which is what this file does. The private copy has
+ * since been deleted and all 5 .c files switched to
+ * #include "libltntstools/xorg-list.h", so there is now a single
+ * canonical copy of this file.
  *
  * TWO REAL macro bugs were also found and FIXED (in both copies, to keep
  * them in sync):
