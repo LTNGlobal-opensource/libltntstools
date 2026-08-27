@@ -83,6 +83,11 @@ int sei_timestamp_field_get(const unsigned char *buffer, int lengthBytes, uint32
 		return -1;
 
 	p += (sizeof(ltn_uuid_sei_timestamp) + ((nr - 1) * 6));
+
+	if (lengthBytes - (p - buffer) < 6) {
+		return -1;
+	}
+
 	v  = (*(p++) << 24);
 	v |= (*(p++) << 16);
 	p++;
