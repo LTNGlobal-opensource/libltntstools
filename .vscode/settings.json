@@ -51,6 +51,7 @@
         "**/test_segmentwriter": true,
         "**/test_klbitstream_readwriter": true,
         "**/test_tr101290": true,
+        "**/test_nal_bitreader": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

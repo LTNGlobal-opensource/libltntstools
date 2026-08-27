@@ -63,7 +63,14 @@ int NALBitReader_read_ue(NALBitReader *br)
 			return -1;
 		}
 	}
-	if (leadingZeroBits > 31) {
+	/* leadingZeroBits == 31 is also rejected, not just > 31: `1 <<
+	 * leadingZeroBits` would shift a 1 into a signed int's sign bit
+	 * (undefined behavior), and the subsequent `- 1` would then also be
+	 * a signed integer overflow. Confirmed via UBSan repro: 31 leading
+	 * zero bits triggered both. No legitimate H.264/H.265 Exp-Golomb
+	 * code needs this many leading zeros anyway.
+	 */
+	if (leadingZeroBits >= 31) {
 		return -1;
 	}
 
@@ -75,9 +82,21 @@ int NALBitReader_read_ue(NALBitReader *br)
 int NALBitReader_read_se(NALBitReader *br)
 {
 	int codeNum = NALBitReader_read_ue(br);
+	if (codeNum < 0) {
+		/* Propagate read_ue()'s failure sentinel. Without this check,
+		 * codeNum == -1 (all bits set) is odd, so the mapping below
+		 * silently computed val = ((-1) + 1) >> 1 == 0 -- a failed
+		 * read masqueraded as the valid signed value 0, with no way
+		 * for the caller to detect the underlying truncated/malformed
+		 * bitstream. Confirmed via repro: read_se() on an
+		 * already-exhausted reader returned 0 instead of an error.
+		 */
+		return codeNum;
+	}
+
 	int val = (codeNum & 1) ? (int)((codeNum + 1) >> 1) : -(int)(codeNum >> 1);
 
-    return val;
+	return val;
 }
 
 /* AVC/H.264 mapped Exp-Golomb for coded_block_pattern, me(v).
