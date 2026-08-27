@@ -24,9 +24,19 @@
  *     single-segment path and overflowed the buffer. This one didn't need
  *     size_max/overflow involved at all, just an ordinary full-capacity
  *     write after the head had rotated away from 0.
- * test_write_overflow_truncates_to_trailing_bytes(), test_discard_more_than_used_clamps_to_zero()
- * and test_write_exact_capacity_after_rotation() are direct regression
- * coverage for bugs 1, 2 and 3 respectively.
+ *  4. _rb_grow(): grew the buffer via realloc()-in-place, which preserves
+ *     byte offsets but not the ring's logical order. If the ring was
+ *     wrapped (content split across the physical end) at the moment
+ *     growth triggered, the segment that had wrapped to the front of the
+ *     buffer got stranded there -- silently corrupting/losing data (no
+ *     crash, no overflow flag), since the new, larger modulo arithmetic
+ *     never looks for it at that offset again. Found only after this file
+ *     already existed, by deliberately combining two conditions ("ring is
+ *     wrapped" and "next write forces growth") that had each individually
+ *     been tested but never together.
+ * test_write_overflow_truncates_to_trailing_bytes(), test_discard_more_than_used_clamps_to_zero(),
+ * test_write_exact_capacity_after_rotation() and test_write_grows_correctly_while_wrapped()
+ * are direct regression coverage for bugs 1, 2, 3 and 4 respectively.
  */
 
 #include <assert.h>
@@ -315,6 +325,43 @@ static void test_write_grows_buffer_within_max(void)
 	rb_free(rb);
 }
 
+/* Regression test for bug #4: growth used to realloc() in place, which
+ * preserves byte offsets but not the ring's logical order. If the ring was
+ * wrapped (content split across the physical end) at the moment growth was
+ * triggered, the segment that had wrapped to the front of the buffer got
+ * stranded there -- silently corrupting/losing data, since it's nowhere
+ * near where the new (larger) modulo arithmetic looks for it. No crash, no
+ * overflow flag, just wrong bytes read back -- confirmed with a standalone
+ * repro before the fix (_rb_grow() now linearizes into a fresh allocation
+ * instead of realloc()-in-place). */
+static void test_write_grows_correctly_while_wrapped(void)
+{
+	KLRingBuffer *rb = rb_new(4, 200);
+	int overflow = 0;
+
+	rb_write_with_state(rb, "AB", 2, &overflow);
+	char sink[2];
+	rb_read(rb, sink, 2); /* head=2, fill=0 */
+
+	/* "CDEF" wraps: to_end from head=2 in a 4-byte ring is 2, so "CD"
+	 * lands at offset 2-3 and "EF" wraps around to offset 0-1. */
+	rb_write_with_state(rb, "CDEF", 4, &overflow);
+	CHECK(overflow == 0);
+	CHECK(rb_used(rb) == 4);
+
+	/* No room left (remain_in_seg == 0): forces growth while wrapped. */
+	size_t w = rb_write_with_state(rb, "G", 1, &overflow);
+	CHECK(w == 1);
+	CHECK(overflow == 0);
+	CHECK(rb_used(rb) == 5);
+
+	char out[5] = { 0 };
+	CHECK(rb_read(rb, out, 5) == 5);
+	CHECK(memcmp(out, "CDEFG", 5) == 0);
+
+	rb_free(rb);
+}
+
 /* -------- overflow: growth refused, ring must truncate instead of corrupt -------- */
 
 static void test_write_overflow_evicts_oldest_data(void)
@@ -493,6 +540,7 @@ int main(void)
 	test_write_exact_capacity_after_rotation();
 
 	test_write_grows_buffer_within_max();
+	test_write_grows_correctly_while_wrapped();
 
 	test_write_overflow_evicts_oldest_data();
 	test_write_overflow_truncates_to_trailing_bytes();

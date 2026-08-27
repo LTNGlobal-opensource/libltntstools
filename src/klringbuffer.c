@@ -134,8 +134,33 @@ static int _rb_grow(KLRingBuffer *buf, size_t increment)
 		return -2;
 	}
 
-	buf->data = (unsigned char *)realloc(buf->data, buf->size + increment);
-	buf->size += increment;
+	size_t new_size = buf->size + increment;
+	unsigned char *new_data = (unsigned char *)malloc(new_size);
+	if (!new_data)
+		return -1;
+
+	/* Linearize the existing content into the new buffer starting at
+	 * offset 0, rather than realloc()-in-place: a wrapped ring's content
+	 * spans two segments (head..size, then 0..remainder) in the old,
+	 * smaller layout. realloc() only preserves byte offsets, not the
+	 * ring's logical order, so growing a wrapped buffer in place strands
+	 * the wrapped segment far from where the new (larger) modulo
+	 * arithmetic expects to find it -- silently corrupting the content.
+	 */
+	if (buf->fill > 0) {
+		size_t first = buf->size - buf->head;
+		if (first > buf->fill)
+			first = buf->fill;
+		memcpy(new_data, buf->data + buf->head, first);
+		if (buf->fill > first) {
+			memcpy(new_data + first, buf->data, buf->fill - first);
+		}
+	}
+
+	free(buf->data);
+	buf->data = new_data;
+	buf->size = new_size;
+	buf->head = 0;
 
 	return 0;
 }
