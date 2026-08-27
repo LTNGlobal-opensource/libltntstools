@@ -52,3 +52,5 @@ test_xorg_list
 test_xorg_list.dSYM
 test_vbv
 test_vbv.dSYM
+test_proc_net_udp
+test_proc_net_udp.dSYM

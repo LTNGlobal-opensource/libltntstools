@@ -55,6 +55,7 @@
         "**/test_udp_receiver": true,
         "**/test_xorg_list": true,
         "**/test_vbv": true,
+        "**/test_proc_net_udp": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
