@@ -544,7 +544,6 @@ static void * vbv_threadFunc(void *p)
 	int permit_vbv_drain = 0;
 	uint64_t resetGeneration = 0;
 
-	ctx->threadTerminate = 0;
 	while (!ctx->threadTerminate) {
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
