@@ -714,7 +714,7 @@ int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes
 
 	char fn[512];
 
-	sprintf(fn, "%s/es-seq%014" PRIu64 "-pts%014" PRIu64 "-dts%014" PRIu64 "-len%08" PRIu32 "-crc%08x",
+	snprintf(fn, sizeof(fn), "%s/es-seq%014" PRIu64 "-pts%014" PRIu64 "-dts%014" PRIu64 "-len%08" PRIu32 "-crc%08x",
 		ctx->dirname,
 		ctx->nr++,
 		pes->PTS,
@@ -751,7 +751,7 @@ int ltn_pes_packet_save_pes(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pe
 
 	char fn[512];
 
-	sprintf(fn, "%s/pes-seq%014" PRIu64 "-pts%014" PRIu64 "-dts%014" PRIu64 "-len%08" PRIu32 "-crc%08x",
+	snprintf(fn, sizeof(fn), "%s/pes-seq%014" PRIu64 "-pts%014" PRIu64 "-dts%014" PRIu64 "-len%08" PRIu32 "-crc%08x",
 		ctx->dirname,
 		ctx->nr++,
 		pes->PTS,
