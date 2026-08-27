@@ -50,6 +50,7 @@
         "**/test_smoother_rtp": true,
         "**/test_segmentwriter": true,
         "**/test_klbitstream_readwriter": true,
+        "**/test_tr101290": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

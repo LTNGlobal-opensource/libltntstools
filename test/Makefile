@@ -16,7 +16,7 @@ endif
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr test_probes test_smoother_rtp test_segmentwriter test_klbitstream_readwriter
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr test_probes test_smoother_rtp test_segmentwriter test_klbitstream_readwriter test_tr101290
 	./test_crc32
 	./test_history_metric
 	./test_ts
@@ -39,6 +39,7 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 	./test_smoother_rtp
 	./test_segmentwriter
 	./test_klbitstream_readwriter
+	./test_tr101290
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -106,5 +107,10 @@ test_segmentwriter: test_segmentwriter.c ../src/segmentwriter.c ../src/kl-queue.
 test_klbitstream_readwriter: test_klbitstream_readwriter.c ../src/libltntstools/klbitstream_readwriter.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_klbitstream_readwriter.c
 
+TR101290_SRCS := ../src/tr101290.c ../src/tr101290-events.c ../src/tr101290-alarms.c ../src/tr101290-timers.c ../src/tr101290-p1.c ../src/tr101290-p2.c ../src/tr101290-summary.c ../src/streammodel.c ../src/streammodel-extractors.c ../src/pat.c ../src/descriptor.c ../src/crc32.c ../src/ts.c ../src/sectionextractor.c ../src/stats.c ../src/clocks.c ../src/history-metric.c
+
+test_tr101290: test_tr101290.c $(TR101290_SRCS)
+	$(CC) $(CFLAGS) $(INCLUDES) $(DVBPSI_CFLAGS) -o $@ test_tr101290.c $(TR101290_SRCS) $(DVBPSI_LIBS) -lpthread
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr test_probes test_smoother_rtp test_segmentwriter test_klbitstream_readwriter
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr test_probes test_smoother_rtp test_segmentwriter test_klbitstream_readwriter test_tr101290

@@ -42,3 +42,5 @@ test_segmentwriter
 test_segmentwriter.dSYM
 test_klbitstream_readwriter
 test_klbitstream_readwriter.dSYM
+test_tr101290
+test_tr101290.dSYM
