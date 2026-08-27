@@ -171,18 +171,24 @@ int ltntstools_probe_scheduler_alloc(void **hdl)
 	ltn_histogram_alloc_video_defaults(&ctx->schedulerAccuracy1ms, "1ms scheduler accuracy");
 
 	/* Spawn a thread that manages the scheduled output queue.
-	 * threadRunning must be set here, synchronously, before the thread is
-	 * created: scheduler_probe_threadFunc() also sets it (redundantly)
-	 * once it actually starts running, but ltntstools_probe_scheduler_free()
-	 * gates its "wait for the thread to terminate" logic on this flag. If
-	 * free() is called before the new thread gets scheduled for the first
-	 * time, threadRunning would still read 0, free() would skip the wait
+	 * threadRunning must be set here, synchronously in the parent,
+	 * immediately after a successful pthread_create() -- not left for
+	 * scheduler_probe_threadFunc() to set (redundantly) once it actually
+	 * starts running. ltntstools_probe_scheduler_free() gates its "wait
+	 * for the thread to terminate" logic on this flag: if free() were
+	 * called before the new thread got scheduled for the first time,
+	 * threadRunning would still read 0, free() would skip the wait
 	 * entirely, and the thread would go on to dereference ctx after
 	 * free() has already freed it -- a real use-after-free (same class of
 	 * bug fixed in smoother-pcr.c's identical threadRunning pattern).
+	 * Setting it only on success (rather than unconditionally before
+	 * pthread_create()) also avoids a hang in free(): if pthread_create()
+	 * itself fails, no thread exists to ever set threadTerminated, so
+	 * threadRunning must stay 0.
 	 */
-	ctx->threadRunning = 1;
-	pthread_create(&ctx->threadId, NULL, scheduler_probe_threadFunc, ctx);
+	if (pthread_create(&ctx->threadId, NULL, scheduler_probe_threadFunc, ctx) == 0) {
+		ctx->threadRunning = 1;
+	}
 
 	*hdl = ctx;
 	return 0;
