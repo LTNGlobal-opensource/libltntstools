@@ -56,6 +56,7 @@
         "**/test_xorg_list": true,
         "**/test_vbv": true,
         "**/test_proc_net_udp": true,
+        "**/test_klringbuffer": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
