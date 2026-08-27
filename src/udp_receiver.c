@@ -282,8 +282,17 @@ static void *udp_receiver_threadfunc(void *p)
 			/* Some implementations pad the trailer of the packet with
 			 * dummy bytes, we don't want to pass these along.
 			 * Hint: Ceton does, silicondust doesn't */
-			int bytes = ((rxbytes - 12) / 188) * 188;
-			ctx->cb(ctx->userContext, ctx->rxbuffer + 12, bytes);
+			if (rxbytes >= 12) {
+				/* rxbytes is size_t (unsigned); rxbytes - 12 would
+				 * underflow to a huge value for any datagram shorter
+				 * than a 12-byte RTP header, and narrowing that into
+				 * `int bytes` produced a garbage/negative byte count
+				 * handed straight to the caller's callback. Confirmed
+				 * via repro: a 5-byte datagram produced bytes == -72.
+				 */
+				int bytes = ((rxbytes - 12) / 188) * 188;
+				ctx->cb(ctx->userContext, ctx->rxbuffer + 12, bytes);
+			}
 		}
 #endif
 
