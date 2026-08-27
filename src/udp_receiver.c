@@ -306,7 +306,29 @@ int ltntstools_udp_receiver_thread_start(struct ltntstools_udp_receiver_s *ctx)
 {
 	assert(ctx);
 	assert(ctx->threadId == 0);
-	return pthread_create(&ctx->threadId, 0, udp_receiver_threadfunc, ctx);
+
+	int ret = pthread_create(&ctx->threadId, 0, udp_receiver_threadfunc, ctx);
+	if (ret == 0) {
+		/* thread_running must be set here, synchronously in the parent,
+		 * immediately after a successful pthread_create() -- not left
+		 * for udp_receiver_threadfunc() to set (redundantly) once it
+		 * actually starts running. ltntstools_udp_receiver_free() gates
+		 * its "wait for the thread to terminate" logic on this flag: if
+		 * free() were called before the new thread got scheduled for
+		 * the first time, thread_running would still read 0, free()
+		 * would skip the wait entirely, and the thread would go on to
+		 * dereference ctx (and use ctx->skt/ctx->rxbuffer) after free()
+		 * has already freed/closed them -- the same use-after-free
+		 * class already found and fixed in smoother-pcr.c, probes.c,
+		 * smoother-rtp.c and segmentwriter.c's identical thread_running
+		 * pattern this session. Setting it only on success (rather than
+		 * unconditionally before pthread_create()) also avoids a hang
+		 * in free(): if pthread_create() itself fails, no thread exists
+		 * to ever set thread_complete, so thread_running must stay 0.
+		 */
+		ctx->thread_running = 1;
+	}
+	return ret;
 }
 
 /* UDP Transmitter ... */
