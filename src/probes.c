@@ -82,16 +82,18 @@ int ltntstools_probe_ltnencoder_alloc(void **hdl)
 }
 
 /* LTN Encoder specific function for extracting and making sense of timing information. */
-static void _ltnencoder_sei_timestamp_query(struct ltnencoder_sei_ctx_s *ctx, const unsigned char *buf, int lengthBytes, int offset)
+static int _ltnencoder_sei_timestamp_query(struct ltnencoder_sei_ctx_s *ctx, const unsigned char *buf, int lengthBytes, int offset)
 {
 	struct timeval walltimeEncoderFrameEntry;
-	sei_timestamp_value_timeval_query(buf + offset, lengthBytes - offset, 2, &walltimeEncoderFrameEntry);
+	if (sei_timestamp_value_timeval_query(buf + offset, lengthBytes - offset, 2, &walltimeEncoderFrameEntry) < 0)
+		return -1;
 
 	struct timeval walltimeLocal;
 	gettimeofday(&walltimeLocal, NULL);
 
 	/* Calculate total latency in ms from encoder frame input to this probe. */
 	ctx->latencyMs = ltn_timeval_subtract_ms(&walltimeLocal, &walltimeEncoderFrameEntry);
+	return 0;
 }
 
 int ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned char *buf, int lengthBytes)
@@ -102,12 +104,11 @@ int ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned ch
 	 * it back for all services. Bug.
 	 * We need to take the video pid into consideration before returning.
 	 */
-	
+
 	/* Find the LTN Encoder UUID */
 	int offset = ltn_uuid_find(buf, lengthBytes);
 	if (offset >= 0) {
-		_ltnencoder_sei_timestamp_query(ctx, buf, lengthBytes, offset);
-		return 0; /* Success */
+		return _ltnencoder_sei_timestamp_query(ctx, buf, lengthBytes, offset);
 	}
 
 	return -1; /* Failure */
@@ -169,7 +170,18 @@ int ltntstools_probe_scheduler_alloc(void **hdl)
 	ctx->beyond3msCount = 0;
 	ltn_histogram_alloc_video_defaults(&ctx->schedulerAccuracy1ms, "1ms scheduler accuracy");
 
-	/* Spawn a thread that manages the scheduled output queue. */
+	/* Spawn a thread that manages the scheduled output queue.
+	 * threadRunning must be set here, synchronously, before the thread is
+	 * created: scheduler_probe_threadFunc() also sets it (redundantly)
+	 * once it actually starts running, but ltntstools_probe_scheduler_free()
+	 * gates its "wait for the thread to terminate" logic on this flag. If
+	 * free() is called before the new thread gets scheduled for the first
+	 * time, threadRunning would still read 0, free() would skip the wait
+	 * entirely, and the thread would go on to dereference ctx after
+	 * free() has already freed it -- a real use-after-free (same class of
+	 * bug fixed in smoother-pcr.c's identical threadRunning pattern).
+	 */
+	ctx->threadRunning = 1;
 	pthread_create(&ctx->threadId, NULL, scheduler_probe_threadFunc, ctx);
 
 	*hdl = ctx;

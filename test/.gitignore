@@ -34,3 +34,5 @@ test_sei_timestamp
 test_sei_timestamp.dSYM
 test_smoother_pcr
 test_smoother_pcr.dSYM
+test_probes
+test_probes.dSYM

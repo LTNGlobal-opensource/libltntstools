@@ -144,8 +144,10 @@ int sei_timestamp_value_timeval_query(const unsigned char *buffer, int lengthByt
 	 */
 	uint32_t secs, usecs;
 
-	sei_timestamp_field_get(buffer, lengthBytes, nr, &secs);
-	sei_timestamp_field_get(buffer, lengthBytes, nr + 1, &usecs);
+	if (sei_timestamp_field_get(buffer, lengthBytes, nr, &secs) < 0)
+		return -1;
+	if (sei_timestamp_field_get(buffer, lengthBytes, nr + 1, &usecs) < 0)
+		return -1;
 
 	t->tv_sec = secs;
 	t->tv_usec = usecs;
@@ -161,7 +163,9 @@ int sei_timestamp_value_timeval_set(const unsigned char *buffer, int lengthBytes
         } else {
 		gettimeofday(&ts, NULL);
 	}
-	sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr, (uint32_t)ts.tv_sec);
-	sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr + 1, (uint32_t)ts.tv_usec);
+	if (sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr, (uint32_t)ts.tv_sec) < 0)
+		return -1;
+	if (sei_timestamp_field_set((unsigned char *)buffer, lengthBytes, nr + 1, (uint32_t)ts.tv_usec) < 0)
+		return -1;
 	return 0;
 }

@@ -46,6 +46,7 @@
         "**/test_pes_extractor": true,
         "**/test_sei_timestamp": true,
         "**/test_smoother_pcr": true,
+        "**/test_probes": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
