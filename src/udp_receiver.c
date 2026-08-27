@@ -138,15 +138,25 @@ int ltntstools_udp_receiver_alloc(struct ltntstools_udp_receiver_s **p,
 		return -1;
 	}
 
+	/* Every early-return below this point must close(ctx->skt) before
+	 * freeing ctx: the socket() call above already succeeded, so ctx->skt
+	 * is a real, open file descriptor -- free(ctx) only releases the
+	 * calloc()'d struct, not the OS-level descriptor. Confirmed via repro
+	 * that a failing bind() (the most realistic/reachable of these
+	 * failure paths, e.g. binding to an address not owned by any local
+	 * interface) leaked the socket fd before this fix.
+	 */
 	int n = socket_buffer_size;
 	if (setsockopt(ctx->skt, SOL_SOCKET, SO_RCVBUF, &n, sizeof(n)) == -1) {
 		perror("so_rcvbuf");
+		close(ctx->skt);
 		free(ctx);
 		return -1;
 	}
 
 	int reuse = 1;
 	if (setsockopt(ctx->skt, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+		close(ctx->skt);
 		free(ctx);
 		return -1;
 	}
@@ -156,6 +166,7 @@ int ltntstools_udp_receiver_alloc(struct ltntstools_udp_receiver_s **p,
 	ctx->sin.sin_addr.s_addr = inet_addr(ctx->ip_addr);
 	if (bind(ctx->skt, (struct sockaddr *)&ctx->sin, sizeof(ctx->sin)) < 0) {
 		perror("bind");
+		close(ctx->skt);
 		free(ctx);
 		return -1;
 	}
@@ -168,12 +179,14 @@ int ltntstools_udp_receiver_alloc(struct ltntstools_udp_receiver_s **p,
 	int fl = fcntl(ctx->skt, F_GETFL, 0);
 	if (fcntl(ctx->skt, F_SETFL, fl | O_NONBLOCK) < 0) {
 		perror("fcntl");
+		close(ctx->skt);
 		free(ctx);
 		return -1;
 	}
 
 	ctx->rxbuffer = malloc(ctx->rxbuffer_size);
 	if (!ctx->rxbuffer) {
+		close(ctx->skt);
 		free(ctx);
 		return -1;
 	}
