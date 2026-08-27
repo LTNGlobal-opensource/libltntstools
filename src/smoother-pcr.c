@@ -595,19 +595,24 @@ int smoother_pcr_alloc(void **hdl, void *userContext, smoother_pcr_output_callba
 	pthread_mutex_unlock(&ctx->listMutex);
 
 	/* Spawn a thread that manages the scheduled output queue.
-	 * threadRunning must be set here, synchronously, before the thread is
-	 * created: smoother_pcr_threadFunc() also sets it (redundantly) once
-	 * it actually starts running, but smoother_pcr_free() gates its
-	 * "wait for the thread to terminate" logic on this flag. If free() is
-	 * called before the new thread gets scheduled for the first time,
-	 * threadRunning would still read 0, free() would skip the wait
-	 * entirely, and the thread would go on to dereference ctx after
-	 * free() has already freed it -- a real, easily reproducible
-	 * use-after-free (confirmed via a plain alloc() immediately followed
-	 * by free(), no other calls in between).
+	 * threadRunning must be set here, synchronously in the parent,
+	 * immediately after a successful pthread_create() -- not left for
+	 * smoother_pcr_threadFunc() to set (redundantly) once it actually
+	 * starts running. smoother_pcr_free() gates its "wait for the thread
+	 * to terminate" logic on this flag: if free() were called before the
+	 * new thread got scheduled for the first time, threadRunning would
+	 * still read 0, free() would skip the wait entirely, and the thread
+	 * would go on to dereference ctx after free() has already freed it --
+	 * a real, easily reproducible use-after-free (confirmed via a plain
+	 * alloc() immediately followed by free(), no other calls in between).
+	 * Setting it only on success (rather than unconditionally before
+	 * pthread_create()) also avoids a hang in free(): if pthread_create()
+	 * itself fails, no thread exists to ever set threadTerminated, so
+	 * threadRunning must stay 0.
 	 */
-	ctx->threadRunning = 1;
-	pthread_create(&ctx->threadId, NULL, smoother_pcr_threadFunc, ctx);
+	if (pthread_create(&ctx->threadId, NULL, smoother_pcr_threadFunc, ctx) == 0) {
+		ctx->threadRunning = 1;
+	}
 
 	*hdl = ctx;
 
