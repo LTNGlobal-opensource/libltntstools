@@ -40,6 +40,7 @@
         "**/test_ts_packetizer": true,
         "**/test_throughput_hires": true,
         "**/test_time": true,
+        "**/test_throughput": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

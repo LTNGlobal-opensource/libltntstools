@@ -16,7 +16,7 @@ endif
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time
+test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput
 	./test_crc32
 	./test_history_metric
 	./test_ts
@@ -29,6 +29,7 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 	./test_ts_packetizer
 	./test_throughput_hires
 	./test_time
+	./test_throughput
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
@@ -66,5 +67,8 @@ test_throughput_hires: test_throughput_hires.c ../src/throughput_hires.c
 test_time: test_time.c ../src/time.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_time.c ../src/time.c
 
+test_throughput: test_throughput.c ../src/throughput.c
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_throughput.c ../src/throughput.c
+
 clean:
-	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time
+	rm -f test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput

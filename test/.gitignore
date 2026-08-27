@@ -22,3 +22,5 @@ test_throughput_hires
 test_throughput_hires.dSYM
 test_time
 test_time.dSYM
+test_throughput
+test_throughput.dSYM
