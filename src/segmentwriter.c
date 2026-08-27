@@ -272,7 +272,27 @@ int ltntstools_segmentwriter_alloc(void **hdl, const char *filenamePrefix, const
 
 	*hdl = s;
 
-	return pthread_create(&s->threadId, NULL, ltntstools_segmentwriter_threadFunc, s);
+	int ret = pthread_create(&s->threadId, NULL, ltntstools_segmentwriter_threadFunc, s);
+	if (ret == 0) {
+		/* threadRunning must be set here, synchronously in the parent,
+		 * immediately after a successful pthread_create() -- not left
+		 * for ltntstools_segmentwriter_threadFunc() to set (redundantly)
+		 * once it actually starts running. ltntstools_segmentwriter_free()
+		 * gates its "wait for the thread to terminate" logic on this
+		 * flag: if free() were called before the new thread got
+		 * scheduled for the first time, threadRunning would still read
+		 * 0, free() would skip the wait entirely, and the thread would
+		 * go on to dereference s after free() has already freed it --
+		 * the same use-after-free class already found and fixed in
+		 * smoother-pcr.c, probes.c and smoother-rtp.c's identical
+		 * threadRunning pattern. Setting it only on success (rather than
+		 * unconditionally before pthread_create()) also avoids a hang in
+		 * free(): if pthread_create() itself fails, no thread exists to
+		 * ever set threadTerminated, so threadRunning must stay 0.
+		 */
+		s->threadRunning = 1;
+	}
+	return ret;
 }
 
 void ltntstools_segmentwriter_free(void *hdl)
