@@ -337,6 +337,19 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
 	return 0; /* Success */
 }
 
+/* Return codes:
+ *    0  The ring was peeked and parsed without hitting any of the error
+ *       conditions below. Note this does NOT guarantee a PES was delivered
+ *       to the callback -- eg. ltn_pes_packet_parse() processing zero bits
+ *       (a truncated/unparseable PES) also returns 0 here; that's a
+ *       separate, not-yet-addressed gap in this return code's meaning.
+ *   -1  Ring was empty, nothing to do.
+ *   -2  Bitstream reader overran the ring content.
+ *   -3  Internal computedRingSize/rb_used bookkeeping mismatch.
+ *   -4  Ring content shorter than a PES could plausibly be (< 16 bytes).
+ *   -5  malloc() of the ring peek buffer failed (OOM); a PES was dropped.
+ *   -6  ltn_pes_packet_alloc() failed (OOM); a PES was dropped.
+ */
 static int _processRing(struct pes_extractor_s *ctx)
 {
 	int rlen = rb_used(ctx->rb);
@@ -398,7 +411,10 @@ static int _processRing(struct pes_extractor_s *ctx)
 			struct ltn_pes_packet_s *pes = ltn_pes_packet_alloc();
 			if (!pes) {
 				free(buf);
-				return -1;
+				/* Distinct from the -1 "nothing to do" case above: this is
+				 * a real dropped-PES error (OOM), not a benign empty ring.
+				 */
+				return -6;
 			}
 			int bitsProcessed = ltn_pes_packet_parse(pes, &bs, ctx->skipDataExtraction);
 
@@ -490,6 +506,11 @@ static int _processRing(struct pes_extractor_s *ctx)
 			}
 		}
 		free(buf);
+	} else {
+		/* malloc() failure must not be reported as success -- nothing was
+		 * processed, so a PES on this ring was silently dropped.
+		 */
+		return -5;
 	}
 
 	if (overrun) {
