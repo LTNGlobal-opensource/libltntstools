@@ -37,6 +37,16 @@
  * test_write_overflow_truncates_to_trailing_bytes(), test_discard_more_than_used_clamps_to_zero(),
  * test_write_exact_capacity_after_rotation() and test_write_grows_correctly_while_wrapped()
  * are direct regression coverage for bugs 1, 2, 3 and 4 respectively.
+ *
+ * Three more bugs, each with its own test below:
+ *  5. rb_new_threadsafe() dereferenced rb_new()'s result unconditionally,
+ *     crashing instead of propagating the NULL rb_new() documents returning
+ *     for a bad size relationship or an OOM.
+ *  6. rb_free(NULL) crashed: the RB_LOCK(rb) macro dereferences rb (via
+ *     rb->usingMutex) before the function's own NULL check ever ran.
+ *  7. rb_read_alloc() dereferenced its `to` output parameter with no NULL
+ *     check at all, and relied on rb_reader()'s assert-only (compiled out
+ *     under NDEBUG) check for `buf`.
  */
 
 #include <assert.h>
@@ -88,6 +98,23 @@ static void test_new_threadsafe_basic(void)
 	CHECK(rb_used(rb) == 2);
 
 	rb_free(rb);
+}
+
+/* rb_new_threadsafe() used to dereference rb_new()'s result unconditionally,
+ * crashing instead of propagating the NULL that rb_new() itself documents
+ * returning for a bad size relationship. */
+static void test_new_threadsafe_rejects_zero_size(void)
+{
+	CHECK(rb_new_threadsafe(0, 100) == NULL);
+}
+
+/* rb_free(NULL) used to crash: the RB_LOCK(rb) macro dereferences rb before
+ * the function's own NULL check ever ran. Reaching the CHECK below without
+ * crashing is the point of this test. */
+static void test_free_null_is_noop(void)
+{
+	rb_free(NULL);
+	CHECK(1);
 }
 
 /* -------- rb_is_empty() / rb_is_full() / rb_used() / rb_unused() -------- */
@@ -244,6 +271,22 @@ static void test_read_alloc(void)
 	CHECK(rb_used(rb) == 0);
 
 	free(out);
+	rb_free(rb);
+}
+
+/* rb_read_alloc() used to dereference its `to` output parameter (and
+ * inherit rb_reader()'s assert-only, NDEBUG-compiled-out `buf` check) with
+ * no guard at all. */
+static void test_read_alloc_rejects_null_args(void)
+{
+	KLRingBuffer *rb = rb_new(8, 8);
+
+	char *out = (char *)0x1; /* sentinel: must stay untouched */
+	CHECK(rb_read_alloc(NULL, &out, 4) == 0);
+	CHECK(out == (char *)0x1);
+
+	CHECK(rb_read_alloc(rb, NULL, 4) == 0);
+
 	rb_free(rb);
 }
 
@@ -524,6 +567,8 @@ int main(void)
 	test_new_rejects_size_greater_than_max();
 	test_new_accepts_size_equal_to_max();
 	test_new_threadsafe_basic();
+	test_new_threadsafe_rejects_zero_size();
+	test_free_null_is_noop();
 
 	test_is_empty();
 	test_is_full();
@@ -536,6 +581,7 @@ int main(void)
 	test_read_more_than_available_clamps();
 	test_read_from_empty_returns_zero();
 	test_read_alloc();
+	test_read_alloc_rejects_null_args();
 	test_wraparound_write_and_read();
 	test_write_exact_capacity_after_rotation();
 

@@ -44,7 +44,8 @@ KLRingBuffer *rb_new(size_t size, size_t size_max)
 KLRingBuffer *rb_new_threadsafe(size_t size, size_t size_max)
 {
 	KLRingBuffer *rb = rb_new(size, size_max);
-	rb->usingMutex = 1;
+	if (rb)
+		rb->usingMutex = 1;
 	return rb;
 }
 
@@ -349,6 +350,9 @@ size_t rb_read(KLRingBuffer *buf, char *to, size_t bytes)
 
 size_t rb_read_alloc(KLRingBuffer *buf, char **to, size_t bytes)
 {
+	if (!buf || !to)
+		return 0;
+
 	*to = (char *)malloc(bytes);
 	if (!*to)
 		return 0;
@@ -425,13 +429,18 @@ void rb_stream(KLRingBuffer *from, KLRingBuffer *to, size_t bytes)
 
 void rb_free(KLRingBuffer *rb)
 {
+	/* RB_LOCK(rb) below dereferences rb (via rb->usingMutex) before any
+	 * check could run, so the NULL guard must come first, not after --
+	 * matching free()'s own "NULL is a no-op" convention that callers
+	 * throughout this codebase already rely on.
+	 */
+	if (!rb)
+		return;
+
 	RB_LOCK(rb);
 
-	assert(rb);
-	if (rb) {
-		free(rb->data);
-		free(rb);
-	}
+	free(rb->data);
+	free(rb);
 }
 
 void rb_fwrite(KLRingBuffer *buf, FILE *fh)

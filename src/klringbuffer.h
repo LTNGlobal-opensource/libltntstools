@@ -138,6 +138,17 @@ size_t rb_write(KLRingBuffer *buf, const char *from, size_t bytes);
  * @return	Number of bytes read.
  */
 size_t rb_read(KLRingBuffer *buf, char *to, size_t bytes);
+
+/**
+ * @brief       Read data from the ring, draining it, into a newly malloc()'d buffer.
+ * @param[in]   KLRingBuffer *buf - Object.
+ * @param[out]  char **to - Set to a newly allocated buffer of `bytes` bytes.
+ *              Owned by the caller (free() it) even when 0 bytes are read.
+ *              Left untouched if buf or to is NULL.
+ * @param[in]	size_t bytes - Number of bytes to allocate for and copy.
+ * @return	Number of bytes read. 0 if buf or to is NULL, the allocation
+ *              failed, or the ring had nothing to read.
+ */
 size_t rb_read_alloc(KLRingBuffer *buf, char **to, size_t bytes);
 
 /**
