@@ -495,6 +495,50 @@ static void test_alloc_rejects_invalid_buffer_range(void)
 	void *hdl = (void *)0x1; /* sentinel: alloc() must not leave this untouched-but-claim-success */
 	int ret = ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, 1000, 10);
 	CHECK(ret < 0);
+
+	/* buffer_max < buffer_min with both concrete (non-default, non-negative)
+	 * values -- caught by rb_new()'s own `size > size_max` check, same
+	 * mechanism as the 1000/10 case above, just spelled out explicitly. */
+	hdl = (void *)0x1;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, 4096, 2048) < 0);
+
+	/* buffer_max == 0 (with a defaulted, valid buffer_min) -- caught by
+	 * rb_new()'s `size > size_max` check (any positive min exceeds a 0 max). */
+	hdl = (void *)0x1;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, 0) < 0);
+
+	/* buffer_min == 0 (with a defaulted, valid buffer_max) -- caught by
+	 * rb_new()'s own explicit `size == 0` check. */
+	hdl = (void *)0x1;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, 0, -1) < 0);
+
+	/* Both zero. */
+	hdl = (void *)0x1;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, 0, 0) < 0);
+}
+
+/* Regression test for issue #17: -1 is the sole "use the default" sentinel;
+ * any other negative value used to fall through unchecked into rb_new(),
+ * relying on the resulting size_t wraparound + malloc() failure to fail
+ * safe by accident rather than being rejected as invalid input explicitly. */
+static void test_alloc_rejects_negative_buffer_sizes_other_than_sentinel(void)
+{
+	void *hdl;
+
+	hdl = (void *)0x1;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -2, -1) < 0);
+
+	hdl = (void *)0x1;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -2) < 0);
+
+	hdl = (void *)0x1;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -100, -100) < 0);
+
+	/* -1 itself must still work (the one legitimate negative value). */
+	hdl = NULL;
+	CHECK(ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1) == 0);
+	CHECK(hdl != NULL);
+	ltntstools_pes_extractor_free(hdl);
 }
 
 /* -------- write(): adaptation field handling -------- */
@@ -660,6 +704,7 @@ int main(void)
 	test_setters_return_success();
 	test_null_and_invalid_args_are_rejected_safely();
 	test_alloc_rejects_invalid_buffer_range();
+	test_alloc_rejects_negative_buffer_sizes_other_than_sentinel();
 
 	test_write_ignores_other_pid_no_callback();
 	test_write_default_attaches_data_test_skip_data_true_omits_it();

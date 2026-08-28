@@ -92,6 +92,16 @@ static void *notification_callback(struct pes_extractor_s *ctx, enum ltntstools_
 
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
+	if (buffer_min < -1 || buffer_max < -1) {
+		/* -1 is the sole sentinel for "use the default". Any other
+		 * negative value would otherwise wrap to a huge unsigned size_t
+		 * once handed to rb_new() below, relying on the resulting
+		 * malloc() failure to fail safe rather than rejecting bad input
+		 * explicitly.
+		 */
+		return -1;
+	}
+
 	struct pes_extractor_s *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
 		return -1;
