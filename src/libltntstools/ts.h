@@ -162,8 +162,8 @@ static inline uint8_t ltntstools_continuity_counter(const uint8_t *pkt)
 
 /**
  * @brief       Write a PCR value into a byte array conformant to the PCR field in MPEG-TS header (48-bit base+reserved+ext)
- * @param[out]  uint8_t *dst - Pointer to insert into (e.g. "pkt + 6")
- * @param[in]   int lengthBytes - Byte range of dst to not exceed
+ * @param[out]  uint8_t *dst - Pointer to insert into (e.g. "pkt + 6"). Must be at least 6 bytes.
+ * @param[in]   int lengthBytes - Byte range of dst, must be >= 6 else the call is a no-op.
  * @param[in]   uint64_t pcr - PCR value to write into dst
  */
 void ltntstools_pcr_packTo(uint8_t *dst, int lengthBytes, uint64_t pcr);
@@ -256,8 +256,10 @@ int ltntstools_contains_pes_header_reverse(const uint8_t *buf, int lengthBytes);
 /**
  * @brief       For a given transport packet, assume the packet contains a table
  *              and extract the section table identifier.
- * @param[in]   const uint8_t *pkt - Transport packet.
- * @return      eight bit field.
+ * @param[in]   const uint8_t *pkt - Transport packet, at least 188 bytes.
+ * @return      eight bit field, or 0xff (the reserved/stuffing table_id) if pkt is
+ *              NULL or the packet's adaption_field_length places the table id
+ *              outside the 188 byte packet.
  */
 unsigned int ltntstools_get_section_tableid(const uint8_t *pkt);
 

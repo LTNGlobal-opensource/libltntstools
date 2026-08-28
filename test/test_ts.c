@@ -216,6 +216,43 @@ static void test_pcr_packTo_roundtrip(void)
 	}
 }
 
+/* Regression tests: len/lengthBytes used to be accepted but silently
+ * ignored, so a short buffer would still be read/written 6 bytes deep. */
+static void test_pcrToScr_rejects_short_len(void)
+{
+	uint8_t a[6] = { 0x00, 0x00, 0x00, 0x00, 0x80, 0x05 };
+	CHECK(ltntstools_pcrToScr(a, 5) == 0);
+	CHECK(ltntstools_pcrToScr(a, 0) == 0);
+	CHECK(ltntstools_pcrToScr(a, -1) == 0);
+}
+
+static void test_pcrToScr_rejects_null_ptr(void)
+{
+	CHECK(ltntstools_pcrToScr(NULL, 6) == 0);
+}
+
+static void test_pcr_packTo_rejects_short_lengthBytes(void)
+{
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, 5) == 0);
+	memset(g.ptr, 0xAA, 5);
+
+	/* lengthBytes (5) is shorter than the 6 bytes a PCR field needs; must
+	 * be a no-op, not a write past the buffer end. */
+	ltntstools_pcr_packTo(g.ptr, 5, 123456789ULL);
+	for (int i = 0; i < 5; i++) {
+		CHECK(g.ptr[i] == 0xAA);
+	}
+
+	guarded_buf_free(&g);
+}
+
+static void test_pcr_packTo_rejects_null_dst(void)
+{
+	/* Must not crash. */
+	ltntstools_pcr_packTo(NULL, 6, 123456789ULL);
+}
+
 /* -------- ltntstools_scr() -------- */
 
 static void test_scr_rejects_no_sync(void)
@@ -367,6 +404,12 @@ static void test_contains_pes_header_short_buffer_safe(void)
 	CHECK(ltntstools_contains_pes_header_reverse(buf, 2) < 0);
 }
 
+static void test_contains_pes_header_null_buf_safe(void)
+{
+	CHECK(ltntstools_contains_pes_header(NULL, 188) < 0);
+	CHECK(ltntstools_contains_pes_header_reverse(NULL, 188) < 0);
+}
+
 /* -------- get_section_tableid -------- */
 
 static void test_get_section_tableid_no_adaptation(void)
@@ -384,6 +427,27 @@ static void test_get_section_tableid_with_adaptation(void)
 	pkt[4] = 10; /* adaptation_field_length */
 	pkt[5 + 1 + 10] = 0x77;
 	CHECK(ltntstools_get_section_tableid(pkt) == 0x77);
+}
+
+/* Regression test: a corrupt/malicious adaptation_field_length must not
+ * push the read past the end of the 188-byte packet. Buffer is
+ * mmap-guarded so a reintroduced out-of-bounds read faults immediately. */
+static void test_get_section_tableid_corrupt_adaptation_length_no_oob_read(void)
+{
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, 188) == 0);
+	memset(g.ptr, 0, 188);
+	set_header(g.ptr, 0x100, 0, 0, 0, 0, 3 /* adaptation + payload */, 0);
+	g.ptr[4] = 255; /* adaptation_field_length: far larger than the packet can hold */
+
+	CHECK(ltntstools_get_section_tableid(g.ptr) == 0xff);
+
+	guarded_buf_free(&g);
+}
+
+static void test_get_section_tableid_null_pkt_returns_reserved(void)
+{
+	CHECK(ltntstools_get_section_tableid(NULL) == 0xff);
 }
 
 /* -------- ES payload type classification -------- */
@@ -436,6 +500,12 @@ static void test_generateNullPacket(void)
 			break;
 		}
 	}
+}
+
+static void test_generateNullPacket_null_pkt_safe(void)
+{
+	/* Must not crash. */
+	ltntstools_generateNullPacket(NULL);
 }
 
 static void test_findSyncPosition_aligned(void)
@@ -563,6 +633,40 @@ static void test_pcr_position_append_grows_array(void)
 	CHECK(arr[1].pcr == 100);
 	CHECK(arr[2].pcr == 200);
 	free(arr);
+}
+
+static void test_pcr_position_append_null_args_safe(void)
+{
+	struct ltntstools_pcr_position_s *arr = NULL;
+	int len = 0;
+	struct ltntstools_pcr_position_s p = { .pcr = 1, .offset = 1, .pid = 1 };
+
+	CHECK(ltntstools_pcr_position_append(NULL, &len, &p) < 0);
+	CHECK(ltntstools_pcr_position_append(&arr, NULL, &p) < 0);
+	CHECK(ltntstools_pcr_position_append(&arr, &len, NULL) < 0);
+	CHECK(arr == NULL);
+	CHECK(len == 0);
+}
+
+static void test_queryPCRs_null_args_safe(void)
+{
+	uint8_t buf[3 * 188] = { 0 };
+	struct ltntstools_pcr_position_s *arr = NULL;
+	int arrLen = 0;
+
+	CHECK(ltntstools_queryPCRs(NULL, sizeof(buf), 0, &arr, &arrLen) < 0);
+	CHECK(ltntstools_queryPCRs(buf, sizeof(buf), 0, NULL, &arrLen) < 0);
+	CHECK(ltntstools_queryPCRs(buf, sizeof(buf), 0, &arr, NULL) < 0);
+}
+
+static void test_queryPCR_pid_null_args_safe(void)
+{
+	uint8_t buf[188] = { 0 };
+	struct ltntstools_pcr_position_s pos;
+	ltntstools_pcr_position_reset(&pos);
+
+	CHECK(ltntstools_queryPCR_pid(NULL, sizeof(buf), &pos, 0x100, 1) < 0);
+	CHECK(ltntstools_queryPCR_pid(buf, sizeof(buf), NULL, 0x100, 1) < 0);
 }
 
 /* Regression test: with pktAligned=1 and a small lengthBytes, the old bound
@@ -726,6 +830,13 @@ static void test_pts_to_ascii_autoalloc(void)
 	}
 }
 
+static void test_pts_to_ascii_null_buf_arg_safe(void)
+{
+	/* Must not crash. */
+	ltntstools_pts_to_ascii(NULL, 0);
+	ltntstools_pcr_to_ascii(NULL, 0);
+}
+
 static void test_pcr_to_ascii_matches_pts_to_ascii(void)
 {
 	char pts_buf[32];
@@ -819,6 +930,10 @@ int main(void)
 
 	test_pcrToScr_known_values();
 	test_pcr_packTo_roundtrip();
+	test_pcrToScr_rejects_short_len();
+	test_pcrToScr_rejects_null_ptr();
+	test_pcr_packTo_rejects_short_lengthBytes();
+	test_pcr_packTo_rejects_null_dst();
 	test_scr_rejects_no_sync();
 	test_scr_rejects_no_adaptation();
 	test_scr_rejects_adaptation_length_zero();
@@ -838,15 +953,19 @@ int main(void)
 	test_contains_pes_header_not_found();
 	test_contains_pes_header_forward_vs_reverse();
 	test_contains_pes_header_short_buffer_safe();
+	test_contains_pes_header_null_buf_safe();
 
 	test_get_section_tableid_no_adaptation();
 	test_get_section_tableid_with_adaptation();
+	test_get_section_tableid_corrupt_adaptation_length_no_oob_read();
+	test_get_section_tableid_null_pkt_returns_reserved();
 
 	test_is_ESPayloadType_Video_spotcheck();
 	test_is_ESPayloadType_Audio_spotcheck();
 	test_GetESPayloadTypeDescription_never_null();
 
 	test_generateNullPacket();
+	test_generateNullPacket_null_pkt_safe();
 	test_findSyncPosition_aligned();
 	test_findSyncPosition_offset();
 	test_findSyncPosition_too_short();
@@ -857,6 +976,9 @@ int main(void)
 	test_queryPCR_pid_unaligned_offset();
 	test_queryPCR_pid_no_match_returns_error();
 	test_pcr_position_append_grows_array();
+	test_pcr_position_append_null_args_safe();
+	test_queryPCRs_null_args_safe();
+	test_queryPCR_pid_null_args_safe();
 	test_queryPCR_pid_tiny_aligned_buffer_no_oob_read();
 	test_queryPCRs_trailing_partial_packet_no_oob_read();
 	test_queryPCR_pid_trailing_partial_packet_no_oob_read();
@@ -869,6 +991,7 @@ int main(void)
 
 	test_pts_to_ascii_known_values();
 	test_pts_to_ascii_autoalloc();
+	test_pts_to_ascii_null_buf_arg_safe();
 	test_pcr_to_ascii_matches_pts_to_ascii();
 	test_pts_to_ascii_extreme_positive_value_stays_in_bounds();
 	test_pts_to_ascii_extreme_negative_value_stays_in_bounds();

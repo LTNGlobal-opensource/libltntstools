@@ -3,7 +3,8 @@
 #include <inttypes.h>
 
 /* Convert a pcr base + extension field back into a 27MHz System Clock reference value.
- * Ptr points to a 6 byte raw data, which we'll parse.
+ * Ptr points to a 6 byte raw data, which we'll parse. len must be >= 6, else
+ * (or if ptr is NULL) 0 is returned without reading ptr.
  * The Adaption spec calls for the PCR to have the following format:
  * program_clock_reference_base       33bits
  * reserved                            6bits
@@ -11,6 +12,9 @@
  */
 uint64_t ltntstools_pcrToScr(const uint8_t *ptr, int len)
 {
+        if (!ptr || len < 6)
+                return 0;
+
         uint64_t pcr_base;
         pcr_base  = (((uint64_t)*(ptr + 0)) << 25);
         pcr_base |= (((uint64_t)*(ptr + 1)) << 17);
@@ -56,6 +60,9 @@ int ltntstools_scr(const uint8_t *pkt, uint64_t *scr)
  */
 void ltntstools_pcr_packTo(uint8_t *dst, int lengthBytes, uint64_t pcr)
 {
+	if (!dst || lengthBytes < 6)
+		return;
+
 	/* PCR / SCR value in 27MHz */
 	/* The PCR is a 42bit number coded in two parts */
 
@@ -94,6 +101,9 @@ int ltntstools_generatePCROnlyPacket(uint8_t *pkt, int lengthBytes, uint16_t pid
 
 int ltntstools_contains_pes_header_reverse(const uint8_t *buf, int lengthBytes)
 {
+	if (!buf)
+		return -1;
+
 	const char pattern[] = { 0x00, 0x00, 0x01 };
 	for (int i = lengthBytes - 3; i >= 0; i--) {
 		if (memcmp(buf + i, pattern, sizeof(pattern)) == 0)
@@ -105,6 +115,9 @@ int ltntstools_contains_pes_header_reverse(const uint8_t *buf, int lengthBytes)
 
 int ltntstools_contains_pes_header(const uint8_t *buf, int lengthBytes)
 {
+	if (!buf)
+		return -1;
+
 	const char pattern[] = { 0x00, 0x00, 0x01 };
 	for (int i = 0; i < lengthBytes - 3; i++) {
 		if (memcmp(buf + i, pattern, sizeof(pattern)) == 0)
@@ -116,11 +129,21 @@ int ltntstools_contains_pes_header(const uint8_t *buf, int lengthBytes)
 
 unsigned int ltntstools_get_section_tableid(const uint8_t *pkt)
 {
+	if (!pkt)
+		return 0xff; /* reserved/stuffing table_id: no valid section data */
+
 	int section_offset = 5;
 	if (ltntstools_has_adaption(pkt)) {
 		section_offset++;
 		section_offset += ltntstools_adaption_field_length(pkt);
 	}
+
+	/* adaption_field_length is an untrusted 8-bit field read from the packet.
+	 * A corrupt/malicious value can push section_offset past the end of this
+	 * (implicitly 188 byte) transport packet -- refuse to read out of bounds.
+	 */
+	if (section_offset < 0 || section_offset >= 188)
+		return 0xff; /* reserved/stuffing table_id: no valid section data */
 
 	return *(pkt + section_offset);
 }
@@ -254,6 +277,9 @@ const char *ltntstools_GetESPayloadTypeDescription(uint8_t esPayloadType)
 
 void ltntstools_generateNullPacket(uint8_t *pkt)
 {
+        if (!pkt)
+                return;
+
         memset(pkt, 0xff, 188);
         *(pkt + 0) = 0x47;
         *(pkt + 1) = 0x1f;
@@ -361,6 +387,9 @@ int ltntstools_findSyncPosition(const uint8_t *buf, int lengthBytes)
 
 int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, struct ltntstools_pcr_position_s **array, int *arrayLength)
 {
+	if (!buf || !array || !arrayLength)
+		return -1;
+
 	/* Find the SYNC byte offset in a buffer of potential transport packets. */
 	int offset = ltntstools_findSyncPosition(buf, lengthBytes);
 	if (offset < 0)
@@ -386,9 +415,14 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
 		if (ltntstools_scr((uint8_t *)pkt, &scr) < 0)
 			continue;
 
-		arr = realloc(arr, ++arrLength * sizeof(struct ltntstools_pcr_position_s));
-		if (!arr)
+		int newLength = arrLength + 1;
+		struct ltntstools_pcr_position_s *tmp = realloc(arr, newLength * sizeof(struct ltntstools_pcr_position_s));
+		if (!tmp) {
+			free(arr);
 			return -1;
+		}
+		arr = tmp;
+		arrLength = newLength;
 
 		(arr + (arrLength - 1))->pid = ltntstools_pid(pkt);
 		(arr + (arrLength - 1))->offset = addr + i;
@@ -403,9 +437,16 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
 
 int ltntstools_pcr_position_append(struct ltntstools_pcr_position_s **array, int *arrayLength, struct ltntstools_pcr_position_s *p)
 {
-	*array = realloc(*array, ++(*arrayLength) * sizeof(struct ltntstools_pcr_position_s));
-	if (!*array)
+	if (!array || !arrayLength || !p)
 		return -1;
+
+	int newLength = *arrayLength + 1;
+	struct ltntstools_pcr_position_s *tmp = realloc(*array, newLength * sizeof(struct ltntstools_pcr_position_s));
+	if (!tmp)
+		return -1; /* *array and *arrayLength are left unmodified on failure */
+
+	*array = tmp;
+	*arrayLength = newLength;
 
 	memcpy(*array + (*arrayLength - 1), p, sizeof(*p));
 
@@ -413,6 +454,9 @@ int ltntstools_pcr_position_append(struct ltntstools_pcr_position_s **array, int
 }
 int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstools_pcr_position_s *pos, uint16_t pcrPID, int pktAligned)
 {
+	if (!buf || !pos)
+		return -1;
+
 	int offset = 0;
 
 	if (!pktAligned) {
@@ -457,8 +501,14 @@ int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstoo
 
 void ltntstools_pts_to_ascii(char **buf, int64_t pts)
 {
+	if (!buf)
+		return;
+
 	if (*buf == NULL)
 			*buf = malloc(16);
+
+	if (*buf == NULL)
+		return; /* Allocation failed. */
 
 	/* Normalize to seconds */
 	int64_t t = pts / 90000;
