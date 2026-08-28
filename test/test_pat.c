@@ -563,6 +563,42 @@ static void test_enum_services_scte35_skips_zero_stream_program(void)
 	ltntstools_pat_free(pat);
 }
 
+/* Regression test for issue #3: a program whose PMT carries the SCTE-35
+ * CUEI registration descriptor but whose only stream isn't actually type
+ * 0x86 previously left the resume cursor (*e) un-advanced in that one
+ * branch, while the outer loop's iteration-count bound (i) kept advancing
+ * independently and unconditionally of *e -- and the array access used *e
+ * (not i) as the index in the first place. The combined effect: the
+ * function got stuck re-examining the very same non-matching program on
+ * every remaining iteration and never reached the next program's genuine
+ * match, incorrectly reporting no match found at all. */
+static void test_enum_services_scte35_survives_non_matching_program_before_real_match(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+
+	struct ltntstools_pat_program_s *p1 = add_program(pat, 1, 0x100);
+	ltntstools_descriptor_list_add(&p1->pmt.descr_list, 0x05, (uint8_t *)"CUEI", 4);
+	add_stream(&p1->pmt, 0x1B, 0x101); /* has the CUEI descriptor, but no 0x86 stream */
+
+	struct ltntstools_pat_program_s *p2 = add_program(pat, 2, 0x200);
+	ltntstools_descriptor_list_add(&p2->pmt.descr_list, 0x05, (uint8_t *)"CUEI", 4);
+	add_stream(&p2->pmt, 0x86, 0x201); /* genuine SCTE-35 splice info */
+
+	int e = 0;
+	struct ltntstools_pmt_s *pmt = NULL;
+	uint16_t *pids = NULL;
+	int pidCount = 0;
+	CHECK(ltntstools_pat_enum_services_scte35(pat, &e, &pmt, &pids, &pidCount) == 0);
+	CHECK(pmt == &p2->pmt);
+	CHECK(pidCount == 1);
+	CHECK(pids && pids[0] == 0x201);
+	free(pids);
+
+	CHECK(ltntstools_pat_enum_services_scte35(pat, &e, &pmt, &pids, &pidCount) < 0);
+
+	ltntstools_pat_free(pat);
+}
+
 /* -------- enum_services_smpte2038 -------- */
 
 static void test_enum_services_smpte2038_finds_and_terminates(void)
@@ -606,6 +642,42 @@ static void test_enum_services_video_multi_program(void)
 	ltntstools_pat_free(pat);
 }
 
+/* Regression coverage for issue #9: exercises the multi-call resume
+ * mechanism (including an intervening non-matching program) now that the
+ * array is indexed by i, the bounds-checked loop variable, instead of *e
+ * directly. Note this can't discriminate the fix from the pre-fix code --
+ * in this particular function i and *e always stayed in lockstep even
+ * before the fix (both advance exactly once per outer iteration, and
+ * start equal), so runtime behavior is unchanged; this only guards
+ * against a future change to the loop reintroducing a divergence between
+ * them. */
+static void test_enum_services_video_resume_across_multiple_programs(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+
+	struct ltntstools_pat_program_s *p1 = add_program(pat, 1, 0x100);
+	add_stream(&p1->pmt, 0x03, 0x101); /* audio only */
+
+	struct ltntstools_pat_program_s *p2 = add_program(pat, 2, 0x200);
+	add_stream(&p2->pmt, 0x1B, 0x201); /* video */
+
+	struct ltntstools_pat_program_s *p3 = add_program(pat, 3, 0x300);
+	add_stream(&p3->pmt, 0x03, 0x301); /* audio only */
+
+	struct ltntstools_pat_program_s *p4 = add_program(pat, 4, 0x400);
+	add_stream(&p4->pmt, 0x1B, 0x401); /* video */
+
+	int e = 0;
+	struct ltntstools_pmt_s *pmt = NULL;
+	CHECK(ltntstools_pat_enum_services_video(pat, &e, &pmt) == 0);
+	CHECK(pmt == &p2->pmt);
+	CHECK(ltntstools_pat_enum_services_video(pat, &e, &pmt) == 0);
+	CHECK(pmt == &p4->pmt);
+	CHECK(ltntstools_pat_enum_services_video(pat, &e, &pmt) < 0);
+
+	ltntstools_pat_free(pat);
+}
+
 static void test_enum_services_teletext_multi_program(void)
 {
 	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
@@ -622,6 +694,41 @@ static void test_enum_services_teletext_multi_program(void)
 	struct ltntstools_pmt_s *pmt = NULL;
 	CHECK(ltntstools_pat_enum_services_teletext(pat, &e, &pmt) == 0);
 	CHECK(pmt == &p2->pmt);
+	CHECK(ltntstools_pat_enum_services_teletext(pat, &e, &pmt) < 0);
+
+	ltntstools_pat_free(pat);
+}
+
+/* Regression coverage for issue #9: same as
+ * test_enum_services_video_resume_across_multiple_programs() above, for
+ * the teletext variant. Same caveat: can't discriminate the fix from the
+ * pre-fix code for the same reason. */
+static void test_enum_services_teletext_resume_across_multiple_programs(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+
+	struct ltntstools_pat_program_s *p1 = add_program(pat, 1, 0x100);
+	add_stream(&p1->pmt, 0x06, 0x101); /* no teletext descriptor -- no match */
+
+	struct ltntstools_pat_program_s *p2 = add_program(pat, 2, 0x200);
+	add_stream(&p2->pmt, 0x06, 0x201);
+	uint8_t ttx1[5] = { 0 };
+	ltntstools_descriptor_list_add(&p2->pmt.streams[0].descr_list, 0x56, ttx1, sizeof(ttx1));
+
+	struct ltntstools_pat_program_s *p3 = add_program(pat, 3, 0x300);
+	add_stream(&p3->pmt, 0x03, 0x301); /* audio only -- no match */
+
+	struct ltntstools_pat_program_s *p4 = add_program(pat, 4, 0x400);
+	add_stream(&p4->pmt, 0x06, 0x401);
+	uint8_t ttx2[5] = { 0 };
+	ltntstools_descriptor_list_add(&p4->pmt.streams[0].descr_list, 0x56, ttx2, sizeof(ttx2));
+
+	int e = 0;
+	struct ltntstools_pmt_s *pmt = NULL;
+	CHECK(ltntstools_pat_enum_services_teletext(pat, &e, &pmt) == 0);
+	CHECK(pmt == &p2->pmt);
+	CHECK(ltntstools_pat_enum_services_teletext(pat, &e, &pmt) == 0);
+	CHECK(pmt == &p4->pmt);
 	CHECK(ltntstools_pat_enum_services_teletext(pat, &e, &pmt) < 0);
 
 	ltntstools_pat_free(pat);
@@ -650,6 +757,62 @@ static void test_enum_services_audio_multi_pid_single_program(void)
 	free(pids);
 	free(streamTypes);
 
+	CHECK(ltntstools_pat_enum_services_audio(pat, &e, &pmt, &streamTypes, &pids, &pidCount) < 0);
+
+	ltntstools_pat_free(pat);
+}
+
+/* Regression test for issue #3: this loop was bounded by i (checked
+ * against pat->program_count) but indexed the array with *e, the resume
+ * cursor -- and i always started at 0 regardless of *e's value. On a
+ * resumed call this granted program_count iterations (the full count)
+ * instead of the program_count - *e that actually remain, so with no
+ * further matches the loop walked *e past the end of the fixed-size
+ * programs[] array. Uses a full LTNTSTOOLS_PAT_ENTRIES_MAX-sized PAT so
+ * the excess reads the old code performed would run off the end of the
+ * array entirely (not just past program_count) -- must terminate cleanly
+ * with "no more matches", not crash or scan into out-of-bounds memory.
+ *
+ * Honesty note: mutation-tested by reverting the fix, and it did NOT
+ * reproduce an observable failure on this platform -- struct
+ * ltntstools_pat_s is calloc()'d, so the heap-buffer-overflow read the old
+ * code performs one element past the array happens to land on
+ * deterministically-zeroed adjacent heap content here, which
+ * ltntstools_pat_enum_services_audio() interprets as an empty ("no
+ * streams") program and continues rather than crashing or matching. The
+ * bug is real (confirmed by code inspection: it's a genuine
+ * out-of-bounds read past a fixed-size array, undefined behavior per the
+ * C standard, and would show up under AddressSanitizer or on an
+ * allocator/heap layout where that adjacent memory isn't zero), but this
+ * specific test can't prove it failed pre-fix the way the scte35
+ * regression test above could. Kept as coverage for the corrected,
+ * intended behavior and as a canary that might catch it under ASan or a
+ * different allocator. */
+static void test_enum_services_audio_resume_past_last_program_does_not_overrun(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+
+	struct ltntstools_pat_program_s *p0 = add_program(pat, 1, 0x100);
+	add_stream(&p0->pmt, 0x03, 0x101); /* audio -- the only match */
+
+	for (int i = 1; i < LTNTSTOOLS_PAT_ENTRIES_MAX; i++) {
+		struct ltntstools_pat_program_s *p = add_program(pat, 2 + i, 0x200 + i);
+		add_stream(&p->pmt, 0x1B, 0x300 + i); /* video only, never matches */
+	}
+	CHECK(pat->program_count == LTNTSTOOLS_PAT_ENTRIES_MAX);
+
+	int e = 0;
+	struct ltntstools_pmt_s *pmt = NULL;
+	uint32_t *streamTypes = NULL;
+	uint16_t *pids = NULL;
+	int pidCount = 0;
+	CHECK(ltntstools_pat_enum_services_audio(pat, &e, &pmt, &streamTypes, &pids, &pidCount) == 0);
+	CHECK(pmt == &p0->pmt);
+	free(pids);
+	free(streamTypes);
+
+	/* No more matches among the remaining LTNTSTOOLS_PAT_ENTRIES_MAX - 1
+	 * (all video-only) programs. */
 	CHECK(ltntstools_pat_enum_services_audio(pat, &e, &pmt, &streamTypes, &pids, &pidCount) < 0);
 
 	ltntstools_pat_free(pat);
@@ -699,6 +862,27 @@ static void test_enum_services_by_pid(void)
 
 	e = 0;
 	CHECK(ltntstools_pat_enum_services(pat, &e, 0x999 /* not present */, &pmt) < 0);
+
+	ltntstools_pat_free(pat);
+}
+
+/* Regression coverage for issue #9: starts the resume cursor at a nonzero
+ * value directly (not via a prior call) and confirms the array is indexed
+ * consistently at that position, now that it's indexed by i instead of
+ * *e. Same caveat as the video/teletext resume tests: i and *e already
+ * stayed in lockstep here before the fix, so this can't discriminate
+ * old vs new behavior -- it guards against future divergence. */
+static void test_enum_services_by_pid_resume_from_nonzero_cursor(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+	add_program(pat, 1, 0x100);
+	struct ltntstools_pat_program_s *p2 = add_program(pat, 2, 0x200);
+	add_program(pat, 3, 0x300);
+
+	int e = 1;
+	struct ltntstools_pmt_s *pmt = NULL;
+	CHECK(ltntstools_pat_enum_services(pat, &e, 0x200, &pmt) == 0);
+	CHECK(pmt == &p2->pmt);
 
 	ltntstools_pat_free(pat);
 }
@@ -1043,12 +1227,17 @@ int main(void)
 
 	test_enum_services_scte35_finds_and_terminates();
 	test_enum_services_scte35_skips_zero_stream_program();
+	test_enum_services_scte35_survives_non_matching_program_before_real_match();
 	test_enum_services_smpte2038_finds_and_terminates();
 	test_enum_services_video_multi_program();
+	test_enum_services_video_resume_across_multiple_programs();
 	test_enum_services_teletext_multi_program();
+	test_enum_services_teletext_resume_across_multiple_programs();
 	test_enum_services_audio_multi_pid_single_program();
 	test_enum_services_audio_skips_zero_stream_program();
+	test_enum_services_audio_resume_past_last_program_does_not_overrun();
 	test_enum_services_by_pid();
+	test_enum_services_by_pid_resume_from_nonzero_cursor();
 
 	test_pmt_remove_es_for_pid_start_middle_end();
 	test_pmt_remove_es_for_pid_not_found();

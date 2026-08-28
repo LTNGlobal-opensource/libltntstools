@@ -363,8 +363,21 @@ int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, st
     *pid_array = NULL;
     *pid_count = 0;
 
-    for (int i = 0; i < pat->program_count; i++) {
-        struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+    /* Regression fix for issue #3: this loop was bounded by i (checked
+     * against pat->program_count) but indexed the array with *e, the
+     * caller's resume cursor -- and i always started at 0 regardless of
+     * *e's value. On a resumed call (*e > 0) this ran more iterations
+     * than remained, walking *e past pat->program_count and reading out
+     * of bounds of the fixed-size programs[] array. i now starts at *e
+     * and is the only thing used to index the array; *e is purely an
+     * output cursor for the caller's next call. Also fixes a related
+     * cursor bug: the "found the registration descriptor but zero
+     * matching streams" case below never advanced *e at all, so a
+     * resumed call would re-examine (and could repeatedly re-allocate
+     * for) the exact same program.
+     */
+    for (int i = *e; i < pat->program_count; i++) {
+        struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
 
         if (ltntstools_descriptor_list_contains_scte35_cue_registration(&pmt->descr_list) == 0) {
 			(*e)++;
@@ -401,6 +414,7 @@ int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, st
             /* Free the allocated memory if no PIDs were found */
             free(*pid_array);
             *pid_array = NULL;
+            (*e)++;
         }
     }
 
@@ -549,12 +563,18 @@ int ltntstools_pat_enum_services_video(struct ltntstools_pat_s *pat, int *e, str
 	if ((*e) + 1 > pat->program_count)
 		return -1;
 
+	/* Regression fix for issue #9: this loop already started i at *e
+	 * correctly, but indexed the array with *e instead of i -- correct
+	 * today only because the two variables happen to stay in lockstep, a
+	 * fragile coincidence a future change to this loop could silently
+	 * break. Index with i, the actual bounds-checked loop variable.
+	 */
 	for (int i = (*e); i < pat->program_count; i++) {
 
-		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+		struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
 
 		for (int j = 0; j < pmt->stream_count; j++) {
-			
+
 			if (ltntstools_is_ESPayloadType_Video(pmt->streams[j].stream_type)) {
 				(*e)++;
 				*pmtptr = pmt;
@@ -576,9 +596,11 @@ int ltntstools_pat_enum_services_teletext(struct ltntstools_pat_s *pat, int *e, 
 	if ((*e) + 1 > pat->program_count)
 		return -1;
 
+	/* Regression fix for issue #9: see ltntstools_pat_enum_services_video()
+	 * -- same fragile *e-vs-i indexing, same fix. */
 	for (int i = (*e); i < pat->program_count; i++) {
 
-		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+		struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
 
 		for (int j = 0; j < pmt->stream_count; j++) {
 			struct ltntstools_pmt_entry_s *se = &pmt->streams[j];
@@ -609,8 +631,11 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 	*stream_type_array = NULL;
 	*pid_count = 0;
 
-	for (int i = 0; i < pat->program_count; i++) {
-		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+	/* Regression fix for issue #3: see ltntstools_pat_enum_services_scte35()
+	 * -- same resume-cursor bug (i started at 0 instead of *e, while the
+	 * array was indexed by *e), same fix. */
+	for (int i = *e; i < pat->program_count; i++) {
+		struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
 
 		if (pmt->stream_count == 0) {
 			/* Nothing to allocate for -- avoid malloc(0), whose return
@@ -671,11 +696,13 @@ int ltntstools_pat_enum_services(struct ltntstools_pat_s *pat, int *e, uint16_t 
 	if ((*e) + 1 > pat->program_count)
 		return -1;
 
+	/* Regression fix for issue #9: see ltntstools_pat_enum_services_video()
+	 * -- same fragile *e-vs-i indexing, same fix. */
 	for (int i = (*e); i < pat->program_count; i++) {
 
-		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
+		struct ltntstools_pmt_s *pmt = &pat->programs[i].pmt;
 
-		if (pat->programs[*e].program_map_PID == pid) {
+		if (pat->programs[i].program_map_PID == pid) {
 			(*e)++;
 			*pmtptr = pmt;
 			return 0; /* Success */
