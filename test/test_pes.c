@@ -50,6 +50,13 @@
  * ltn_pes_packet_pack() mirrors that same reuse, so pack<->parse round trips
  * are internally consistent -- but ltn_pes_packet_dump()'s
  * `DISPLAY_U32(i, pkt->ES_rate)` line displays the wrong (always-zero) field.
+ *
+ * The "NULL argument safety" section below covers a separate fix: every
+ * pes.c function used to dereference its pointer argument(s) unconditionally,
+ * so a NULL caller mistake crashed the process instead of returning an
+ * error/no-op. Guards were added to init/free/pack/parse/dump/copy/clone/
+ * is_audio/is_video/has_PTS/has_DTS; writer_init/save_es/save_pes already
+ * guarded correctly.
  */
 
 #include <assert.h>
@@ -147,6 +154,108 @@ static void test_clone_independent_of_source(void)
 
 	ltn_pes_packet_free(src);
 	ltn_pes_packet_free(clone);
+}
+
+/* -------- NULL argument safety --------
+ * Every function below used to dereference its pointer argument(s)
+ * unconditionally; a NULL caller mistake crashed the process. Each of these
+ * exercises the guard added for that function -- the only thing under test
+ * is that the call returns the documented "did nothing" value (or, for void
+ * functions, simply returns) instead of segfaulting, since a missed guard
+ * would crash this whole test binary rather than fail a single CHECK().
+ */
+
+static void test_init_and_free_accept_null(void)
+{
+	ltn_pes_packet_init(NULL);
+	ltn_pes_packet_free(NULL);
+	CHECK(1); /* reaching here without crashing is the point of this test */
+}
+
+static void test_pack_rejects_null_args(void)
+{
+	struct ltn_pes_packet_s pkt = { 0 };
+	pkt.stream_id = 0xE0;
+
+	uint8_t buf[16];
+	struct klbs_context_s bs;
+	klbs_init(&bs);
+	klbs_write_set_buffer(&bs, buf, sizeof(buf));
+
+	CHECK(ltn_pes_packet_pack(NULL, &bs) == 0);
+	CHECK(ltn_pes_packet_pack(&pkt, NULL) == 0);
+}
+
+static void test_parse_rejects_null_args(void)
+{
+	uint8_t buf[16] = { 0 };
+	struct klbs_context_s bs;
+	klbs_init(&bs);
+	klbs_read_set_buffer(&bs, buf, sizeof(buf));
+
+	struct ltn_pes_packet_s pkt = { 0 };
+
+	CHECK(ltn_pes_packet_parse(NULL, &bs, 0) == 0);
+	CHECK(ltn_pes_packet_parse(&pkt, NULL, 0) == 0);
+}
+
+static void test_dump_accepts_null_pkt(void)
+{
+	ltn_pes_packet_dump(NULL, "  ");
+	ltn_pes_packet_dump_with_options(NULL, "  ", 0xffffffff);
+	CHECK(1);
+}
+
+static void test_dump_accepts_null_indent(void)
+{
+	struct ltn_pes_packet_s pkt = { 0 };
+	pkt.stream_id = 0xE0;
+
+	ltn_pes_packet_dump(&pkt, NULL);
+	ltn_pes_packet_dump_with_options(&pkt, NULL, 0x01);
+	CHECK(1);
+}
+
+static void test_copy_rejects_null_args(void)
+{
+	struct ltn_pes_packet_s src = { 0 };
+	src.stream_id = 0xE0;
+
+	struct ltn_pes_packet_s dst = { 0 };
+	dst.stream_id = 0xAA;
+
+	ltn_pes_packet_copy(NULL, &src);
+	ltn_pes_packet_copy(&dst, NULL);
+
+	/* Neither call should have touched dst. */
+	CHECK(dst.stream_id == 0xAA);
+	CHECK(dst.data == NULL);
+}
+
+static void test_clone_rejects_null_src(void)
+{
+	struct ltn_pes_packet_s *clone = ltn_pes_packet_clone(NULL);
+	CHECK(clone == NULL);
+}
+
+static void test_is_audio_null_returns_false(void)
+{
+	CHECK(ltn_pes_packet_is_audio(NULL) == 0);
+}
+
+static void test_is_video_null_returns_false(void)
+{
+	CHECK(ltn_pes_packet_is_video(NULL) == 0);
+}
+
+static void test_has_pts_null_returns_false(void)
+{
+	CHECK(ltn_pes_packet_has_PTS(NULL) == 0);
+}
+
+static void test_has_dts_null_returns_false(void)
+{
+	CHECK(ltn_pes_packet_has_DTS(NULL) == 0);
 }
 
 /* -------- stream_id classification -------- */
@@ -753,6 +862,18 @@ int main(void)
 	test_init_resets_and_frees_existing_data();
 	test_copy_deep_copies_data_and_rawbuffer();
 	test_clone_independent_of_source();
+
+	test_init_and_free_accept_null();
+	test_pack_rejects_null_args();
+	test_parse_rejects_null_args();
+	test_dump_accepts_null_pkt();
+	test_dump_accepts_null_indent();
+	test_copy_rejects_null_args();
+	test_clone_rejects_null_src();
+	test_is_audio_null_returns_false();
+	test_is_video_null_returns_false();
+	test_has_pts_null_returns_false();
+	test_has_dts_null_returns_false();
 
 	test_is_audio_stream_id_ranges();
 	test_is_video_stream_id_ranges();

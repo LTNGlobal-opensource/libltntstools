@@ -18,6 +18,9 @@ struct ltn_pes_packet_s *ltn_pes_packet_alloc()
 
 void ltn_pes_packet_init(struct ltn_pes_packet_s *pkt)
 {
+	if (!pkt)
+		return;
+
 	if (pkt->rawBuffer) {
 		free(pkt->rawBuffer);
 	}
@@ -29,6 +32,9 @@ void ltn_pes_packet_init(struct ltn_pes_packet_s *pkt)
 
 void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt)
 {
+	if (!pkt)
+		return;
+
 	if (pkt->rawBuffer) {
 		free(pkt->rawBuffer);
 		pkt->rawBuffer = NULL;
@@ -76,6 +82,10 @@ static int64_t read33bit_ts(struct klbs_context_s *bs)
 ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs)
 {
 	ssize_t bits = 0;
+
+	if (!pkt || !bs)
+		return bits;
+
 	klbs_write_bits(bs, pkt->packet_start_code_prefix, 24);
 	klbs_write_bits(bs, pkt->stream_id, 8);
 	klbs_write_bits(bs, pkt->PES_packet_length, 16);
@@ -248,6 +258,9 @@ static int pes_clamped_byte_count_free(struct klbs_context_s *bs, uint32_t strea
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData)
 {
 	ssize_t bits = 0;
+
+	if (!pkt || !bs)
+		return bits;
 
 	/* Make sure something exists in the buffer */
 	if (klbs_get_byte_count_free(bs) < 8)
@@ -542,6 +555,12 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 
 static void ltn_pes_packet_dump_internal(struct ltn_pes_packet_s *pkt, const char *indent, unsigned int opts)
 {
+	if (!pkt)
+		return;
+
+	if (!indent)
+		indent = "";
+
 	char i[32];
 	snprintf(i, sizeof(i), "%s    ", indent);
 
@@ -618,6 +637,9 @@ void ltn_pes_packet_dump(struct ltn_pes_packet_s *pkt, const char *indent)
 
 void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *src)
 {
+	if (!dst || !src)
+		return;
+
 	unsigned char *oldData = dst->data;
 	unsigned char *oldRawBuffer = dst->rawBuffer;
 
@@ -652,6 +674,9 @@ void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *
 
 struct ltn_pes_packet_s * ltn_pes_packet_clone(struct ltn_pes_packet_s *src)
 {
+	if (!src)
+		return NULL;
+
 	struct ltn_pes_packet_s *dst = ltn_pes_packet_alloc();
 	if (dst) {
 		ltn_pes_packet_copy(dst, src);
@@ -661,6 +686,9 @@ struct ltn_pes_packet_s * ltn_pes_packet_clone(struct ltn_pes_packet_s *src)
 
 int ltn_pes_packet_is_audio(struct ltn_pes_packet_s *pes)
 {
+	if (!pes)
+		return 0;
+
 	if ((pes->stream_id >= 0xc0) && (pes->stream_id <= 0xdf)) {
 		return 1;
 	}
@@ -675,6 +703,9 @@ int ltn_pes_packet_is_audio(struct ltn_pes_packet_s *pes)
 
 int ltn_pes_packet_is_video(struct ltn_pes_packet_s *pes)
 {
+	if (!pes)
+		return 0;
+
 	if ((pes->stream_id >= 0xe0) && (pes->stream_id <= 0xef)) {
 		return 1;
 	}
@@ -771,6 +802,9 @@ int ltn_pes_packet_save_pes(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pe
 
 int ltn_pes_packet_has_PTS(struct ltn_pes_packet_s *pes)
 {
+	if (!pes)
+		return 0;
+
 	/* See iso13818-1 Table 2-17 – PES packet */
 	if (pes->PTS_DTS_flags & 2) {
 		return 1;
@@ -781,6 +815,9 @@ int ltn_pes_packet_has_PTS(struct ltn_pes_packet_s *pes)
 
 int ltn_pes_packet_has_DTS(struct ltn_pes_packet_s *pes)
 {
+	if (!pes)
+		return 0;
+
 	/* See iso13818-1 Table 2-17 – PES packet */
 	if (pes->PTS_DTS_flags & 1) {
 		return 1;
