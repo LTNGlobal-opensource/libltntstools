@@ -344,6 +344,85 @@ static void test_cc_error_never_counted_for_null_pid(void)
 	ltntstools_pid_stats_free(s);
 }
 
+/* -------- CC error history coalescing --------
+ * _stream_increment_cc_errors() used to allocate one ccErrorHistory list
+ * node per single CC error. A badly-behaving/corrupt stream with sustained
+ * CC errors could grow that list without bound between 25hr prune passes.
+ * It now accumulates same-second errors and only pushes one node per
+ * elapsed second.
+ */
+
+static int history_list_length(struct ltntstools_history_metric_collection_s *c)
+{
+	int n = 0;
+	struct ltntstools_history_metric_s *e = NULL;
+	xorg_list_for_each_entry(e, &c->list, list) {
+		n++;
+	}
+	return n;
+}
+
+static void test_cc_error_history_coalesces_same_second_bursts(void)
+{
+	struct ltntstools_stream_statistics_s *s;
+	ltntstools_pid_stats_alloc(&s);
+
+	uint8_t buf[7 * 188];
+
+	/* Prime 7 different pids' lastCC; first-ever packet on a pid is never a
+	 * CC error regardless of the cc value. */
+	for (int i = 0; i < 7; i++) {
+		set_header(buf + i * 188, 0x50 + i, 0, 0, 1, 0, 5);
+	}
+	ltntstools_pid_stats_update(s, buf, 7);
+
+	/* Second batch: cc jumps on every pid -> 7 genuine CC errors, all
+	 * captured with the single gettimeofday() taken once for this call. */
+	for (int i = 0; i < 7; i++) {
+		set_header(buf + i * 188, 0x50 + i, 0, 0, 1, 0, 9);
+	}
+	ltntstools_pid_stats_update(s, buf, 7);
+
+	CHECK(ltntstools_pid_stats_stream_get_cc_errors(s) == 7);
+	CHECK(ltntstools_pid_stats_stream_get_ccerror_count_1hr(s) == 7);
+	CHECK(ltntstools_pid_stats_stream_get_ccerror_count_24hr(s) == 7);
+
+	/* All 7 errors landed in the same second and are still sitting in the
+	 * (not yet flushed) accumulator, so the list itself gained no nodes. */
+	CHECK(history_list_length(&s->ccErrorHistory) == 0);
+
+	ltntstools_pid_stats_free(s);
+}
+
+static void test_cc_error_history_flushes_accumulator_on_new_second(void)
+{
+	struct ltntstools_stream_statistics_s *s;
+	ltntstools_pid_stats_alloc(&s);
+
+	/* Simulate a burst of 5 errors that already accumulated "10 seconds
+	 * ago", not yet flushed into ccErrorHistory. */
+	time_t past = time(NULL) - 10;
+	s->ccErrorHistoryAccumTs = past;
+	s->ccErrorHistoryAccumCount = 5;
+
+	/* A CC error landing in the current (different) second must flush the
+	 * prior accumulator as a single node, then start a fresh one. */
+	uint8_t pkt[188];
+	set_header(pkt, 0x50, 0, 0, 1, 0, 0);
+	ltntstools_pid_stats_update(s, pkt, 1); /* first-ever packet, primes lastCC */
+	set_header(pkt, 0x50, 0, 0, 1, 0, 5);   /* cc jumps -> CC error */
+	ltntstools_pid_stats_update(s, pkt, 1);
+
+	CHECK(history_list_length(&s->ccErrorHistory) == 1);
+
+	struct ltntstools_history_metric_s *head =
+		xorg_list_first_entry(&s->ccErrorHistory.list, struct ltntstools_history_metric_s, list);
+	CHECK(head->ts == past);
+	CHECK(head->count == 5);
+
+	ltntstools_pid_stats_free(s);
+}
+
 static void test_tei_error_detected_and_notified(void)
 {
 	struct ltntstools_stream_statistics_s *s;
@@ -468,6 +547,35 @@ static void test_clone_independent_of_source_mutation(void)
 	ltntstools_pid_stats_free(clone);
 }
 
+/* ltntstools_pid_stats_clone() used to memcpy() src's notifications[] into
+ * dst verbatim, so events on the clone would fire src's registered
+ * callback/userContext -- as if the clone were src. A clone must start with
+ * no registered callbacks. */
+static void test_clone_does_not_inherit_source_callbacks(void)
+{
+	struct ltntstools_stream_statistics_s *s;
+	ltntstools_pid_stats_alloc(&s);
+
+	struct notify_capture_s cap = { 0 };
+	CHECK(ltntstools_notification_register_callback(s, EVENT_UPDATE_STREAM_CC_COUNT, &cap, capture_cb) == 0);
+
+	struct ltntstools_stream_statistics_s *clone = ltntstools_pid_stats_clone(s);
+	CHECK(clone != NULL);
+
+	/* Trigger a CC error on the CLONE, not on s. If dst had inherited src's
+	 * callback/userContext, this would incorrectly invoke capture_cb. */
+	uint8_t buf[2 * 188];
+	set_header(buf, 0x50, 0, 0, 1, 0, 0);
+	set_header(buf + 188, 0x50, 0, 0, 1, 0, 5); /* cc jumps 0 -> 5 */
+	ltntstools_pid_stats_update(clone, buf, 2);
+
+	CHECK(ltntstools_pid_stats_pid_get_cc_errors(clone, 0x50) == 1); /* clone did record the error itself */
+	CHECK(cap.count == 0); /* but s's callback must not have fired */
+
+	ltntstools_pid_stats_free(s);
+	ltntstools_pid_stats_free(clone);
+}
+
 /* -------- PCR tracking / bitrate calculator -------- */
 
 static void feed_pcr(struct ltntstools_stream_statistics_s *s, uint8_t *cc, uint64_t pcr)
@@ -506,6 +614,51 @@ static void test_get_pcr_before_and_after_warmup(void)
 	CHECK(ltntstools_pid_stats_pid_get_pcr(s, 0x100) == 0); /* still warming up */
 
 	feed_pcr(s, &cc, pcr); /* 101st PCR-bearing packet */
+	CHECK(ltntstools_pid_stats_pid_get_pcr(s, 0x100) == (int64_t)pcr);
+
+	ltntstools_pid_stats_free(s);
+}
+
+/* ltntstools_pid_stats_update() used to ignore the return code of
+ * ltn_histogram_alloc_video_defaults() when lazily establishing
+ * pid->pcrTickIntervals/pcrWallDrift, then unconditionally pass those
+ * (possibly still-NULL, on allocation failure) pointers to
+ * ltn_histogram_interval_update_with_value(), which dereferences them with
+ * no NULL check -- a crash under memory pressure. Simulate "the allocation
+ * failed" by freeing and NULLing the histograms once they've been
+ * established, then confirm further PCR processing on the same pid no
+ * longer touches them. */
+static void test_pcr_histogram_null_after_established_does_not_crash(void)
+{
+	struct ltntstools_stream_statistics_s *s;
+	ltntstools_pid_stats_alloc(&s);
+	ltntstools_pid_stats_pid_set_contains_pcr(s, 0x100);
+
+	uint8_t cc = 0;
+	uint64_t pcr = 0;
+	for (int i = 0; i < 101; i++) {
+		feed_pcr(s, &cc, pcr);
+		pcr += 90000;
+	}
+
+	struct ltntstools_pid_statistics_s *pid = ltntstools_pid_stats_get(s, 0x100);
+	CHECK(pid != NULL);
+	if (pid) {
+		CHECK(pid->pcrTickIntervals != NULL);
+		CHECK(pid->pcrWallDrift != NULL);
+
+		/* Simulate the one-time allocation having failed. */
+		ltn_histogram_free(pid->pcrTickIntervals);
+		pid->pcrTickIntervals = NULL;
+		ltn_histogram_free(pid->pcrWallDrift);
+		pid->pcrWallDrift = NULL;
+	}
+
+	/* Must not crash. */
+	for (int i = 0; i < 5; i++) {
+		pcr += 90000;
+		feed_pcr(s, &cc, pcr);
+	}
 	CHECK(ltntstools_pid_stats_pid_get_pcr(s, 0x100) == (int64_t)pcr);
 
 	ltntstools_pid_stats_free(s);
@@ -682,7 +835,7 @@ static void test_null_stream_getters_return_safe_defaults(void)
 	CHECK(ltntstools_pid_stats_stream_get_notmultipleofseven_time(NULL) == 0);
 	CHECK(ltntstools_pid_stats_stream_get_scrambled_count(NULL) == 0);
 	CHECK(ltntstools_pid_stats_stream_padding_pct(NULL) == 0);
-	CHECK(ltntstools_pid_stats_stream_did_violate_pcr_timing(NULL) != 0); /* documented: nonzero on NULL */
+	CHECK(ltntstools_pid_stats_stream_did_violate_pcr_timing(NULL) == 0);
 	CHECK(ltntstools_pid_stats_stream_get_packet_count(NULL) == 0);
 	CHECK(ltntstools_pid_stats_pid_get_pusi_payload_errors(NULL, 0x100) == 0);
 	CHECK(ltntstools_pid_stats_stream_get_pusi_payload_errors(NULL) == 0);
@@ -693,7 +846,7 @@ static void test_null_stream_getters_return_safe_defaults(void)
 	CHECK(ltntstools_pid_stats_pid_get_cc_errors(NULL, 0x100) == 0);
 	CHECK(ltntstools_pid_stats_pid_get_tei_errors(NULL, 0x100) == 0);
 	CHECK(ltntstools_pid_stats_pid_get_last_update(NULL, 0x100) == 0);
-	CHECK(ltntstools_pid_stats_pid_did_violate_pcr_timing(NULL, 0x100) != 0);
+	CHECK(ltntstools_pid_stats_pid_did_violate_pcr_timing(NULL, 0x100) == 0);
 	CHECK(ltntstools_pid_stats_pid_get_contains_pcr(NULL, 0x100) == 0);
 	CHECK(ltntstools_pid_stats_pid_get_pcr(NULL, 0x100) == 0);
 	CHECK(ltntstools_pid_stats_stream_get_iat_hwm_us(NULL) == 0);
@@ -759,6 +912,8 @@ int main(void)
 	test_cc_error_first_packet_immunity();
 	test_cc_error_detected_and_notified();
 	test_cc_error_never_counted_for_null_pid();
+	test_cc_error_history_coalesces_same_second_bursts();
+	test_cc_error_history_flushes_accumulator_on_new_second();
 	test_tei_error_detected_and_notified();
 	test_scrambled_detected_and_notified();
 	test_payload_pusi_error_detected();
@@ -767,9 +922,11 @@ int main(void)
 	test_clone_null_source_returns_null();
 	test_clone_matches_source();
 	test_clone_independent_of_source_mutation();
+	test_clone_does_not_inherit_source_callbacks();
 
 	test_contains_pcr_set_get();
 	test_get_pcr_before_and_after_warmup();
+	test_pcr_histogram_null_after_established_does_not_crash();
 	test_pcr_violate_timing_progression();
 	test_pcr_walltime_drift_getter();
 	test_bitrate_calculator_query_values();

@@ -211,6 +211,10 @@ struct ltntstools_stream_statistics_s
 	uint64_t internal_ccErrors;             /**< Total number of continuity counter issues processed */
 
 	struct ltntstools_history_metric_collection_s ccErrorHistory;
+	time_t   ccErrorHistoryAccumTs;    /**< Elapsed-second bucket currently being accumulated, not yet visible in ccErrorHistory. */
+	uint64_t ccErrorHistoryAccumCount; /**< Count accumulated in ccErrorHistoryAccumTs so far. Coalesces bursts of CC
+	                                         errors within the same second into a single ccErrorHistory node, instead
+	                                         of one node per error (unbounded growth on a badly-behaving stream). */
 
 	uint64_t scrambledCount;       /**< Total number of times we've seen scrambled/encrypted packets */
 	uint64_t pcrExceeds40ms;       /**< Total number of times the PCR interval has exceeded 40ms */
@@ -462,7 +466,8 @@ uint32_t ltntstools_pid_stats_stream_padding_pct(struct ltntstools_stream_statis
 /**
  * @brief       Query TRANSPORT stream - Did any pids violate PCR transport timing windows?
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
- * @return      Boolean. Current implementation returns non-zero if stream is NULL.
+ * @return      Boolean. Returns 0 (no violation) if stream is NULL, consistent with the
+ *              rest of this API's NULL handling.
  */
 int      ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream);
 
@@ -548,7 +553,8 @@ time_t   ltntstools_pid_stats_pid_get_last_update(struct ltntstools_stream_stati
  * @brief       Query TRANSPORT - Did input pid violate PCR transport timing windows?
  * @param[in]   struct ltntstools_stream_statistics_s *stream - Handle / context. May be NULL.
  * @param[in]   uint16_t pidnr - pid
- * @return      Boolean. Current implementation returns non-zero if stream is NULL or PID has not been observed/allocated.
+ * @return      Boolean. Returns 0 (no violation) if stream is NULL or PID has not been
+ *              observed/allocated, consistent with the rest of this API's NULL handling.
  */
 int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream, uint16_t pidnr);
 

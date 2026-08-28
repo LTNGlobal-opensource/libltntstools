@@ -81,7 +81,7 @@ test_history_metric: test_history_metric.c ../src/history-metric.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_history_metric.c ../src/history-metric.c $(LDLIBS_HISTORY_METRIC)
 
 test_ts: test_ts.c ../src/ts.c
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_ts.c ../src/ts.c
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_ts.c ../src/ts.c -lpthread
 
 test_reframer: test_reframer.c ../src/reframer.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_reframer.c ../src/reframer.c

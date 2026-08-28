@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <pthread.h>
 
 #include "libltntstools/ts.h"
 
@@ -800,6 +801,61 @@ static void test_update_then_verify(void)
 	CHECK(current == 6);
 }
 
+/* Regression test: ltntstools_verifyPacketWith64bCounter() used to lazily
+ * initialize a shared static buffer on first use with a check-then-memset
+ * pattern and no locking -- a data race if called from multiple threads.
+ * It's now stateless (compares stuffing bytes directly, no shared mutable
+ * state), so hammer it from several threads simultaneously and confirm
+ * every call still gets a correct result. */
+#define VERIFY_THREAD_SAFETY_THREADS 8
+#define VERIFY_THREAD_SAFETY_ITERATIONS 2000
+
+struct verify_thread_safety_arg {
+	int failures;
+};
+
+static void *verify_thread_safety_fn(void *arg)
+{
+	struct verify_thread_safety_arg *a = (struct verify_thread_safety_arg *)arg;
+	a->failures = 0;
+
+	for (int i = 0; i < VERIFY_THREAD_SAFETY_ITERATIONS; i++) {
+		uint8_t pkt[188];
+		uint8_t cc = 0;
+		ltntstools_generatePacketWith64bCounter(pkt, sizeof(pkt), 0x40, &cc, 100);
+
+		uint64_t current = 0;
+		if (ltntstools_verifyPacketWith64bCounter(pkt, sizeof(pkt), 0x40, 99, &current) != 0)
+			a->failures++;
+		if (current != 100)
+			a->failures++;
+
+		/* A corrupted copy must still be reliably rejected under concurrent access. */
+		uint8_t bad[188];
+		memcpy(bad, pkt, sizeof(bad));
+		bad[50] ^= 0xff;
+		uint64_t current2 = 0;
+		if (ltntstools_verifyPacketWith64bCounter(bad, sizeof(bad), 0x40, 99, &current2) == 0)
+			a->failures++;
+	}
+
+	return NULL;
+}
+
+static void test_verify_thread_safety(void)
+{
+	pthread_t threads[VERIFY_THREAD_SAFETY_THREADS];
+	struct verify_thread_safety_arg args[VERIFY_THREAD_SAFETY_THREADS];
+
+	for (int i = 0; i < VERIFY_THREAD_SAFETY_THREADS; i++) {
+		CHECK(pthread_create(&threads[i], NULL, verify_thread_safety_fn, &args[i]) == 0);
+	}
+	for (int i = 0; i < VERIFY_THREAD_SAFETY_THREADS; i++) {
+		pthread_join(threads[i], NULL);
+		CHECK(args[i].failures == 0);
+	}
+}
+
 /* -------- pts_to_ascii / pcr_to_ascii -------- */
 
 static void test_pts_to_ascii_known_values(void)
@@ -988,6 +1044,7 @@ int main(void)
 	test_verify_detects_counter_mismatch();
 	test_verify_detects_payload_corruption();
 	test_update_then_verify();
+	test_verify_thread_safety();
 
 	test_pts_to_ascii_known_values();
 	test_pts_to_ascii_autoalloc();

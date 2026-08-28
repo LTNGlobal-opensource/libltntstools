@@ -15,7 +15,7 @@ void     ltntstools_cc_reorder_table_reset(struct ltntstools_cc_reorder_table_s 
 static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *stream, struct timeval *ts);
 static void _pidArrayFree(struct ltntstools_stream_statistics_s *stream);
 static int _pidArrayAdd(struct ltntstools_stream_statistics_s *stream, uint16_t pidNr);
-void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid);
+static void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid);
 
 static int ltntstools_bitrate_calculator_init(struct ltntstools_stream_statistics_s *stream, uint16_t pcrpidnr);
 static void ltntstools_bitrate_calculator_reset(struct ltntstools_stream_statistics_s *stream);
@@ -151,8 +151,12 @@ int ltntstools_isPayloadPUSIInError(const uint8_t *pkt)
 	return 0;
 }
 
-void ltntstools_pid_statistics_reset(struct ltntstools_pid_statistics_s *pid)
+static void ltntstools_pid_statistics_reset(struct ltntstools_pid_statistics_s *pid)
 {
+	if (!pid) {
+		return;
+	}
+
 	pid->enabled = 1;
 	pid->internal_packetCount = 0;
 	pid->internal_ccErrors = 0;
@@ -190,7 +194,7 @@ void ltntstools_pid_statistics_reset(struct ltntstools_pid_statistics_s *pid)
 #endif		
 }
 
-struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_alloc(uint16_t pidNr)
+static struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_alloc(uint16_t pidNr)
 {
 	struct ltntstools_pid_statistics_s *pid = calloc(1, sizeof(*pid));
 	if (pid) {
@@ -200,8 +204,12 @@ struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_alloc(uint16_t pid
 	return pid;
 }
 
-struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_clone(struct ltntstools_pid_statistics_s *src)
+static struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_clone(struct ltntstools_pid_statistics_s *src)
 {
+	if (!src) {
+		return NULL;
+	}
+
 	struct ltntstools_pid_statistics_s *pid = calloc(1, sizeof(*pid));
 	if (pid) {
 		memcpy(pid, src, sizeof(*src));
@@ -238,8 +246,12 @@ struct ltntstools_pid_statistics_s *ltntstools_pid_statistics_clone(struct ltnts
 	return pid;
 }
 
-void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid)
+static void ltntstools_pid_statistics_free(struct ltntstools_pid_statistics_s *pid)
 {
+	if (!pid) {
+		return;
+	}
+
 	if (pid->pcrTickIntervals) {
 		ltn_histogram_free(pid->pcrTickIntervals);
 		pid->pcrTickIntervals = NULL;
@@ -342,10 +354,23 @@ static void _stream_increment_cc_errors(struct ltntstools_stream_statistics_s *s
 	stream->internal_ccErrors++;
 	stream->last_cc_error = now.tv_sec;
 
-	struct ltntstools_history_metric_s *m = ltntstools_history_metric_alloc(now.tv_sec, 1);
-	if (m) {
-		ltntstools_history_metric_collection_add(&stream->ccErrorHistory, m);
+	/* Coalesce CC errors landing in the same second into a single
+	 * ccErrorHistory node instead of allocating one per error -- a
+	 * badly-behaving stream with continuous CC errors could otherwise
+	 * grow that list without bound between 25hr prune passes.
+	 */
+	if (stream->ccErrorHistoryAccumTs != now.tv_sec) {
+		if (stream->ccErrorHistoryAccumTs != 0) {
+			struct ltntstools_history_metric_s *m = ltntstools_history_metric_alloc(
+				stream->ccErrorHistoryAccumTs, stream->ccErrorHistoryAccumCount);
+			if (m) {
+				ltntstools_history_metric_collection_add(&stream->ccErrorHistory, m);
+			}
+		}
+		stream->ccErrorHistoryAccumTs = now.tv_sec;
+		stream->ccErrorHistoryAccumCount = 0;
 	}
+	stream->ccErrorHistoryAccumCount++;
 
 	if (stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb) {
 		stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].cb(stream->notifications[EVENT_UPDATE_STREAM_CC_COUNT].userContext, 
@@ -552,10 +577,14 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 					/* One time initialzation of our histograms. */
 					char title[64];
 					snprintf(title, sizeof(title), "PCR Tick Intervals PID 0x%04x", pidnr);
-					ltn_histogram_alloc_video_defaults(&pid->pcrTickIntervals, title);
+					if (ltn_histogram_alloc_video_defaults(&pid->pcrTickIntervals, title) < 0) {
+						pid->pcrTickIntervals = NULL;
+					}
 
 					snprintf(title, sizeof(title), "PCR Jitter PID 0x%04x (abs value)", pidnr);
-					ltn_histogram_alloc_video_defaults(&pid->pcrWallDrift, title);
+					if (ltn_histogram_alloc_video_defaults(&pid->pcrWallDrift, title) < 0) {
+						pid->pcrWallDrift = NULL;
+					}
 				}
 
 				if (ltntstools_clock_is_established_wallclock(pcrclk) == 0) {
@@ -574,7 +603,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 					stream->pcrExceeds40ms++;
 				}
 
-				ltn_histogram_interval_update_with_value(pid->pcrTickIntervals, delta / 27000);
+				if (pid->pcrTickIntervals) {
+					ltn_histogram_interval_update_with_value(pid->pcrTickIntervals, delta / 27000);
+				}
 
 				/* Update current value and re-compute drifts. */
 				ltntstools_clock_set_ticks(pcrclk, pcr);
@@ -586,7 +617,9 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 				/* Normalize to remove drift direction - needed for histogram */
 				v = llabs(v);
 				//printf("us %" PRIi64 "\n", v);
-				ltn_histogram_interval_update_with_value(pid->pcrWallDrift, v);
+				if (pid->pcrWallDrift) {
+					ltn_histogram_interval_update_with_value(pid->pcrWallDrift, v);
+				}
 
 				if (stream->notifications[EVENT_UPDATE_PID_PCR_WALLTIME].cb) {
 					stream->notifications[EVENT_UPDATE_PID_PCR_WALLTIME].cb(stream->notifications[EVENT_UPDATE_PID_PCR_WALLTIME].userContext, 
@@ -614,6 +647,8 @@ void ltntstools_pid_stats_reset(struct ltntstools_stream_statistics_s *stream)
 	stream->teiErrors = 0;
 	stream->internal_ccErrors = 0;
 	ltntstools_history_metric_collection_reset(&stream->ccErrorHistory);
+	stream->ccErrorHistoryAccumTs = 0;
+	stream->ccErrorHistoryAccumCount = 0;
 	stream->scrambledCount = 0;
 	stream->pcrExceeds40ms = 0;
 	stream->prev_pcrExceeds40ms = 0;
@@ -760,6 +795,13 @@ struct ltntstools_stream_statistics_s * ltntstools_pid_stats_clone(struct ltntst
 	dst->pidArray = NULL;
 	dst->pidArrayCount = 0;
 
+	/* A clone is a separate object; it must not inherit src's registered
+	 * callbacks/userContext, or events on the clone would invoke callbacks
+	 * that believe they're operating on src. Caller registers its own via
+	 * ltntstools_notification_register_callback() if it wants them.
+	 */
+	ltntstools_notification_unregister_callbacks(dst);
+
 	if (src->pidArrayCount) {
 		dst->pidArray = malloc(src->pidArrayCount * sizeof(*dst->pidArray));
 		if (!dst->pidArray) {
@@ -860,6 +902,14 @@ uint64_t ltntstools_pid_stats_stream_get_ccerror_count_1hr(struct ltntstools_str
 		return 0;
 	}
 	ltntstools_history_metric_collection_count_until_1hr(&stream->ccErrorHistory, &val);
+
+	/* The most recent second's worth of CC errors may still be sitting in
+	 * the coalescing accumulator, not yet flushed into ccErrorHistory --
+	 * include it so a live query doesn't transiently undercount. */
+	if (stream->ccErrorHistoryAccumTs != 0 && stream->ccErrorHistoryAccumTs >= time(NULL) - 3600) {
+		val += stream->ccErrorHistoryAccumCount;
+	}
+
 	return val;
 }
 
@@ -870,6 +920,12 @@ uint64_t ltntstools_pid_stats_stream_get_ccerror_count_24hr(struct ltntstools_st
 		return 0;
 	}
 	ltntstools_history_metric_collection_count_until_24hr(&stream->ccErrorHistory, &val);
+
+	/* See ltntstools_pid_stats_stream_get_ccerror_count_1hr() comment. */
+	if (stream->ccErrorHistoryAccumTs != 0 && stream->ccErrorHistoryAccumTs >= time(NULL) - 86400) {
+		val += stream->ccErrorHistoryAccumCount;
+	}
+
 	return val;
 }
 
@@ -1127,7 +1183,7 @@ uint64_t ltntstools_pid_stats_stream_get_scrambled_count(struct ltntstools_strea
 int ltntstools_pid_stats_stream_did_violate_pcr_timing(struct ltntstools_stream_statistics_s *stream)
 {
 	if (!stream) {
-		return 1;
+		return 0;
 	}
 	/* If the last _write cause the pcr's to be violated, exceeding 40ms, it's not always great. */
 	return stream->prev_pcrExceeds40ms != stream->pcrExceeds40ms;
@@ -1137,11 +1193,11 @@ int ltntstools_pid_stats_pid_did_violate_pcr_timing(struct ltntstools_stream_sta
 {
 	/* If the last _write cause the pcr's to be violated, exceeding 40ms, it's not always great. */
 	if (!stream || !stream->internal_pids) {
-		return 1;
+		return 0;
 	}
 	struct ltntstools_pid_statistics_s *pid = stream->internal_pids[pidnr & 0x1fff];
 	if (!pid) {
-		return 1;
+		return 0;
 	}
 	return pid->prev_pcrExceeds40ms != pid->pcrExceeds40ms;
 }
