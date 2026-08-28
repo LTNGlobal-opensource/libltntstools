@@ -573,6 +573,87 @@ static void test_write_legitimate_adaptation_field_still_reassembles(void)
 	ltntstools_pes_extractor_free(hdl);
 }
 
+/* -------- write() ring buffer overflow -------- */
+
+static void build_filler_ts_packet(uint8_t *pkt, uint16_t pid, int pusi, uint8_t cc)
+{
+	memset(pkt, 0x00, 188);
+	pkt[0] = 0x47;
+	pkt[1] = (pusi ? 0x40 : 0x00) | ((pid >> 8) & 0x1f);
+	pkt[2] = pid & 0xff;
+	pkt[3] = 0x10 | (cc & 0x0f);
+	if (pusi) {
+		/* Look enough like the start of a real PES that _processRing()
+		 * doesn't bail out at the very first byte check. */
+		pkt[4] = 0x00; pkt[5] = 0x00; pkt[6] = 0x01; pkt[7] = 0xE0;
+	}
+}
+
+/* buffer_min == buffer_max == 100 bytes: smaller than a single TS packet's
+ * ~184 byte payload contribution, and growth can never succeed (no room to
+ * grow into) -- forces an overflow on the very first "leading PES data"
+ * ring write, immediately after a fresh rb_empty(). This exact site used
+ * to call abort(), killing the whole host process on a single oversized/
+ * misconfigured write. Confirmed via a standalone repro before this test
+ * was added: pre-fix, SIGABRT (exit 134); post-fix, survives cleanly. */
+static void test_write_survives_ring_overflow_on_leading_pes_write(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, 100, 100);
+	reset_capture();
+
+	uint8_t pkt[188];
+	build_filler_ts_packet(pkt, 0x100, 1, 0);
+	CHECK(ltntstools_pes_extractor_write(hdl, pkt, 1) == 1); /* first PUSI: appending 0->1 */
+
+	build_filler_ts_packet(pkt, 0x100, 1, 1);
+	CHECK(ltntstools_pes_extractor_write(hdl, pkt, 1) == 1); /* second PUSI: also a "leading data" write */
+
+	CHECK(g_capturedCount == 0); /* overflowed/corrupted content must never be delivered */
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
+/* Default sizing (-1,-1 -> 2KB min, 4MB max): push enough mid-PES
+ * continuation writes to exceed buffer_max while accumulating a single
+ * PES. This specific write site had NO overflow handling at all before
+ * this fix (didOverflow was set but never even checked) -- not fatal on
+ * its own (rb_write_with_state() already discards safely), but silent.
+ * Also exercises _processRing()'s computedRingSize/rb_used consistency
+ * check, since the discard desyncs the two. */
+static void test_write_survives_ring_overflow_during_pes_accumulation(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t pkt[188];
+	uint8_t cc = 0;
+
+	build_filler_ts_packet(pkt, 0x100, 1, cc++);
+	CHECK(ltntstools_pes_extractor_write(hdl, pkt, 1) == 1);
+
+	/* 4MB default buffer_max / 184 bytes per packet ~= 22,828 packets
+	 * needed to exceed it. Clear that by a modest, deliberately tight
+	 * margin (not by thousands of packets) -- every write past the cap
+	 * logs an overflow line, and this only needs to prove the ring
+	 * recovers past the boundary, not stress-test how far past it. */
+	for (int i = 0; i < 22900; i++) {
+		build_filler_ts_packet(pkt, 0x100, 0, cc++);
+		ltntstools_pes_extractor_write(hdl, pkt, 1);
+	}
+
+	/* Flush with a closing PUSI -- must not crash. */
+	build_filler_ts_packet(pkt, 0x100, 1, cc++);
+	ltntstools_pes_extractor_write(hdl, pkt, 1);
+
+	CHECK(g_capturedCount == 0); /* overflowed/corrupted content must never be delivered */
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
 int main(void)
 {
 	test_alloc_free_basic();
@@ -587,6 +668,8 @@ int main(void)
 	test_write_cc_error_discards_partial_pes_but_recovers();
 	test_write_malformed_adaptation_field_length_does_not_crash();
 	test_write_legitimate_adaptation_field_still_reassembles();
+	test_write_survives_ring_overflow_on_leading_pes_write();
+	test_write_survives_ring_overflow_during_pes_accumulation();
 
 	test_ordered_output_defers_until_free_flush();
 

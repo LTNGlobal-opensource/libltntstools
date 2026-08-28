@@ -97,10 +97,23 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 		return -1;
 	}
 
+	/* buffer_min is eagerly malloc()'d by rb_new() below, right now, for
+	 * every context -- unlike buffer_max, which is just a lazy-growth
+	 * ceiling that costs nothing until a PES actually needs it. Growth
+	 * happens in generous steps (partly a function of a single TS
+	 * packet's payload contribution, see rb_write_with_state()) and,
+	 * once grown, a ring's allocation is never shrunk back down between
+	 * PES frames (rb_empty() only resets fill/head, not the allocation
+	 * size) -- so a small start mainly costs a handful of regrows near
+	 * the start of a stream, settling at whatever size the pid's real
+	 * frames need, not a per-frame tax. That's what makes a small default
+	 * safe across pid types (tiny audio/ancillary frames never grow past
+	 * this at all; video frames climb to their steady-state size once).
+	 */
 	if (buffer_min == -1)
-		buffer_min = 4 * 1048576;
+		buffer_min = 2 * 1024;
 	if (buffer_max == -1)
-		buffer_max = 32 * 1048576;
+		buffer_max = 4 * 1048576;
 
 	ctx->rb = rb_new(buffer_min, buffer_max);
 	if (!ctx->rb) {
@@ -698,6 +711,17 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			int wsize = 188 - offset;
 			ctx->computedRingSize += wsize;
 			rb_write_with_state(ctx->rb, (const char *)pkt + offset, wsize, &didOverflow);
+			if (didOverflow) {
+				/* rb_write_with_state() has already safely discarded old
+				 * ring content to make room -- not fatal, but this PES's
+				 * payload is now corrupted. _processRing()'s bs.overrun/
+				 * bs.truncated checks are the real safety net: they'll
+				 * detect and reject a corrupted PES rather than deliver
+				 * a mangled one to the callback.
+				 */
+				fprintf(stderr, "%s() ring buffer overflow on pid 0x%04x (buffer_max reached), PES will be discarded\n",
+					__func__, ctx->pid);
+			}
 
 		} else
 		if (ltntstools_payload_unit_start_indicator(pkt) == 1 && ctx->appending == 1) {
@@ -736,10 +760,15 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			ctx->computedRingSize += wsize;
 			rb_write_with_state(ctx->rb, (const char *)pkt + offset, wsize, &didOverflow);
 			if (didOverflow) {
-#if 1
-				printf("%s() overflow of ring, aborting\n", __func__);
-				abort();
-#endif
+				/* Same rationale as the mid-PES overflow check above --
+				 * not fatal, _processRing()'s overrun/truncation checks
+				 * are the real safety net that will reject the resulting
+				 * corrupted PES rather than deliver it to the callback.
+				 * Previously called abort() here, killing the entire host
+				 * process over a single oversized/malformed PES.
+				 */
+				fprintf(stderr, "%s() ring buffer overflow on pid 0x%04x (buffer_max reached), PES will be discarded\n",
+					__func__, ctx->pid);
 			}
 		}
 	}
