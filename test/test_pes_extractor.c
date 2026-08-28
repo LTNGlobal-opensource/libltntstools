@@ -436,6 +436,61 @@ static void test_write_cc_error_discards_partial_pes_but_recovers(void)
 	ltntstools_pes_extractor_free(hdl);
 }
 
+/* Regression test for issue #13: notification_callback() (internal to
+ * pes-extractor.c) was registered via a cast to ltntstools_notification_callback
+ * even though it was actually defined returning void* and taking a
+ * concrete struct pes_extractor_s* first param, both mismatched with the
+ * real (void-returning, void*-userContext) typedef -- undefined behavior
+ * per the C standard when stats.c calls through that function pointer type,
+ * which it does on every PUSI packet. There's no way to call this static,
+ * internal-linkage function directly from outside pes-extractor.c, but its
+ * side effect (ctx->pusi_time_ms, propagated into pes->arrivalMs by
+ * _processRing()) is observable through the public API, so this exercises
+ * the fixed callback end-to-end rather than just "doesn't crash": confirms
+ * it actually runs and produces a sane value on the second+ PES boundary
+ * (the first PES on a pid never gets a callback invocation at all, see
+ * stats.c's pusi_time_first/pusi_time_current bootstrap). Deliberately
+ * does not assert an exact elapsed-time value -- that would be timing-
+ * dependent/flaky -- only that it's a small, non-negative number of ms. */
+static void test_write_arrivalMs_is_populated_via_notification_callback(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t payload1[10];
+	memset(payload1, 0xAB, sizeof(payload1));
+	uint8_t buf1[64];
+	int totalBytes1 = pack_pes(0xE0, payload1, sizeof(payload1), buf1, sizeof(buf1));
+
+	uint8_t payload2[10];
+	memset(payload2, 0x5A, sizeof(payload2));
+	uint8_t buf2[64];
+	int totalBytes2 = pack_pes(0xE0, payload2, sizeof(payload2), buf2, sizeof(buf2));
+
+	uint8_t packets[8][188];
+	uint8_t cc = 0;
+	int n = build_ts_packets(buf1, totalBytes1, 0x100, &cc, packets, 8);
+	n += build_ts_packets(buf2, totalBytes2, 0x100, &cc, packets + n, 8 - n);
+	build_trailer_packet(0x100, &cc, packets[n++]);
+
+	ltntstools_pes_extractor_write(hdl, &packets[0][0], n);
+
+	/* Both PES's are delivered; the notification-driven pusi_time_ms
+	 * machinery only starts producing values from the 2nd PES boundary
+	 * onward, but arrivalMs is a plain struct field either way (0 if the
+	 * callback never ran for that one, which is itself a valid, sane value). */
+	CHECK(g_capturedCount == 2);
+	for (int i = 0; i < g_capturedCount; i++) {
+		struct ltn_pes_packet_s *pes = g_captured[i];
+		CHECK(pes->arrivalMs >= 0);
+		CHECK(pes->arrivalMs < 1000); /* generous bound for a tight, sleep-free test loop */
+	}
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
 /* -------- ordered output mode -------- */
 
 static void test_ordered_output_defers_until_free_flush(void)
@@ -711,6 +766,7 @@ int main(void)
 	test_write_rawBuffer_matches_original_packed_bytes();
 	test_write_large_pes_spanning_multiple_ts_packets_reassembles();
 	test_write_cc_error_discards_partial_pes_but_recovers();
+	test_write_arrivalMs_is_populated_via_notification_callback();
 	test_write_malformed_adaptation_field_length_does_not_crash();
 	test_write_legitimate_adaptation_field_still_reassembles();
 	test_write_survives_ring_overflow_on_leading_pes_write();

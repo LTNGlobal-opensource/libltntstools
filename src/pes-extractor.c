@@ -79,15 +79,25 @@ struct item_s
 	struct ltn_pes_packet_s *pes;
 };
 
-static void *notification_callback(struct pes_extractor_s *ctx, enum ltntstools_notification_event_e event,
+/* Matches ltntstools_notification_callback's real signature exactly (void
+ * return, void *userContext first param -- stats.h:147). Previously
+ * declared returning void* and taking struct pes_extractor_s * directly,
+ * registered via an explicit cast below. Calling through a function
+ * pointer of a mismatched type is undefined behavior per the C standard --
+ * stats.c does exactly that, unconditionally, on every PUSI packet (see
+ * EVENT_UPDATE_PID_PUSI_DELIVERY_TIME dispatch). Harmless on real calling
+ * conventions, but not guaranteed. Same class of bug, and same fix, as
+ * demux_pid_pe_callback's for pes_extractor_callback.
+ */
+static void notification_callback(void *userContext, enum ltntstools_notification_event_e event,
 	const struct ltntstools_stream_statistics_s *stats,
 	const struct ltntstools_pid_statistics_s *pid)
 {
+	struct pes_extractor_s *ctx = (struct pes_extractor_s *)userContext;
+
 	if (event == EVENT_UPDATE_PID_PUSI_DELIVERY_TIME) {
 		ctx->pusi_time_ms = pid->pusi_time_ms;
 	}
-
-	return NULL;
 }
 
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
@@ -159,7 +169,7 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 		return -1;
 	}
 	ltntstools_notification_register_callback(ctx->libstats, EVENT_UPDATE_PID_PUSI_DELIVERY_TIME,
-		ctx, (ltntstools_notification_callback)notification_callback);
+		ctx, notification_callback);
 
 	/* initialize a 10 item deep list */
 	for (int i = 0; i < ORDERED_LIST_DEPTH; i++) {
