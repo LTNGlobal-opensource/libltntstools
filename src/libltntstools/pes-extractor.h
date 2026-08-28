@@ -69,7 +69,10 @@ void ltntstools_pes_extractor_free(void *hdl);
  * @param[in]   void *hdl - Handle / context.
  * @param[in]   const uint8_t *pkts - one or more aligned transport packets
  * @param[in]   int packetCount - number of packets
- * @return      number of packets processed
+ * @return      number of packets in this batch that matched the configured
+ *              pid (may be zero, eg. none of the packets belonged to this
+ *              pid), else < 0 if the call was rejected (eg. the context is
+ *              closing down).
  */
 ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packetCount);
 

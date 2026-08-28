@@ -514,9 +514,15 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 	int didOverflow;
 
 	if (atomic_load(&ctx->preventWrites)) {
-		/* Library closing down */
-		return 0; /* Failed */
+		/* Library closing down. 0 is also a legitimate "processed zero
+		 * matching packets" result below, so this must be distinguishable
+		 * from that -- use a negative value, consistent with this file's
+		 * other error returns.
+		 */
+		return -1; /* Failed */
 	}
+
+	int pidMatchedCount = 0;
 
 	for (int i = 0; i < packetCount; i++) {
 		const uint8_t *pkt = pkts + (i * 188);
@@ -526,6 +532,8 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 
 		if (ltntstools_pid(pkt) != ctx->pid)
 			continue;
+
+		pidMatchedCount++;
 
 #if SIMULATE_TS_PACKET_LOSS
 		static uint64_t pidcount = 0;
@@ -646,5 +654,5 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 		}
 	}
 
-	return packetCount;
+	return pidMatchedCount;
 }

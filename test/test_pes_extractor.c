@@ -229,8 +229,11 @@ static void test_write_ignores_other_pid_no_callback(void)
 	int n = build_ts_packets(buf, totalBytes, 0x200 /* NOT the target pid */, &cc, packets, 4);
 	build_trailer_packet(0x200, &cc, packets[n++]);
 
+	/* write()'s return value is the number of packets in the batch that
+	 * matched the configured pid, not just packetCount echoed back --
+	 * none of these n packets are on pid 0x100, so it must be 0. */
 	ssize_t ret = ltntstools_pes_extractor_write(hdl, &packets[0][0], n);
-	CHECK(ret == n);
+	CHECK(ret == 0);
 	CHECK(g_capturedCount == 0);
 
 	ltntstools_pes_extractor_free(hdl);
@@ -429,7 +432,7 @@ static void test_alloc_rejects_invalid_buffer_range(void)
  * (AddressSanitizer: stack-buffer-underflow in rb_write_with_state(),
  * called from ltntstools_pes_extractor_write()). The only correct,
  * safe behavior is to treat it as carrying no payload -- write() must
- * simply not crash and must still report packetCount handled. */
+ * simply not crash and must still report the packet as pid-matched. */
 static void test_write_malformed_adaptation_field_length_does_not_crash(void)
 {
 	void *hdl = NULL;
