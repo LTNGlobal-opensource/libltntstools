@@ -189,7 +189,18 @@ void rb_free(KLRingBuffer *buf);
  */
 void rb_discard(KLRingBuffer *buf, size_t bytes);
 
-unsigned int rb_get_write_pos(KLRingBuffer *buf);
-unsigned int rb_get_read_pos(KLRingBuffer *buf);
+/**
+ * @brief       Current write offset within the ring's physical allocation.
+ * @param[in]   KLRingBuffer *buf - Object.
+ * @return      Offset in bytes ((head + fill) % size). 0 if buf is NULL.
+ */
+size_t rb_get_write_pos(KLRingBuffer *buf);
+
+/**
+ * @brief       Current read offset (head) within the ring's physical allocation.
+ * @param[in]   KLRingBuffer *buf - Object.
+ * @return      Offset in bytes. 0 if buf is NULL.
+ */
+size_t rb_get_read_pos(KLRingBuffer *buf);
 
 #endif /* KLRINGBUFFER_H */

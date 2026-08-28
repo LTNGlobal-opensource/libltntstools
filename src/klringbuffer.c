@@ -27,17 +27,17 @@ KLRingBuffer *rb_new(size_t size, size_t size_max)
 	 */
 	if ((size == 0) || (size > size_max)) {
 		errno = EINVAL;
-		return 0;
+		return NULL;
 	}
 
 	KLRingBuffer *buf = (KLRingBuffer *)malloc(sizeof(*buf));
 	if (!buf)
-		return 0;
+		return NULL;
 
 	buf->data = (unsigned char *)malloc(size);
 	if (!buf->data) {
 		free(buf);
-		return 0;
+		return NULL;
 	}
 
 	buf->size = size;
@@ -193,8 +193,20 @@ static int _rb_grow(KLRingBuffer *buf, size_t increment)
 
 static void _rb_shrink_reset(KLRingBuffer *buf)
 {
-	buf->data = (unsigned char *)realloc(buf->data, buf->size_initial);
-	buf->size = buf->size_initial;
+	/* On failure, realloc() returns NULL while leaving the original block
+	 * (still valid, still buf->size bytes) untouched -- overwriting
+	 * buf->data with that NULL would both leak the original allocation and
+	 * hand every future write a NULL pointer to dereference. Keep the
+	 * existing (larger than ideal, but valid) buffer instead; the ring is
+	 * always empty here, so head/fill can still be safely reset either way,
+	 * and this shrink is just an optimization that can retry next time the
+	 * ring empties out.
+	 */
+	unsigned char *new_data = (unsigned char *)realloc(buf->data, buf->size_initial);
+	if (new_data) {
+		buf->data = new_data;
+		buf->size = buf->size_initial;
+	}
 	buf->head = buf->fill = 0;
 }
 
@@ -203,7 +215,7 @@ static inline void _advance_tail(KLRingBuffer *buf, size_t bytes)
 	buf->fill += bytes;
 }
 
-unsigned int rb_get_write_pos(KLRingBuffer *buf)
+size_t rb_get_write_pos(KLRingBuffer *buf)
 {
 	if (!buf)
 		return 0;
@@ -211,7 +223,7 @@ unsigned int rb_get_write_pos(KLRingBuffer *buf)
 	return (buf->head + buf->fill) % buf->size;
 }
 
-unsigned int rb_get_read_pos(KLRingBuffer *buf)
+size_t rb_get_read_pos(KLRingBuffer *buf)
 {
 	if (!buf)
 		return 0;
@@ -491,7 +503,20 @@ void rb_free(KLRingBuffer *rb)
 	if (!rb)
 		return;
 
+	/* Lock and immediately unlock as a barrier -- wait for any in-flight
+	 * critical section on this ring to finish before tearing it down. A
+	 * mutex must be unlocked before pthread_mutex_destroy() (destroying a
+	 * locked mutex is undefined behavior), and freeing the memory that
+	 * backs it while still locked (the previous behavior here) is worse
+	 * still: it can leave a lock held on storage that no longer exists.
+	 *
+	 * rb_new() calls pthread_mutex_init() unconditionally, regardless of
+	 * whether usingMutex ever gets set -- so the matching destroy must be
+	 * unconditional too, or every ring leaks its mutex's resources.
+	 */
 	RB_LOCK(rb);
+	RB_UNLOCK(rb);
+	pthread_mutex_destroy(&rb->mutex);
 
 	free(rb->data);
 	free(rb);
