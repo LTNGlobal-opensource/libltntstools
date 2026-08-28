@@ -43,20 +43,44 @@
  *    masking it in the original failing test. Fixed to write the
  *    marker+length byte.
  *
- * Also worth knowing (not a round-trip-breaking bug, so not separately
- * tested): ltn_pes_packet_parse() stores a parsed ES_rate value back into
- * `pkt->ES_rate_flag` itself (reusing the flag field as the value field)
- * rather than into the dedicated `pkt->ES_rate` struct field, and
- * ltn_pes_packet_pack() mirrors that same reuse, so pack<->parse round trips
- * are internally consistent -- but ltn_pes_packet_dump()'s
- * `DISPLAY_U32(i, pkt->ES_rate)` line displays the wrong (always-zero) field.
- *
  * The "NULL argument safety" section below covers a separate fix: every
  * pes.c function used to dereference its pointer argument(s) unconditionally,
  * so a NULL caller mistake crashed the process instead of returning an
  * error/no-op. Guards were added to init/free/pack/parse/dump/copy/clone/
  * is_audio/is_video/has_PTS/has_DTS; writer_init/save_es/save_pes already
  * guarded correctly.
+ *
+ * Four more fixes, each with its own test below:
+ *
+ * 6. ltn_pes_packet_parse() used to store a parsed ES_rate value back into
+ *    `pkt->ES_rate_flag` itself (reusing the flag field as the value field)
+ *    instead of the dedicated `pkt->ES_rate` struct field, and
+ *    ltn_pes_packet_pack() mirrored that same reuse -- so pack<->parse round
+ *    trips were internally consistent, but ltn_pes_packet_dump()'s
+ *    `DISPLAY_U32(i, pkt->ES_rate)` line always displayed 0. Fixed: both now
+ *    use pkt->ES_rate, leaving pkt->ES_rate_flag a clean boolean.
+ *
+ * 7. ltn_pes_packet_pack()'s "raw data" branch (special stream IDs
+ *    BF/F0/F1/FF/F2/F8, no extended header) wrote pkt->PES_packet_length
+ *    bytes from pkt->data, while the normal branch used pkt->dataLengthBytes
+ *    -- the actual size of the pkt->data allocation. A caller who set
+ *    PES_packet_length larger than the real buffer (e.g. by copying a
+ *    packet and only updating one field) caused an out-of-bounds read.
+ *    Fixed: this branch now writes min(dataLengthBytes, PES_packet_length)
+ *    bytes.
+ *
+ * 8. ltn_pes_packet_copy()'s struct-wide memcpy() copies dataLengthBytes/
+ *    rawBufferLengthBytes verbatim, but dst->data/dst->rawBuffer are only
+ *    repopulated when src->data/src->rawBuffer is non-NULL -- so a src with
+ *    a NULL data pointer but nonzero dataLengthBytes produced a dst with
+ *    the same NULL-pointer/nonzero-length mismatch. Fixed: dst's length
+ *    field is now zeroed whenever the matching src pointer is NULL.
+ *
+ * 9. ltn_pes_packet_save_es()/save_pes() passed pes->data/pes->rawBuffer to
+ *    getCRC32()/fwrite() without checking they were non-NULL first. Fixed:
+ *    both now skip the CRC/fwrite calls when the length is 0, and refuse to
+ *    write a file at all (return < 0) when the pointer is NULL but the
+ *    length claims otherwise.
  */
 
 #include <assert.h>
@@ -132,6 +156,27 @@ static void test_copy_deep_copies_data_and_rawbuffer(void)
 
 	free(dst.data);
 	free(dst.rawBuffer);
+}
+
+/* Issue #8 (see file header): a src with a NULL data/rawBuffer pointer but
+ * a nonzero length used to leave dst with the same inconsistent
+ * pointer/length pair (copied verbatim by the struct-wide memcpy()). */
+static void test_copy_zeroes_length_when_src_pointer_is_null(void)
+{
+	struct ltn_pes_packet_s src = { 0 };
+	src.stream_id = 0xE0;
+	src.data = NULL;
+	src.dataLengthBytes = 99; /* inconsistent on purpose */
+	src.rawBuffer = NULL;
+	src.rawBufferLengthBytes = 77; /* inconsistent on purpose */
+
+	struct ltn_pes_packet_s dst = { 0 };
+	ltn_pes_packet_copy(&dst, &src);
+
+	CHECK(dst.data == NULL);
+	CHECK(dst.dataLengthBytes == 0);
+	CHECK(dst.rawBuffer == NULL);
+	CHECK(dst.rawBufferLengthBytes == 0);
 }
 
 static void test_clone_independent_of_source(void)
@@ -522,6 +567,38 @@ static void test_roundtrip_pts_and_dts(void)
 	if (parsed.data) free(parsed.data);
 }
 
+/* Issue #6 (see file header): ES_rate must round-trip through the dedicated
+ * pkt->ES_rate field, and pkt->ES_rate_flag must come back as a clean
+ * boolean (not the 22-bit rate value it used to be overwritten with). */
+static void test_roundtrip_es_rate(void)
+{
+	struct ltn_pes_packet_s pkt = { 0 };
+	pkt.packet_start_code_prefix = 0x000001;
+	pkt.stream_id = 0xE0;
+	pkt.ES_rate_flag = 1;
+	pkt.ES_rate = 0x3ABCD; /* 22 bits */
+	uint8_t payload[1] = { 0x5A };
+	pkt.data = payload;
+	pkt.dataLengthBytes = sizeof(payload);
+
+	uint8_t buf[64];
+	int totalBytes = (int)pack_with_correct_length(&pkt, buf, sizeof(buf));
+
+	struct klbs_context_s bs;
+	klbs_init(&bs);
+	klbs_read_set_buffer(&bs, buf, totalBytes);
+
+	struct ltn_pes_packet_s parsed = { 0 };
+	ltn_pes_packet_parse(&parsed, &bs, 0);
+
+	CHECK(parsed.ES_rate_flag == 1);
+	CHECK(parsed.ES_rate == 0x3ABCD);
+	CHECK(parsed.dataLengthBytes == 1);
+	CHECK(parsed.data && parsed.data[0] == 0x5A);
+
+	if (parsed.data) free(parsed.data);
+}
+
 /* KNOWN BUG: see file header (#2). pack() under-writes the ESCR field by
  * 1 byte relative to what it claims and what parse() expects, so the
  * payload comes out shifted/corrupted. */
@@ -687,7 +764,8 @@ static void test_roundtrip_special_streamid_raw_data(void)
 	pkt.stream_id = 0xF0; /* ECM */
 	uint8_t payload[6] = { 1, 2, 3, 4, 5, 6 };
 	pkt.data = payload;
-	pkt.PES_packet_length = sizeof(payload); /* this branch writes exactly PES_packet_length bytes */
+	pkt.dataLengthBytes = sizeof(payload); /* must match the real pkt->data allocation, see issue #7 below */
+	pkt.PES_packet_length = sizeof(payload); /* this branch writes min(dataLengthBytes, PES_packet_length) bytes */
 
 	uint8_t buf[64];
 	memset(buf, 0, sizeof(buf));
@@ -709,6 +787,37 @@ static void test_roundtrip_special_streamid_raw_data(void)
 	CHECK(parsed.data && memcmp(parsed.data, payload, sizeof(payload)) == 0);
 
 	if (parsed.data) free(parsed.data);
+}
+
+/* Issue #7: pkt->data is malloc()'d to exactly dataLengthBytes (3), but
+ * PES_packet_length lies and claims 6. Before the fix, pack() wrote
+ * PES_packet_length bytes from pkt->data regardless of dataLengthBytes,
+ * reading 3 bytes past the end of this allocation. Run under
+ * ASan/valgrind to catch a regression; without one, the min() bound is
+ * checked directly via the returned bit count and packed bytes below. */
+static void test_pack_special_streamid_bounds_write_by_dataLengthBytes(void)
+{
+	struct ltn_pes_packet_s pkt = { 0 };
+	pkt.packet_start_code_prefix = 0x000001;
+	pkt.stream_id = 0xF0; /* ECM */
+	uint8_t *payload = malloc(3);
+	payload[0] = 0xAA; payload[1] = 0xBB; payload[2] = 0xCC;
+	pkt.data = payload;
+	pkt.dataLengthBytes = 3;
+	pkt.PES_packet_length = 6; /* lies: claims more than the real allocation */
+
+	uint8_t buf[64];
+	memset(buf, 0, sizeof(buf));
+	struct klbs_context_s wbs;
+	klbs_init(&wbs);
+	klbs_write_set_buffer(&wbs, buf, sizeof(buf));
+	ssize_t bits = ltn_pes_packet_pack(&pkt, &wbs);
+
+	/* Only the 3 real bytes were written, not the claimed 6. */
+	CHECK(bits == 3 * 8);
+	CHECK(memcmp(buf + 6, payload, 3) == 0);
+
+	free(payload);
 }
 
 static void test_pack_padding_stream(void)
@@ -856,11 +965,69 @@ static void test_save_pes_writes_file_with_correct_content(void)
 	}
 }
 
+/* Issue #9 (see file header): a NULL data/rawBuffer pointer paired with a
+ * nonzero length is an inconsistent packet -- save_es()/save_pes() must
+ * refuse to write bogus output rather than pass NULL+nonzero-count to
+ * getCRC32()/fwrite(). */
+static void test_save_es_rejects_inconsistent_null_data(void)
+{
+	struct ltn_pes_packet_writer_ctx ctx;
+	ltn_pes_packet_writer_init(&ctx, scratch_dir());
+
+	struct ltn_pes_packet_s pes = { 0 };
+	pes.data = NULL;
+	pes.dataLengthBytes = 5; /* inconsistent on purpose */
+
+	CHECK(ltn_pes_packet_save_es(&ctx, &pes) < 0);
+	CHECK(ctx.nr == 0); /* nothing written, sequence number not consumed */
+}
+
+static void test_save_pes_rejects_inconsistent_null_rawbuffer(void)
+{
+	struct ltn_pes_packet_writer_ctx ctx;
+	ltn_pes_packet_writer_init(&ctx, scratch_dir());
+
+	struct ltn_pes_packet_s pes = { 0 };
+	pes.rawBuffer = NULL;
+	pes.rawBufferLengthBytes = 5; /* inconsistent on purpose */
+
+	CHECK(ltn_pes_packet_save_pes(&ctx, &pes) < 0);
+	CHECK(ctx.nr == 0);
+}
+
+/* A NULL pointer with a genuinely zero length (an empty ES/PES) is valid --
+ * this must still produce a 0-byte file, not crash. */
+static void test_save_es_and_save_pes_handle_null_pointer_zero_length(void)
+{
+	struct ltn_pes_packet_writer_ctx ctx;
+	ltn_pes_packet_writer_init(&ctx, scratch_dir());
+
+	struct ltn_pes_packet_s pes = { 0 };
+	pes.data = NULL;
+	pes.dataLengthBytes = 0;
+	pes.rawBuffer = NULL;
+	pes.rawBufferLengthBytes = 0;
+
+	char esFn[600], pesFn[600];
+	snprintf(esFn, sizeof(esFn), "%s/es-seq%014u-pts%014u-dts%014u-len%08u-crc%08x",
+		scratch_dir(), 0, 0, 0, 0, 0);
+	snprintf(pesFn, sizeof(pesFn), "%s/pes-seq%014u-pts%014u-dts%014u-len%08u-crc%08x",
+		scratch_dir(), 1, 0, 0, 0, 0);
+
+	CHECK(ltn_pes_packet_save_es(&ctx, &pes) == 0);
+	CHECK(ltn_pes_packet_save_pes(&ctx, &pes) == 0);
+	CHECK(ctx.nr == 2);
+
+	remove(esFn);
+	remove(pesFn);
+}
+
 int main(void)
 {
 	test_alloc_free_basic();
 	test_init_resets_and_frees_existing_data();
 	test_copy_deep_copies_data_and_rawbuffer();
+	test_copy_zeroes_length_when_src_pointer_is_null();
 	test_clone_independent_of_source();
 
 	test_init_and_free_accept_null();
@@ -888,18 +1055,23 @@ int main(void)
 	test_roundtrip_no_optional_fields();
 	test_roundtrip_pts_only();
 	test_roundtrip_pts_and_dts();
+	test_roundtrip_es_rate();
 	test_roundtrip_escr_flag();
 	test_roundtrip_trick_mode_and_copy_info_flags();
 	test_roundtrip_crc_flag();
 	test_roundtrip_extension_private_data();
 	test_roundtrip_extension_seqcounter_pstd_ext2();
 	test_roundtrip_special_streamid_raw_data();
+	test_pack_special_streamid_bounds_write_by_dataLengthBytes();
 	test_pack_padding_stream();
 
 	test_writer_init_rejects_null_args();
 	test_writer_init_copies_dirname();
 	test_save_es_rejects_null_args();
 	test_save_pes_rejects_null_args();
+	test_save_es_rejects_inconsistent_null_data();
+	test_save_pes_rejects_inconsistent_null_rawbuffer();
+	test_save_es_and_save_pes_handle_null_pointer_zero_length();
 	test_save_es_writes_file_with_correct_content();
 	test_save_pes_writes_file_with_correct_content();
 

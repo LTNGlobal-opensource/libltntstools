@@ -140,7 +140,7 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 
 		if (pkt->ES_rate_flag) {
 			klbs_write_bits(bs, 1, 1); /* market bit */
-			klbs_write_bits(bs, pkt->ES_rate_flag, 22);
+			klbs_write_bits(bs, pkt->ES_rate, 22);
 			klbs_write_bits(bs, 1, 1); /* market bit */
 			bits += 24;
 		}
@@ -221,7 +221,17 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 		(pkt->stream_id == 0xF8 /* H.222.1 type E */))
 	{
 		if (pkt->data) {
-			for (uint32_t i = 0; i < pkt->PES_packet_length; i++) {
+			/* dataLengthBytes is the actual size of the pkt->data allocation;
+			 * PES_packet_length is just the wire field the caller wants
+			 * written. Bound the write by whichever is smaller so a caller
+			 * who sets PES_packet_length larger than the real buffer can't
+			 * make this read past the end of pkt->data.
+			 */
+			uint32_t len = pkt->PES_packet_length;
+			if (pkt->dataLengthBytes < len) {
+				len = pkt->dataLengthBytes;
+			}
+			for (uint32_t i = 0; i < len; i++) {
 				klbs_write_bits(bs, *(pkt->data + i), 8);
 				bits += 8;
 			}
@@ -339,7 +349,7 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 
 		if (pkt->ES_rate_flag) {
 			klbs_read_bits(bs, 1); /* marker bit */
-			pkt->ES_rate_flag = klbs_read_bits(bs, 22);
+			pkt->ES_rate = klbs_read_bits(bs, 22);
 			klbs_read_bits(bs, 1); /* marker bit */
 			bits += 24;
 		}
@@ -661,6 +671,13 @@ void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *
 		} else {
 			dst->dataLengthBytes = 0;
 		}
+	} else {
+		/* src->data is NULL, so dst->dataLengthBytes (copied verbatim by the
+		 * struct-wide memcpy() above) must not be left dangling as a nonzero
+		 * length paired with a NULL pointer -- callers such as save_es()
+		 * trust the two fields to agree.
+		 */
+		dst->dataLengthBytes = 0;
 	}
 	if (src->rawBuffer) {
 		dst->rawBuffer = malloc(src->rawBufferLengthBytes);
@@ -669,6 +686,8 @@ void ltn_pes_packet_copy(struct ltn_pes_packet_s *dst, struct ltn_pes_packet_s *
 		} else {
 			dst->rawBufferLengthBytes = 0;
 		}
+	} else {
+		dst->rawBufferLengthBytes = 0;
 	}
 }
 
@@ -731,12 +750,22 @@ int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes
 	if ((ctx == NULL) || (pes == NULL))
 		return ret;
 
+	/* A NULL pes->data paired with a nonzero dataLengthBytes is an
+	 * inconsistent packet (the length claims a payload that isn't there);
+	 * refuse to write bogus output rather than pass a NULL pointer with a
+	 * nonzero count to getCRC32()/fwrite() below.
+	 */
+	if (!pes->data && pes->dataLengthBytes)
+		return ret;
+
 	/* 014d PTS %014d DTS (or zero) %08d length 32bit crc (all decimal), crc %08x
 	 * Eg. seq00000000000000-pts00000000000000-dts00000000000000-len00000000-crc00000000
 	 */
 
 	uint32_t crc32 = 0;
-	ltntstools_getCRC32(pes->data, pes->dataLengthBytes, &crc32);
+	if (pes->dataLengthBytes) {
+		ltntstools_getCRC32(pes->data, pes->dataLengthBytes, &crc32);
+	}
 
 	char fn[512];
 
@@ -752,7 +781,7 @@ int ltn_pes_packet_save_es(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pes
 	if (!ofh)
 		return ret;
 
-	ssize_t w = fwrite(pes->data, 1, pes->dataLengthBytes, ofh);
+	ssize_t w = pes->dataLengthBytes ? fwrite(pes->data, 1, pes->dataLengthBytes, ofh) : 0;
 	if (w == pes->dataLengthBytes) {
 		ret = 0;
 		ctx->nr++;
@@ -769,12 +798,21 @@ int ltn_pes_packet_save_pes(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pe
 	if ((ctx == NULL) || (pes == NULL))
 		return ret;
 
+	/* A NULL pes->rawBuffer paired with a nonzero rawBufferLengthBytes is an
+	 * inconsistent packet; refuse to write bogus output rather than pass a
+	 * NULL pointer with a nonzero count to getCRC32()/fwrite() below.
+	 */
+	if (!pes->rawBuffer && pes->rawBufferLengthBytes)
+		return ret;
+
 	/* 014d PTS %014d DTS (or zero) %08d length 32bit crc (all decimal), crc %08x
 	 * Eg. seq00000000000000-pts00000000000000-dts00000000000000-len00000000-crc00000000
 	 */
 
 	uint32_t crc32 = 0;
-	ltntstools_getCRC32(pes->rawBuffer, pes->rawBufferLengthBytes, &crc32);
+	if (pes->rawBufferLengthBytes) {
+		ltntstools_getCRC32(pes->rawBuffer, pes->rawBufferLengthBytes, &crc32);
+	}
 
 	char fn[512];
 
@@ -790,7 +828,7 @@ int ltn_pes_packet_save_pes(struct ltn_pes_packet_writer_ctx *ctx, struct ltn_pe
 	if (!ofh)
 		return ret;
 
-	ssize_t w = fwrite(pes->rawBuffer, 1, pes->rawBufferLengthBytes, ofh);
+	ssize_t w = pes->rawBufferLengthBytes ? fwrite(pes->rawBuffer, 1, pes->rawBufferLengthBytes, ofh) : 0;
 	if (w == pes->rawBufferLengthBytes) {
 		ret = 0;
 		ctx->nr++;
