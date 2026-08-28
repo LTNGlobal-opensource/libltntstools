@@ -61,6 +61,8 @@
         "**/test_nal_h264": true,
         "**/test_nal_h265": true,
         "**/test_clocks": true,
+        "**/test_klqueue": true,
+        "**/test_utils": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",
