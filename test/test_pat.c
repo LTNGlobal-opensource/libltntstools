@@ -7,10 +7,15 @@
  * helpers). See test/Makefile for how libdvbpsi is located.
  *
  * SCOPE: ltntstools_pat_alloc_from_existing() and
- * ltntstools_pat_add_from_existing() are NOT tested here -- they consume
- * libdvbpsi's own decoded PAT/PMT structures (dvbpsi_pat_t/dvbpsi_pmt_t),
- * which would require constructing those library-internal linked-list
- * structures by hand. ltntstools_pmt_create_packet_ts2() is different: like
+ * ltntstools_pat_add_from_existing() consume libdvbpsi's own decoded
+ * PAT/PMT structures (dvbpsi_pat_t/dvbpsi_pmt_t). They ARE covered below
+ * (see the alloc_from_existing/add_from_existing section) by building
+ * those structures with libdvbpsi's own dvbpsi_pat_new()/
+ * dvbpsi_pat_program_add()/dvbpsi_pmt_new()/dvbpsi_pmt_es_add()/
+ * dvbpsi_pmt_descriptor_add()/dvbpsi_pmt_es_descriptor_add() APIs rather
+ * than hand-building the linked lists.
+ *
+ * ltntstools_pmt_create_packet_ts2() is different: like
  * the non-"2" ltntstools_pmt_create_packet_ts(), its input is this library's
  * own struct ltntstools_pmt_s -- it just generates the section bytes via
  * real libdvbpsi calls internally instead of hand-rolling them -- so it IS
@@ -39,6 +44,13 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdbool.h>
+
+#include <dvbpsi/dvbpsi.h>
+#include <dvbpsi/psi.h>
+#include <dvbpsi/pat.h>
+#include <dvbpsi/descriptor.h>
+#include <dvbpsi/pmt.h>
 
 #include "libltntstools/pat.h"
 #include "libltntstools/ts.h"
@@ -60,6 +72,37 @@ static int g_failures = 0;
 			g_failures++; \
 		} \
 	} while (0)
+
+/* Redirects stderr to a temp file so a test can inspect diagnostic output
+ * (eg. issue #7's PAT/PMT-truncation and descriptor-add-failure logging,
+ * which has no other externally observable effect). Must be paired with
+ * capture_stderr_stop(). */
+static int g_capture_saved_fd = -1;
+static char g_capture_path[] = "/tmp/test_pat_stderr_XXXXXX";
+
+static void capture_stderr_start(void)
+{
+	fflush(stderr);
+	int fd = mkstemp(g_capture_path);
+	g_capture_saved_fd = dup(fileno(stderr));
+	dup2(fd, fileno(stderr));
+	close(fd);
+}
+
+static void capture_stderr_stop(char *buf, size_t buflen)
+{
+	fflush(stderr);
+	dup2(g_capture_saved_fd, fileno(stderr));
+	close(g_capture_saved_fd);
+	g_capture_saved_fd = -1;
+
+	FILE *f = fopen(g_capture_path, "r");
+	size_t n = f ? fread(buf, 1, buflen - 1, f) : 0;
+	buf[n] = 0;
+	if (f)
+		fclose(f);
+	unlink(g_capture_path);
+}
 
 static void add_stream(struct ltntstools_pmt_s *pmt, uint32_t stream_type, uint32_t pid)
 {
@@ -134,6 +177,124 @@ static void test_dprintf_does_not_crash(void)
 	}
 	CHECK(1);
 
+	ltntstools_pat_free(pat);
+}
+
+/* -------- alloc_from_existing / add_from_existing -------- */
+
+/* Regression test for issue #7: ltntstools_pat_alloc_from_existing() caps
+ * program_count at LTNTSTOOLS_PAT_ENTRIES_MAX (correct, and unchanged by
+ * this fix -- the array genuinely can't hold more), but previously did so
+ * silently: a caller feeding it a PAT with more than 64 programs had no
+ * way to know anything had been dropped. Now it logs to stderr. Builds a
+ * real dvbpsi_pat_t (via dvbpsi_pat_new()/dvbpsi_pat_program_add(), the
+ * same libdvbpsi API pat.c itself uses to build these) with one more
+ * program than fits, and checks both the capped count/content (functional
+ * behavior, unchanged) and that the drop was actually logged (the part
+ * this fix adds -- a mutation reverting just the logging wouldn't be
+ * caught by a count-only check). */
+static void test_pat_alloc_from_existing_truncates_and_logs_excess_programs(void)
+{
+	dvbpsi_pat_t *dpat = dvbpsi_pat_new(1, 0, true);
+	for (int i = 0; i < LTNTSTOOLS_PAT_ENTRIES_MAX + 1; i++) {
+		dvbpsi_pat_program_add(dpat, 100 + i, 0x200 + i);
+	}
+
+	capture_stderr_start();
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc_from_existing(dpat);
+	char captured[512];
+	capture_stderr_stop(captured, sizeof(captured));
+
+	CHECK(pat != NULL);
+	CHECK(pat->program_count == LTNTSTOOLS_PAT_ENTRIES_MAX);
+	CHECK(pat->programs[0].program_number == 100);
+	CHECK(pat->programs[LTNTSTOOLS_PAT_ENTRIES_MAX - 1].program_number == 100 + (LTNTSTOOLS_PAT_ENTRIES_MAX - 1));
+	CHECK(strstr(captured, "dropped") != NULL);
+
+	ltntstools_pat_free(pat);
+	dvbpsi_pat_delete(dpat);
+}
+
+/* Baseline for the same function: when everything fits, no truncation
+ * message should appear. */
+static void test_pat_alloc_from_existing_no_log_when_everything_fits(void)
+{
+	dvbpsi_pat_t *dpat = dvbpsi_pat_new(1, 0, true);
+	dvbpsi_pat_program_add(dpat, 1, 0x100);
+	dvbpsi_pat_program_add(dpat, 2, 0x101);
+
+	capture_stderr_start();
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc_from_existing(dpat);
+	char captured[512];
+	capture_stderr_stop(captured, sizeof(captured));
+
+	CHECK(pat != NULL);
+	CHECK(pat->program_count == 2);
+	CHECK(captured[0] == 0);
+
+	ltntstools_pat_free(pat);
+	dvbpsi_pat_delete(dpat);
+}
+
+/* Regression test for issue #7: ltntstools_pat_add_from_existing() caps a
+ * program's stream_count at LTNTSTOOLS_PMT_ENTRIES_MAX the same way, and
+ * previously dropped the excess ES entries silently. Now logs to stderr. */
+static void test_pat_add_from_existing_truncates_and_logs_excess_streams(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+	add_program(pat, 7, 0x100);
+
+	dvbpsi_pmt_t *dpmt = dvbpsi_pmt_new(7, 0, true, 0x101);
+	for (int i = 0; i < LTNTSTOOLS_PMT_ENTRIES_MAX + 1; i++) {
+		dvbpsi_pmt_es_add(dpmt, 0x1B, 0x200 + i);
+	}
+
+	capture_stderr_start();
+	ltntstools_pat_add_from_existing(pat, dpmt);
+	char captured[512];
+	capture_stderr_stop(captured, sizeof(captured));
+
+	CHECK(pat->programs[0].pmt.stream_count == LTNTSTOOLS_PMT_ENTRIES_MAX);
+	CHECK(pat->programs[0].pmt.streams[0].elementary_PID == 0x200);
+	CHECK(strstr(captured, "dropped") != NULL);
+
+	dvbpsi_pmt_delete(dpmt);
+	ltntstools_pat_free(pat);
+}
+
+/* Regression test for issue #7: ltntstools_pat_add_from_existing()'s two
+ * descriptor-add loops (outer PMT descriptors and per-ES inner
+ * descriptors) previously discarded a ltntstools_descriptor_list_add()
+ * failure -- eg. more than LTNTSTOOLS_DESCRIPTOR_ENTRIES_MAX descriptors
+ * on either list -- with a comment ("Error, skipping") and no actual
+ * logging. Now both loops log to stderr. */
+static void test_pat_add_from_existing_logs_descriptor_add_failures(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+	add_program(pat, 9, 0x100);
+
+	dvbpsi_pmt_t *dpmt = dvbpsi_pmt_new(9, 0, true, 0x101);
+	uint8_t data[4] = { 0xAA, 0xBB, 0xCC, 0xDD };
+	for (int i = 0; i < LTNTSTOOLS_DESCRIPTOR_ENTRIES_MAX + 1; i++) {
+		dvbpsi_pmt_descriptor_add(dpmt, 0x05, sizeof(data), data);
+	}
+
+	dvbpsi_pmt_es_t *es = dvbpsi_pmt_es_add(dpmt, 0x1B, 0x300);
+	for (int i = 0; i < LTNTSTOOLS_DESCRIPTOR_ENTRIES_MAX + 1; i++) {
+		dvbpsi_pmt_es_descriptor_add(es, 0x05, sizeof(data), data);
+	}
+
+	capture_stderr_start();
+	ltntstools_pat_add_from_existing(pat, dpmt);
+	char captured[512];
+	capture_stderr_stop(captured, sizeof(captured));
+
+	CHECK(pat->programs[0].pmt.descr_list.count == LTNTSTOOLS_DESCRIPTOR_ENTRIES_MAX);
+	CHECK(pat->programs[0].pmt.streams[0].descr_list.count == LTNTSTOOLS_DESCRIPTOR_ENTRIES_MAX);
+	CHECK(strstr(captured, "failed to add outer descriptor") != NULL);
+	CHECK(strstr(captured, "failed to add inner descriptor") != NULL);
+
+	dvbpsi_pmt_delete(dpmt);
 	ltntstools_pat_free(pat);
 }
 
@@ -843,6 +1004,11 @@ int main(void)
 	test_clone_null_returns_null();
 	test_clone_matches_and_is_independent();
 	test_dprintf_does_not_crash();
+
+	test_pat_alloc_from_existing_truncates_and_logs_excess_programs();
+	test_pat_alloc_from_existing_no_log_when_everything_fits();
+	test_pat_add_from_existing_truncates_and_logs_excess_streams();
+	test_pat_add_from_existing_logs_descriptor_add_failures();
 
 	test_pmt_entry_compare();
 	test_pmt_compare();

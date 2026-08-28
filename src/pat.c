@@ -143,6 +143,20 @@ struct ltntstools_pat_s * ltntstools_pat_alloc_from_existing(dvbpsi_pat_t *pat)
 		e = e->p_next;
 	}
 
+	if (e) {
+		/* The source PAT had more programs than LTNTSTOOLS_PAT_ENTRIES_MAX
+		 * -- the loop above stopped early and the remainder were silently
+		 * dropped. Without this, a caller has no way to know their PAT
+		 * was truncated. */
+		int dropped = 0;
+		while (e) {
+			dropped++;
+			e = e->p_next;
+		}
+		fprintf(stderr, "%s() PAT has more than %d programs, %d program(s) dropped\n",
+			__func__, LTNTSTOOLS_PAT_ENTRIES_MAX, dropped);
+	}
+
 	return p;
 }
 
@@ -177,7 +191,8 @@ void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t
 	while (p_desc) {
 		int ret = ltntstools_descriptor_list_add(&e->descr_list, p_desc->i_tag, &p_desc->p_data[0], p_desc->i_length);
 		if (ret < 0) {
-			/* Error, skipping. */
+			fprintf(stderr, "%s() program %d: failed to add outer descriptor tag 0x%02x len %d, skipping\n",
+				__func__, pmt->i_program_number, p_desc->i_tag, p_desc->i_length);
 		}
 		p_desc = p_desc->p_next;
 	}
@@ -194,13 +209,28 @@ void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t
 		while (p_desc) {
 			int ret = ltntstools_descriptor_list_add(&es->descr_list, p_desc->i_tag, &p_desc->p_data[0], p_desc->i_length);
 			if (ret < 0) {
-				/* Error, skipping. */
+				fprintf(stderr, "%s() program %d pid 0x%04x: failed to add inner descriptor tag 0x%02x len %d, skipping\n",
+					__func__, pmt->i_program_number, es->elementary_PID, p_desc->i_tag, p_desc->i_length);
 			}
 			p_desc = p_desc->p_next;
 		}
 
 		e->stream_count++;
 		p_es = p_es->p_next;
+	}
+
+	if (p_es) {
+		/* The source PMT had more ES streams than LTNTSTOOLS_PMT_ENTRIES_MAX
+		 * -- the loop above stopped early and the remainder were silently
+		 * dropped. Without this, a caller has no way to know their PMT
+		 * was truncated. */
+		int dropped = 0;
+		while (p_es) {
+			dropped++;
+			p_es = p_es->p_next;
+		}
+		fprintf(stderr, "%s() program %d has more than %d streams, %d stream(s) dropped\n",
+			__func__, pmt->i_program_number, LTNTSTOOLS_PMT_ENTRIES_MAX, dropped);
 	}
 }
 
