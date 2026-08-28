@@ -223,7 +223,7 @@ static void test_scr_rejects_no_sync(void)
 	uint8_t pkt[188] = { 0 };
 	pkt[0] = 0x46; /* bad sync */
 	uint64_t scr;
-	CHECK(ltntstools_scr(pkt, &scr) < 0);
+	CHECK(ltntstools_scr(pkt, &scr) == LTNTSTOOLS_SCR_ERR_NO_SYNC);
 }
 
 static void test_scr_rejects_no_adaptation(void)
@@ -231,7 +231,7 @@ static void test_scr_rejects_no_adaptation(void)
 	uint8_t pkt[188] = { 0 };
 	set_header(pkt, 0x100, 0, 0, 0, 0, 1 /* payload only */, 0);
 	uint64_t scr;
-	CHECK(ltntstools_scr(pkt, &scr) < 0);
+	CHECK(ltntstools_scr(pkt, &scr) == LTNTSTOOLS_SCR_ERR_NO_ADAPTATION);
 }
 
 static void test_scr_rejects_adaptation_length_zero(void)
@@ -240,7 +240,7 @@ static void test_scr_rejects_adaptation_length_zero(void)
 	set_header(pkt, 0x100, 0, 0, 0, 0, 2, 0);
 	pkt[4] = 0; /* adaptation_field_length == 0 */
 	uint64_t scr;
-	CHECK(ltntstools_scr(pkt, &scr) < 0);
+	CHECK(ltntstools_scr(pkt, &scr) == LTNTSTOOLS_SCR_ERR_ADAPTATION_EMPTY);
 }
 
 static void test_scr_rejects_pcr_flag_not_set(void)
@@ -250,7 +250,27 @@ static void test_scr_rejects_pcr_flag_not_set(void)
 	pkt[4] = 183;
 	pkt[5] = 0x00; /* PCR_flag not set */
 	uint64_t scr;
-	CHECK(ltntstools_scr(pkt, &scr) < 0);
+	CHECK(ltntstools_scr(pkt, &scr) == LTNTSTOOLS_SCR_ERR_PCR_FLAG_NOT_SET);
+}
+
+/* The four failure reasons must be distinct negative values, so callers
+ * that want to (e.g.) treat "no adaptation field" as routine but "bad sync"
+ * as a corruption signal can actually tell them apart, rather than every
+ * reason collapsing into a single -1. */
+static void test_scr_error_codes_are_distinct_and_negative(void)
+{
+	int codes[] = {
+		LTNTSTOOLS_SCR_ERR_NO_SYNC,
+		LTNTSTOOLS_SCR_ERR_NO_ADAPTATION,
+		LTNTSTOOLS_SCR_ERR_ADAPTATION_EMPTY,
+		LTNTSTOOLS_SCR_ERR_PCR_FLAG_NOT_SET,
+	};
+	for (size_t i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
+		CHECK(codes[i] < 0);
+		for (size_t j = i + 1; j < sizeof(codes) / sizeof(codes[0]); j++) {
+			CHECK(codes[i] != codes[j]);
+		}
+	}
 }
 
 static void test_scr_extracts_valid_pcr(void)
@@ -803,6 +823,7 @@ int main(void)
 	test_scr_rejects_no_adaptation();
 	test_scr_rejects_adaptation_length_zero();
 	test_scr_rejects_pcr_flag_not_set();
+	test_scr_error_codes_are_distinct_and_negative();
 	test_scr_extracts_valid_pcr();
 
 	test_scr_diff_no_wrap();

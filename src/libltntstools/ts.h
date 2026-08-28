@@ -28,6 +28,14 @@ extern "C" {
 
 #define PCR_CLOCK_HZ 27000000
 
+/* ltntstools_scr() failure reasons. All are < 0; callers that only care
+ * about success/failure can keep testing for "< 0" as before.
+ */
+#define LTNTSTOOLS_SCR_ERR_NO_SYNC          -1 /**< Packet does not start with the sync byte (0x47). */
+#define LTNTSTOOLS_SCR_ERR_NO_ADAPTATION    -2 /**< adaptation_field_control indicates no adaptation field is present. */
+#define LTNTSTOOLS_SCR_ERR_ADAPTATION_EMPTY -3 /**< Adaptation field is present but zero length, so it carries no PCR. */
+#define LTNTSTOOLS_SCR_ERR_PCR_FLAG_NOT_SET -4 /**< Adaptation field is present but PCR_flag is not set. */
+
 /** Conventions:
  * 
  * All clocks are expressed as int64_t
@@ -222,7 +230,8 @@ static inline int64_t ltntstools_pts_diff(int64_t from, int64_t to)
  *              in the packet, if a PCR is detected and present.
  * @param[in]   const uint8_t *pkt - Transport packet.
  * @param[out]  uint64_t *scr - PCR contained in packet.
- * @return      0 on success, < 0 on error.
+ * @return      0 on success, else one of LTNTSTOOLS_SCR_ERR_* (all < 0) identifying why
+ *              no PCR could be extracted.
  */
 int ltntstools_scr(const uint8_t *pkt, uint64_t *scr);
 

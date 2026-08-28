@@ -30,20 +30,20 @@ uint64_t ltntstools_pcrToScr(const uint8_t *ptr, int len)
 int ltntstools_scr(const uint8_t *pkt, uint64_t *scr)
 {
 	if (ltntstools_sync_present(pkt) == 0)
-		return -1;
+		return LTNTSTOOLS_SCR_ERR_NO_SYNC;
 
 	if (ltntstools_adaption_field_control(pkt) < 2)
-		return -1;
+		return LTNTSTOOLS_SCR_ERR_NO_ADAPTATION;
 
 	uint8_t adaption_field_length = *(pkt + 4);
 	if (adaption_field_length == 0)
-		return -1;
+		return LTNTSTOOLS_SCR_ERR_ADAPTATION_EMPTY;
 
 	/* Extract the PCR -- See ISO13818 Table 2.7 */
 
 	/* Ensure PCR_flag is set. */
 	if ((*(pkt + 5) & 0x10) == 0)
-		return -1;
+		return LTNTSTOOLS_SCR_ERR_PCR_FLAG_NOT_SET;
 
 	uint64_t v = ltntstools_pcrToScr(pkt + 6, 6);
 	*scr = v;
