@@ -51,8 +51,9 @@ typedef void (*pes_extractor_callback)(void *userContext, struct ltn_pes_packet_
  * @param[in]   void *userContext - user private context, passed back to caller during callback.
  * @param[in]   int buffer_min - Initial size of ring buffer for processing/detecting pes, eagerly allocated up front. Set to -1 to use the default of 2 * 1024
  * @param[in]   int buffer_max - Maximum size of ring buffer, grown into lazily as needed. Set to -1 to use the default of 4 * 1048576
- * @return      0 on success, else < 0. Fails if buffer_min or buffer_max is
- *              negative and not exactly -1 (the only valid "use default" sentinel).
+ * @return      0 on success, else < 0. Fails if hdl is NULL, or if
+ *              buffer_min or buffer_max is negative and not exactly -1
+ *              (the only valid "use default" sentinel).
  */
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max);
 

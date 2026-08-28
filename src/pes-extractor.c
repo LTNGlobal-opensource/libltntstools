@@ -102,6 +102,15 @@ static void notification_callback(void *userContext, enum ltntstools_notificatio
 
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
+	if (!hdl) {
+		/* Consistent with every other handle-based entry point in this
+		 * file (free(), set_ordered_output(), set_skip_data(),
+		 * set_pcr_pid(), write()) -- this was the one left unchecked
+		 * before dereferencing at `*hdl = ctx;` below.
+		 */
+		return -1;
+	}
+
 	if (buffer_min < -1 || buffer_max < -1) {
 		/* -1 is the sole sentinel for "use the default". Any other
 		 * negative value would otherwise wrap to a huge unsigned size_t

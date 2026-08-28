@@ -219,6 +219,12 @@ static void test_null_and_invalid_args_are_rejected_safely(void)
 {
 	ltntstools_pes_extractor_free(NULL); /* must be a safe no-op */
 
+	/* Regression test for issue #15: alloc() dereferenced `*hdl = ctx;`
+	 * unconditionally at the end of a successful construction, with no
+	 * NULL check on hdl -- inconsistent with every other handle-based
+	 * entry point in this file (all covered below). */
+	CHECK(ltntstools_pes_extractor_alloc(NULL, 0x100, 0xE0, capture_cb, NULL, -1, -1) == -1);
+
 	CHECK(ltntstools_pes_extractor_set_ordered_output(NULL, 1) == -1);
 	CHECK(ltntstools_pes_extractor_set_skip_data(NULL, 1) == -1);
 	CHECK(ltntstools_pes_extractor_set_pcr_pid(NULL, 0x100) == -1);
