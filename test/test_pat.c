@@ -6,13 +6,17 @@
  * directly and calls into it from ltntstools_pmt_create_packet_ts2-style
  * helpers). See test/Makefile for how libdvbpsi is located.
  *
- * SCOPE: ltntstools_pat_alloc_from_existing(), ltntstools_pat_add_from_existing()
- * and ltntstools_pmt_create_packet_ts2() are NOT tested here -- they consume
+ * SCOPE: ltntstools_pat_alloc_from_existing() and
+ * ltntstools_pat_add_from_existing() are NOT tested here -- they consume
  * libdvbpsi's own decoded PAT/PMT structures (dvbpsi_pat_t/dvbpsi_pmt_t),
  * which would require constructing those library-internal linked-list
- * structures by hand. Everything else in pat.c operates purely on this
- * library's own ltntstools_pat_s/ltntstools_pmt_s structs, which is what's
- * covered below.
+ * structures by hand. ltntstools_pmt_create_packet_ts2() is different: like
+ * the non-"2" ltntstools_pmt_create_packet_ts(), its input is this library's
+ * own struct ltntstools_pmt_s -- it just generates the section bytes via
+ * real libdvbpsi calls internally instead of hand-rolling them -- so it IS
+ * covered below (see test_pmt_create_packet_ts2_structure_and_crc()).
+ * Everything else in pat.c operates purely on this library's own
+ * ltntstools_pat_s/ltntstools_pmt_s structs, which is what's covered below.
  *
  * ltntstools_pat_create_packet_ts() and ltntstools_pmt_create_packet_ts()
  * previously had a confirmed bug, found while writing
@@ -39,6 +43,13 @@
 #include "libltntstools/pat.h"
 #include "libltntstools/ts.h"
 #include "libltntstools/crc32.h"
+
+/* Not declared in pat.h, but has real external linkage in pat.c -- unlike
+ * ltntstools_pat_alloc_from_existing()/_add_from_existing(), its input is
+ * this library's own struct ltntstools_pmt_s (same as the non-"2" variant
+ * above it in pat.c), not a libdvbpsi-decoded structure the caller would
+ * need to hand-construct. See test_pmt_create_packet_ts2_structure_and_crc(). */
+int ltntstools_pmt_create_packet_ts2(struct ltntstools_pmt_s *p, uint16_t pid, uint8_t cc, uint8_t *packet, int packetLength);
 
 static int g_failures = 0;
 
@@ -697,6 +708,82 @@ static void test_pmt_create_packet_ts_version_number(void)
 	CHECK(versionByte == (0xC0 | (9 << 1) | 1));
 }
 
+/* Regression test for issue #2: same class of bug as issue #1's PAT
+ * equivalent -- ltntstools_pmt_create_packet_ts() writes header + outer
+ * descriptors + stream entries + inner descriptors + CRC into a fixed
+ * 188-byte buffer with no check that the total fits. Reachable with a
+ * single stream carrying one large descriptor, well short of the 16
+ * stream / 16 descriptor array limits -- confirming this is easier to
+ * trigger than the PAT overflow. Boundary-tests both sides: a 160-byte
+ * descriptor (188 bytes total: fits exactly) vs 161 bytes (189: one too
+ * many, rejected). Same guard-buffer + memcmp technique as the PAT test,
+ * to directly prove the rejected call writes nothing at all. */
+static void test_pmt_create_packet_ts_rejects_content_too_large_to_fit(void)
+{
+	uint8_t descriptorData[161];
+	memset(descriptorData, 0x5A, sizeof(descriptorData));
+
+	struct ltntstools_pmt_s pmt = { 0 };
+	pmt.program_number = 1;
+	add_stream(&pmt, 0x1B, 0x101);
+	ltntstools_descriptor_list_add(&pmt.streams[0].descr_list, 0x05, descriptorData, 160);
+
+	uint8_t pkt[188];
+	CHECK(ltntstools_pmt_create_packet_ts(&pmt, 0x50, 0, pkt, 188) == 0); /* 188 bytes: fits exactly */
+
+	/* Replace the single descriptor with a 161-byte one: 189 bytes, one too many. */
+	pmt.streams[0].descr_list.count = 0;
+	ltntstools_descriptor_list_add(&pmt.streams[0].descr_list, 0x05, descriptorData, 161);
+
+	uint8_t guarded[188 + 16];
+	memset(guarded, 0xAA, sizeof(guarded));
+	int ret = ltntstools_pmt_create_packet_ts(&pmt, 0x50, 0, guarded, 188);
+	CHECK(ret < 0);
+
+	uint8_t untouched[188 + 16];
+	memset(untouched, 0xAA, sizeof(untouched));
+	CHECK(memcmp(guarded, untouched, sizeof(guarded)) == 0);
+}
+
+/* Basic coverage for ltntstools_pmt_create_packet_ts2() -- previously
+ * entirely untested (the file header's scope note groups it with the two
+ * genuinely-dvbpsi-input functions, but its own input is this library's
+ * ltntstools_pmt_s, same as the non-"2" variant above; it just generates
+ * the section bytes via real libdvbpsi calls instead of hand-rolling them).
+ * Written while fixing issue #8 (missing NULL checks on dvbpsi_pmt_new()/
+ * dvbpsi_pmt_es_add()/dvbpsi_new()/dvbpsi_pmt_sections_generate(), all
+ * OOM-only) to at least confirm that change didn't break the success path
+ * -- the OOM failure paths themselves aren't independently testable
+ * without fault injection (same platform limitation established
+ * elsewhere: a DYLD_INTERPOSE malloc-failure shim was tried and found
+ * unreliable on this platform). */
+static void test_pmt_create_packet_ts2_structure_and_crc(void)
+{
+	struct ltntstools_pmt_s pmt = { 0 };
+	pmt.program_number = 1;
+	pmt.PCR_PID = 0x101;
+	add_stream(&pmt, 0x1B, 0x101);
+	add_stream(&pmt, 0x03, 0x102);
+
+	uint8_t pkt[188];
+	CHECK(ltntstools_pmt_create_packet_ts2(&pmt, 0x50, 4, pkt, 188) == 0);
+
+	CHECK(ltntstools_sync_present(pkt) == 1);
+	CHECK(ltntstools_pid(pkt) == 0x50);
+	/* Pre-existing quirk of writePSI() (unrelated to issues #2/#8): it
+	 * increments the CC by one after writing each PSI section, so an
+	 * input cc of 4 ends up as 5 in the output packet, not 4. */
+	CHECK(ltntstools_continuity_counter(pkt) == 5);
+	CHECK(pkt[5] == 0x02); /* PMT table_id */
+
+	int section_length = pkt[7];
+	int totalSectionBytes = 3 + section_length;
+	CHECK(ltntstools_checkCRC32(&pkt[5], totalSectionBytes) == 0);
+
+	uint16_t pcrPid = ((pkt[13] & 0x1f) << 8) | pkt[14];
+	CHECK(pcrPid == 0x101);
+}
+
 /* Regression test for issue #1: ltntstools_pat_create_packet_ts() writes a
  * fixed 13-byte header + 4 bytes/program + 4 CRC bytes with no check that
  * the total fits within the caller's packetLength -- a PAT with more than
@@ -792,6 +879,8 @@ int main(void)
 	test_pat_create_packet_ts_rejects_too_many_programs_to_fit();
 	test_pmt_create_packet_ts_structure_and_crc();
 	test_pmt_create_packet_ts_version_number();
+	test_pmt_create_packet_ts_rejects_content_too_large_to_fit();
+	test_pmt_create_packet_ts2_structure_and_crc();
 	test_create_packet_ts_rejects_invalid_args();
 
 	if (g_failures == 0) {

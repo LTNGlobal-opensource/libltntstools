@@ -69,7 +69,10 @@ int ltntstools_pmt_remove_es_for_pid(struct ltntstools_pmt_s *pmt, uint16_t pid)
  * @param[in]   uint8_t cc - desired initial continuity counter value
  * @param[in]   uint8_t *packet - Buffer where packet will be created
  * @param[in]   int packetLengthBytes - Buffer length, must be exactly 188 bytes.
- * @return      0 - Success or, < 0 on error.
+ * @return      0 - Success or, < 0 on error, including if the PMT's
+ *              descriptors and streams are too large for the PMT to fit
+ *              within a single packet (17 + outerLen + stream_count*5 +
+ *              innerLenTotal + 4 bytes must not exceed packetLengthBytes).
  */
 int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *pmt, uint16_t pid, uint8_t cc, uint8_t *packet, int packetLengthBytes);
 

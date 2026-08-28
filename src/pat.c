@@ -804,11 +804,6 @@ int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *pmt, uint16_t pid, 
 	if ((!pmt) || (packetLength != 188) || (packet == NULL))
 		return -1;
 
-	uint8_t *p = packet;
-	int i = 0;
-
-	memset(p, 0xFF, packetLength);
-
 	int outerLen = 0;
 	for (int j = 0; j < pmt->descr_list.count; j++) {
 		outerLen += (pmt->descr_list.array[j].len + 2);
@@ -820,6 +815,27 @@ int ltntstools_pmt_create_packet_ts(struct ltntstools_pmt_s *pmt, uint16_t pid, 
 			innerLenTotal += (pmt->streams[j].descr_list.array[k].len + 2);
 		}
 	}
+
+	/* Same class of bug as ltntstools_pat_create_packet_ts(): this function
+	 * (per its sibling's long-standing "EXACTLY ONE packet" contract) has
+	 * no support for spanning a PMT across multiple TS packets. Without
+	 * this check, a PMT whose outer/inner descriptors and stream entries
+	 * don't fit within packetLength would silently write past the end of
+	 * the caller's buffer instead of failing cleanly. 17 fixed header
+	 * bytes + outerLen + 5 bytes/stream + innerLenTotal + 4 CRC bytes.
+	 * Reject up front, before writing anything.
+	 */
+	int contentBytes = 17 + outerLen + (pmt->stream_count * 5) + innerLenTotal + 4;
+	if (contentBytes > packetLength) {
+		fprintf(stderr, "%s() pid 0x%04x needs %d bytes (outerLen=%d, stream_count=%d, innerLenTotal=%d), which does not fit in a single %d byte packet\n",
+			__func__, pid, contentBytes, outerLen, pmt->stream_count, innerLenTotal, packetLength);
+		return -1;
+	}
+
+	uint8_t *p = packet;
+	int i = 0;
+
+	memset(p, 0xFF, packetLength);
 
 	p[i++] = 0x47;
 	p[i++] = 0x40 | ((pid & 0x1fff) >> 8);
@@ -891,7 +907,19 @@ int ltntstools_pmt_create_packet_ts2(struct ltntstools_pmt_s *p, uint16_t pid, u
 	if ((!p) || (packetLength != 188) || (packet == NULL))
 		return -1;
 
+	/* None of dvbpsi_pmt_new()/dvbpsi_pmt_es_add()/dvbpsi_new()/
+	 * dvbpsi_pmt_sections_generate() were previously checked for failure
+	 * (all four are OOM-only, confirmed by reading their implementations
+	 * in libdvbpsi). A NULL pmt/es/dvbpsi would crash on the very next
+	 * dvbpsi_*_add() call that dereferences it; a NULL sec would silently
+	 * skip writePSI()'s content loop, leaving a mostly-zeroed packet while
+	 * this function still reported success (return 0) either way.
+	 */
 	dvbpsi_pmt_t *pmt = dvbpsi_pmt_new(p->program_number, p->version_number, p->current_next_indicator, p->PCR_PID);
+	if (!pmt) {
+		fprintf(stderr, "%s() dvbpsi_pmt_new() failed (OOM)\n", __func__);
+		return -1;
+	}
 
 	for (int j = 0; j < p->descr_list.count; j++) {
 		dvbpsi_pmt_descriptor_add(pmt,
@@ -902,6 +930,11 @@ int ltntstools_pmt_create_packet_ts2(struct ltntstools_pmt_s *p, uint16_t pid, u
 
 	for (int i = 0; i < p->stream_count; i++) {
 		dvbpsi_pmt_es_t *es = dvbpsi_pmt_es_add(pmt, p->streams[i].stream_type, p->streams[i].elementary_PID);
+		if (!es) {
+			fprintf(stderr, "%s() dvbpsi_pmt_es_add() failed (OOM)\n", __func__);
+			dvbpsi_pmt_delete(pmt);
+			return -1;
+		}
 
 		for (int j = 0; j < p->streams[i].descr_list.count; j++) {
 			dvbpsi_pmt_es_descriptor_add(es,
@@ -911,8 +944,19 @@ int ltntstools_pmt_create_packet_ts2(struct ltntstools_pmt_s *p, uint16_t pid, u
 	}
 
 	dvbpsi_t *dvbpsi = dvbpsi_new(&message, DVBPSI_MSG_ERROR);
+	if (!dvbpsi) {
+		fprintf(stderr, "%s() dvbpsi_new() failed (OOM)\n", __func__);
+		dvbpsi_pmt_delete(pmt);
+		return -1;
+	}
 
 	dvbpsi_psi_section_t *sec = dvbpsi_pmt_sections_generate(dvbpsi, pmt);
+	if (!sec) {
+		fprintf(stderr, "%s() dvbpsi_pmt_sections_generate() failed\n", __func__);
+		dvbpsi_pmt_delete(pmt);
+		dvbpsi_delete(dvbpsi);
+		return -1;
+	}
 
 	memset(packet, 0, 188);
 	packet[0] = 0x47;
