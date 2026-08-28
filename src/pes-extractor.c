@@ -345,15 +345,26 @@ static int _processRing(struct pes_extractor_s *ctx)
 	}
 
 	if (ctx->computedRingSize != rlen) {
-		printf("%s() %d vs %d, should never happen, aborting\n", __func__, ctx->computedRingSize, rlen);
-		abort();
+		/* Internal bookkeeping drift between computedRingSize and the ring's
+		 * actual used byte count -- should never happen, but killing the
+		 * entire host process on it is a disproportionate response for a
+		 * library. Discard this ring's content and let the caller (which
+		 * unconditionally empties the ring right after calling this
+		 * function) recover on the next PES boundary instead.
+		 */
+		fprintf(stderr, "%s() computedRingSize %d vs rb_used %d, should never happen, discarding ring\n",
+			__func__, ctx->computedRingSize, rlen);
+		return -3;
 	}
 	if (rlen < 16) {
 		/* While technically possible, a PES is rarely less than
-		 * 16 bytes so lets put some safely in place here.
+		 * 16 bytes so lets put some safety in place here. A malformed or
+		 * truncated stream can plausibly hit this, so discard and return
+		 * an error rather than aborting the whole process.
 		 */
-		printf("%s() pes len %d < 16 bytes - should probably never happen, aborting\n", __func__, rlen);
-		abort();
+		fprintf(stderr, "%s() pes len %d < 16 bytes - should probably never happen, discarding ring\n",
+			__func__, rlen);
+		return -4;
 	}
 
 	int overrun = 0;
