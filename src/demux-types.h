@@ -69,7 +69,7 @@ struct demux_ctx_s
 	int pidIndexLength;
 };
 
-void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes);
+void demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes);
 void demux_pid_init(struct demux_ctx_s *ctx, struct demux_pid_s *pid, uint16_t pidNr);
 void demux_pid_uninit(struct demux_pid_s *pid);
 void demux_pid_set_estype(struct demux_pid_s *pid, enum payload_e estype);

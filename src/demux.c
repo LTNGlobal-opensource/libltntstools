@@ -90,7 +90,7 @@ int ltntstools_demux_alloc_from_pat(void **hdl, void *userContext,
 					/* Found a SMPTE-2064 stream. */
 					if (ltntstools_pes_extractor_alloc(&pid->pe, stream->elementary_PID,
 						0xbf, /* See SMPTE ST 2064-2 2015 section 7.2.1 */
-						(pes_extractor_callback)demux_pid_pe_callback, pid, -1, -1) < 0)
+						demux_pid_pe_callback, pid, -1, -1) < 0)
 					{
 						fprintf(stderr, MODULE_PREFIX "Unable to allocate smpte2064 PE extractor for pid 0x%04x, skipping\n", stream->elementary_PID);
 					} else {
@@ -107,7 +107,7 @@ int ltntstools_demux_alloc_from_pat(void **hdl, void *userContext,
 
 				if (ltntstools_pes_extractor_alloc(&pid->pe,
 					stream->elementary_PID, streamId,
-					(pes_extractor_callback)demux_pid_pe_callback, pid,	-1, -1) < 0)
+					demux_pid_pe_callback, pid, -1, -1) < 0)
 				{
 					fprintf(stderr, MODULE_PREFIX "Unable to allocate audio PE extractor for pid 0x%04x, skipping\n", stream->elementary_PID);
 				} else {
@@ -129,7 +129,7 @@ int ltntstools_demux_alloc_from_pat(void **hdl, void *userContext,
 				uint8_t streamId = 0xe0;
 
 				if (ltntstools_pes_extractor_alloc(&pid->pe, stream->elementary_PID,
-					streamId, (pes_extractor_callback)demux_pid_pe_callback, pid, -1, -1) < 0)
+					streamId, demux_pid_pe_callback, pid, -1, -1) < 0)
 				{
 					fprintf(stderr, MODULE_PREFIX "Unable to allocate video PE extractor for pid 0x%04x, skipping\n", stream->elementary_PID);
 				} else {

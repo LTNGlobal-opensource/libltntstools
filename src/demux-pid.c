@@ -51,8 +51,13 @@ void demux_pid_set_payload(struct demux_pid_s *pid, enum payload_e payload)
 	pid->payload = payload;
 }
 
-/* PES Extractor callback */
-void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
+/* PES Extractor callback. Matches pes_extractor_callback's real signature
+ * (void return) -- previously declared returning void* and registered via
+ * an explicit cast in demux.c, which is undefined behavior per the C
+ * standard when called through the (void-returning) pes_extractor_callback
+ * function pointer type, even though harmless on real ABIs.
+ */
+void demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
 {
 	struct demux_pid_s *pid = (struct demux_pid_s *)userContext;
 	struct demux_ctx_s *ctx = pid->ctx;
@@ -62,7 +67,7 @@ void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
 	struct demux_pid_pes_item_s *item = malloc(sizeof(*item));
 	if (!item) {
 		ltn_pes_packet_free(pes);
-		return NULL;
+		return;
 	}
 
 	gettimeofday(&now, NULL);
@@ -97,5 +102,4 @@ void *demux_pid_pe_callback(void *userContext, struct ltn_pes_packet_s *pes)
 	}
 
 	/* We're holding onto the lifetime of the pes. We're not freeing it. */
-	return NULL;
 }
