@@ -161,7 +161,9 @@ int ltn_pes_packet_is_video(struct ltn_pes_packet_s *pes);
  * @brief       Pack the pes into a bytestream container
  * @param[in]   struct ltn_pes_packet_s *pes - object
  * @param[in]   struct klbs_context_s *bs - existing bytestream container
- * @return      number of bits packed.
+ * @return      number of bits packed, 0 if pes or bs is NULL, or -1 if bs's
+ *              destination buffer was too small to hold the packed pes
+ *              (check bs->overrun).
  */
 ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pes, struct klbs_context_s *bs);
 

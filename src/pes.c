@@ -244,6 +244,16 @@ ssize_t ltn_pes_packet_pack(struct ltn_pes_packet_s *pkt, struct klbs_context_s 
 		}
 	}
 
+	/* klbs_write_bit() sets bs->overrun the instant the destination buffer
+	 * fills, but keeps cycling its shift register afterward without an
+	 * early return (KLBITSTREAM_RETURN_ON_OVERRUN is 0), so every
+	 * `bits += ...` above keeps incrementing right through an overrun as if
+	 * each write had actually landed. Report failure explicitly instead of
+	 * a bit count that no longer reflects what's really in the buffer.
+	 */
+	if (bs->overrun)
+		return -1;
+
 	return bits;
 }
 

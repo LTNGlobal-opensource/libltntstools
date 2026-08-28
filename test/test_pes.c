@@ -81,6 +81,15 @@
  *    both now skip the CRC/fwrite calls when the length is 0, and refuse to
  *    write a file at all (return < 0) when the pointer is NULL but the
  *    length claims otherwise.
+ *
+ * 10. ltn_pes_packet_pack()'s `bits` counter is incremented by a fixed
+ *     amount per field regardless of whether the underlying klbs_write_bit()
+ *     call actually landed -- once the destination buffer fills,
+ *     klbs_write_bit() sets bs->overrun and silently no-ops the real write
+ *     but keeps cycling its shift register, so `bits` kept climbing as if
+ *     every subsequent write had succeeded. Fixed: pack() now checks
+ *     bs->overrun before returning and reports failure (-1) instead of a
+ *     bit count that no longer matches the buffer's real contents.
  */
 
 #include <assert.h>
@@ -229,6 +238,28 @@ static void test_pack_rejects_null_args(void)
 
 	CHECK(ltn_pes_packet_pack(NULL, &bs) == 0);
 	CHECK(ltn_pes_packet_pack(&pkt, NULL) == 0);
+}
+
+/* Issue #10 (see file header): a destination buffer too small to hold the
+ * packed pes must be reported as failure (-1), not a bit count that no
+ * longer reflects what's actually in the buffer. */
+static void test_pack_returns_minus_one_on_overrun(void)
+{
+	struct ltn_pes_packet_s pkt = { 0 };
+	pkt.packet_start_code_prefix = 0x000001;
+	pkt.stream_id = 0xE0;
+	uint8_t payload[3] = { 1, 2, 3 };
+	pkt.data = payload;
+	pkt.dataLengthBytes = sizeof(payload);
+
+	uint8_t buf[4]; /* far too small for the ~15-byte packed PES */
+	struct klbs_context_s bs;
+	klbs_init(&bs);
+	klbs_write_set_buffer(&bs, buf, sizeof(buf));
+
+	ssize_t bits = ltn_pes_packet_pack(&pkt, &bs);
+	CHECK(bits == -1);
+	CHECK(bs.overrun == 1);
 }
 
 static void test_parse_rejects_null_args(void)
@@ -1032,6 +1063,7 @@ int main(void)
 
 	test_init_and_free_accept_null();
 	test_pack_rejects_null_args();
+	test_pack_returns_minus_one_on_overrun();
 	test_parse_rejects_null_args();
 	test_dump_accepts_null_pkt();
 	test_dump_accepts_null_indent();
