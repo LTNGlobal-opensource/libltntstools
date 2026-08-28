@@ -476,12 +476,18 @@ static int _processRing(struct pes_extractor_s *ctx)
 
 			if (!overrun && bitsProcessed && ctx->cb) {
 
+				/* buf has already been fully consumed by
+				 * ltn_pes_packet_parse() above (it deep-copies whatever it
+				 * needs into pes->data separately), so nothing else needs
+				 * it -- hand its ownership straight to pes->rawBuffer
+				 * instead of a second malloc()+memcpy() of up to rlen
+				 * (buffer_max, 32MB by default) bytes. buf is set to NULL
+				 * so the free(buf) below becomes a no-op for this path;
+				 * ltn_pes_packet_free() now owns and will free it.
+				 */
 				pes->rawBufferLengthBytes = rlen;
-				pes->rawBuffer = malloc(pes->rawBufferLengthBytes);
-				if (!pes->rawBuffer) {
-					ltn_pes_packet_free(pes);
-				} else {
-				memcpy(pes->rawBuffer, buf, pes->rawBufferLengthBytes);
+				pes->rawBuffer = buf;
+				buf = NULL;
 
 				if (ctx->orderedOutput) {
 					/* Send the PES's to the callback in the correct temporal order,
@@ -522,7 +528,6 @@ static int _processRing(struct pes_extractor_s *ctx)
 				} else {
 					ctx->cb(ctx->userContext, pes);
 					/* User owns the lifetime of the object */
-				}
 				}
 			} else
 			if (bitsProcessed) {

@@ -301,6 +301,58 @@ static void test_write_default_attaches_data_test_skip_data_true_omits_it(void)
 	}
 }
 
+/* pes->rawBuffer is populated by _processRing() itself (independently of
+ * skipDataExtraction/pes->data, which ltn_pes_packet_parse() owns) --
+ * confirm it's the exact original packed PES bytes, byte for byte. This
+ * also covers _processRing() handing buf's own allocation directly to
+ * pes->rawBuffer instead of a second malloc()+memcpy(): if that plumbing
+ * were wrong, rawBuffer would come back NULL, wrong-length, or corrupt. */
+static void test_write_rawBuffer_matches_original_packed_bytes(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t payload[300];
+	for (int i = 0; i < (int)sizeof(payload); i++)
+		payload[i] = (uint8_t)(i * 3 + 7);
+
+	uint8_t buf[512];
+	int totalBytes = pack_pes(0xE0, payload, sizeof(payload), buf, sizeof(buf));
+	CHECK(totalBytes > 184); /* sanity: spans more than one TS packet */
+
+	uint8_t packets[8][188];
+	uint8_t cc = 0;
+	int tsPacketCount = build_ts_packets(buf, totalBytes, 0x100, &cc, packets, 8);
+	int n = tsPacketCount;
+	build_trailer_packet(0x100, &cc, packets[n++]);
+
+	ltntstools_pes_extractor_write(hdl, &packets[0][0], n);
+
+	/* The ring accumulates every contributing TS packet's full 184-byte
+	 * payload area, including any trailing stuffing bytes in the last one
+	 * (build_ts_packets() doesn't pad totalBytes out to a TS packet
+	 * boundary, but write() has no way to know that -- it just appends
+	 * wsize bytes from every packet up to the next PUSI). So rawBuffer's
+	 * length is rounded up to a whole number of TS packets' worth, not
+	 * totalBytes itself; only the first totalBytes bytes are meaningful
+	 * to compare against the original packed PES. */
+	int expectedRawLen = tsPacketCount * 184;
+
+	CHECK(g_capturedCount == 1);
+	if (g_capturedCount == 1) {
+		struct ltn_pes_packet_s *pes = g_captured[0];
+		CHECK(pes->rawBuffer != NULL);
+		CHECK((int)pes->rawBufferLengthBytes == expectedRawLen);
+		if (pes->rawBuffer != NULL && (int)pes->rawBufferLengthBytes >= totalBytes) {
+			CHECK(memcmp(pes->rawBuffer, buf, totalBytes) == 0);
+		}
+	}
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
 /* -------- write() large PES spanning multiple TS packets -------- */
 
 static void test_write_large_pes_spanning_multiple_ts_packets_reassembles(void)
@@ -530,6 +582,7 @@ int main(void)
 
 	test_write_ignores_other_pid_no_callback();
 	test_write_default_attaches_data_test_skip_data_true_omits_it();
+	test_write_rawBuffer_matches_original_packed_bytes();
 	test_write_large_pes_spanning_multiple_ts_packets_reassembles();
 	test_write_cc_error_discards_partial_pes_but_recovers();
 	test_write_malformed_adaptation_field_length_does_not_crash();
