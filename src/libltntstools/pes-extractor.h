@@ -13,15 +13,15 @@
  *              and partially corrupted streams discarded.
  * 
  * Usage example, demuxing and parsing Video frames on pid 0x31:
- * 
- *    void *myCB(void *userContext, struct ltn_pes_packet_s *pes)
+ *
+ *    void myCB(void *userContext, struct ltn_pes_packet_s *pes)
  *    {
- *      ltn_pes_packet_dump(pes);
+ *      ltn_pes_packet_dump(pes, "");
  *      ltn_pes_packet_free(pes);
  *    }
- * 
+ *
  *    void *hdl;
- *    ltntstools_pes_extractor_alloc(&hdl, 0x31, 0xe0, myCB, NULL);
+ *    ltntstools_pes_extractor_alloc(&hdl, 0x31, 0xe0, myCB, NULL, -1, -1);
  *    ltntstools_pes_extractor_set_skip_data(hdl, 1); // Skip payload data
  * 
  *    while (1) {
