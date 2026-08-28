@@ -426,6 +426,12 @@ static int _processRing(struct pes_extractor_s *ctx)
 #if LOCAL_DEBUG
 						_list_print(ctx);
 #endif
+					} else {
+						/* listOrdered is empty (eg. every item malloc() failed
+						 * during alloc()) -- nowhere to cache pes, so it would
+						 * otherwise leak here.
+						 */
+						ltn_pes_packet_free(pes);
 					}
 
 				} else {
@@ -435,14 +441,23 @@ static int _processRing(struct pes_extractor_s *ctx)
 				}
 			} else
 			if (bitsProcessed) {
+				/* Either bs.overrun or ctx->cb == NULL -- either way, pes
+				 * was never delivered or cached, so it must be freed here
+				 * or it leaks.
+				 */
 #if LOCAL_DEBUG
 				ltn_pes_packet_dump(pes, "\t");
-				ltn_pes_packet_free(pes);
 #endif
+				ltn_pes_packet_free(pes);
 			} else {
+				/* ltn_pes_packet_parse() processed nothing (eg. truncated
+				 * ring content) -- pes is still a live allocation and must
+				 * be freed here or it leaks.
+				 */
 #if LOCAL_DEBUG
 				printf("skipping, processedbits = %d\n", bitsProcessed);
 #endif
+				ltn_pes_packet_free(pes);
 			}
 		}
 		free(buf);
