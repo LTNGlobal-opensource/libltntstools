@@ -93,6 +93,34 @@
  *
  * 10. klbs_read_bit()'s `if (ctx->reg_used <= 8)` was always true at that
  *     point in the code -- dead conditional, removed (no behavior change).
+ *
+ * Four more fixes, each with its own test below:
+ *
+ * 11. klbs_peek_bits()'s own doc says peeking never changes the original
+ *     context, but on an overrun it set ctx->overrun = 1 on the real ctx
+ *     before making its copy -- silently violating that contract. Now only
+ *     the (discarded) copy observes the overrun, via klbs_read_bits().
+ *
+ * 12. klbs_free() never read ctx->didAllocateStorage or freed ctx->buf,
+ *     even though that field exists specifically to record that
+ *     klbs_alloc_init_with_storage() (not the caller) allocated it -- a
+ *     real leak for any caller who didn't know to separately free() the
+ *     buffer first (as this test file's own tests previously had to).
+ *     klbs_free() now frees ctx->buf when didAllocateStorage is set, and
+ *     leaves it alone otherwise (see
+ *     test_free_leaves_caller_supplied_buffer_intact()).
+ *
+ * 13. klbs_bitmove() didn't stop its loop once src->overrun/dst->overrun
+ *     went true (since KLBITSTREAM_RETURN_ON_OVERRUN is 0 by default) --
+ *     it kept looping through every remaining bit (now safe no-ops) and,
+ *     with KLBITSTREAM_DEBUG on, logged a duplicate "OVERRUN" line on
+ *     every one of them. Now breaks out immediately.
+ *
+ * 14. klbs_write_bit()'s `assert(ctx->buflen_used <= ctx->buflen)` was the
+ *     only overrun-assert in this file not gated behind
+ *     KLBITSTREAM_ASSERT_ON_OVERRUN (0 by default) -- breaking the file's
+ *     deliberate "never abort, always degrade gracefully" pattern used
+ *     everywhere else. Now gated like its siblings.
  */
 
 #include <assert.h>
@@ -136,7 +164,9 @@ static void test_alloc_init_with_storage_write_mode(void)
 	klbs_write_bits(ctx, 0xFF, 8);
 	CHECK(klbs_get_byte_count(ctx) == 1);
 
-	free(klbs_get_buffer(ctx)); /* per docs: klbs_free() leaves the user buffer intact */
+	/* Issue #5 (see file header): klbs_free() now frees ctx->buf itself
+	 * because didAllocateStorage is set -- a caller must NOT also free()
+	 * it separately (that would double-free). */
 	klbs_free(ctx);
 }
 
@@ -146,8 +176,26 @@ static void test_alloc_init_with_storage_read_mode(void)
 	CHECK(ctx != NULL);
 	CHECK(klbs_get_buffer_size(ctx) == 4);
 
-	free(klbs_get_buffer(ctx));
 	klbs_free(ctx);
+}
+
+/* Issue #12 (see file header): confirm klbs_free() still leaves a
+ * caller-supplied buffer (didAllocateStorage == 0) untouched -- only
+ * buffers klbs_alloc_init_with_storage() itself allocated should be freed
+ * automatically. If klbs_free() had incorrectly freed userBuf too, the
+ * free() below would be a double-free (caught under AddressSanitizer). */
+static void test_free_leaves_caller_supplied_buffer_intact(void)
+{
+	struct klbs_context_s *ctx = klbs_alloc();
+	CHECK(ctx != NULL);
+
+	uint8_t *userBuf = (uint8_t *)malloc(8);
+	CHECK(userBuf != NULL);
+	klbs_write_set_buffer(ctx, userBuf, 8);
+	CHECK(ctx->didAllocateStorage == 0);
+
+	klbs_free(ctx);
+	free(userBuf);
 }
 
 static void test_init_zeroes_context(void)
@@ -455,12 +503,40 @@ static void test_peek_bits_does_not_false_positive_on_small_buffers(void)
 	CHECK(all == 0x12345678ULL);
 	CHECK(ctx2.overrun == 0);
 
-	/* Peeking one bit more than actually remains must correctly overrun. */
+	/* Peeking one bit more than actually remains is an overrun -- but per
+	 * issue #11 (see file header), klbs_peek_bits() must not mutate the
+	 * real ctx3.overrun to reflect that; only the internal (discarded)
+	 * copy it reads through observes it. See
+	 * test_peek_bits_overrun_does_not_mutate_original_ctx() for the
+	 * dedicated regression test.
+	 */
 	struct klbs_context_s ctx3;
 	klbs_init(&ctx3);
 	klbs_read_set_buffer(&ctx3, buf, sizeof(buf));
 	klbs_peek_bits(&ctx3, 33);
-	CHECK(ctx3.overrun == 1);
+	CHECK(ctx3.overrun == 0);
+}
+
+/* Issue #11 (see file header): klbs_peek_bits()'s own doc says peeking
+ * never changes the original context, but it used to set ctx->overrun = 1
+ * on the real ctx directly, before making its internal copy. */
+static void test_peek_bits_overrun_does_not_mutate_original_ctx(void)
+{
+	uint8_t buf[4] = { 0x12, 0x34, 0x56, 0x78 };
+	struct klbs_context_s ctx;
+	klbs_init(&ctx);
+	klbs_read_set_buffer(&ctx, buf, sizeof(buf));
+
+	klbs_peek_bits(&ctx, 33); /* only 32 bits available */
+
+	CHECK(ctx.overrun == 0); /* the real context must be untouched */
+	CHECK(ctx.buflen_used == 0);
+	CHECK(ctx.reg_used == 0);
+
+	/* The context must still be fully usable afterward. */
+	uint64_t readback = klbs_read_bits(&ctx, 32);
+	CHECK(readback == 0x12345678ULL);
+	CHECK(ctx.overrun == 0);
 }
 
 /* -------- overrun: does not touch memory beyond the buffer -------- */
@@ -519,6 +595,34 @@ static void test_bitmove_transfers_and_advances_src(void)
 	CHECK(klbs_get_byte_count(&dst) == 2);
 	CHECK(dstBuf[0] == 0xAB);
 	CHECK(dstBuf[1] == 0xCD);
+}
+
+/* Issue #13 (see file header): klbs_bitmove() used to keep looping through
+ * every remaining requested bit even after overrun, needlessly calling
+ * klbs_read_bit()/klbs_write_bit() (safe no-ops by then). It must stop as
+ * soon as overrun is detected instead of continuing to "move" (nothing)
+ * for the rest of the requested bit count. */
+static void test_bitmove_stops_immediately_on_overrun(void)
+{
+	uint8_t srcBuf[1] = { 0xFF }; /* only 8 bits available */
+	struct klbs_context_s src;
+	klbs_init(&src);
+	klbs_read_set_buffer(&src, srcBuf, sizeof(srcBuf));
+
+	uint8_t dstBuf[4];
+	struct klbs_context_s dst;
+	klbs_init(&dst);
+	klbs_write_set_buffer(&dst, dstBuf, sizeof(dstBuf));
+
+	klbs_bitmove(&dst, &src, 32); /* request far more bits than src has */
+
+	CHECK(src.overrun == 1);
+	CHECK(dst.overrun == 0); /* dst itself had plenty of room; only src ran out */
+	/* Only the 8 real bits that were available should have been moved --
+	 * the old, buggy version kept looping and would have written all 4
+	 * requested bytes (32 bits) into dst regardless. */
+	CHECK(klbs_get_byte_count(&dst) == 1);
+	CHECK(dstBuf[0] == 0xFF);
 }
 
 static void test_bitcopy_transfers_without_advancing_src(void)
@@ -697,6 +801,7 @@ int main(void)
 	test_alloc_free_basic();
 	test_alloc_init_with_storage_write_mode();
 	test_alloc_init_with_storage_read_mode();
+	test_free_leaves_caller_supplied_buffer_intact();
 	test_init_zeroes_context();
 
 	test_byte_count_macros();
@@ -717,11 +822,13 @@ int main(void)
 
 	test_peek_bits_does_not_advance_or_mutate_original();
 	test_peek_bits_does_not_false_positive_on_small_buffers();
+	test_peek_bits_overrun_does_not_mutate_original_ctx();
 
 	test_write_bit_overrun_does_not_corrupt_beyond_buffer();
 	test_read_bit_overrun_does_not_read_beyond_buffer();
 
 	test_bitmove_transfers_and_advances_src();
+	test_bitmove_stops_immediately_on_overrun();
 	test_bitcopy_transfers_without_advancing_src();
 	test_bitcopy_overrun_when_insufficient_room();
 

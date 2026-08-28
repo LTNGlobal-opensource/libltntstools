@@ -124,11 +124,25 @@ static inline int klbs_save(struct klbs_context_s *ctx, const char *fn)
 
 /**
  * @brief       Destroy and deallocate a previously allocated context.
- *              The users read/write buffer is left in tact, and not freed.
+ *              If ctx->buf was allocated internally by
+ *              klbs_alloc_init_with_storage() (ctx->didAllocateStorage is
+ *              set), that buffer is freed too. Otherwise the caller's
+ *              read/write buffer is left intact, not freed.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
  */
 static inline void klbs_free(struct klbs_context_s *ctx)
 {
+	if (!ctx)
+		return;
+
+	/* didAllocateStorage exists specifically to record that this context
+	 * (not the caller) owns ctx->buf -- previously left unused, which
+	 * meant every klbs_alloc_init_with_storage() context leaked its
+	 * buffer unless the caller separately, manually freed it first.
+	 */
+	if (ctx->didAllocateStorage)
+		free(ctx->buf);
+
 	free(ctx);
 }
 
@@ -207,7 +221,15 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 		return;
 #endif
 	}
+	/* Gated like every other overrun-assert in this file (all default to
+	 * compiled out, KLBITSTREAM_ASSERT_ON_OVERRUN is 0) so this library
+	 * degrades gracefully (log + set overrun, keep going) instead of
+	 * aborting the process -- this bare, ungated assert() used to break
+	 * that pattern for this one call site.
+	 */
+#if KLBITSTREAM_ASSERT_ON_OVERRUN
 	assert(ctx->buflen_used <= ctx->buflen);
+#endif
 
 	bit &= 1;
 	if (ctx->reg_used < 8) {
@@ -559,14 +581,17 @@ static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitco
 		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Peek Bits bitcount %d > available %llu (buflen_used %d, buflen %d, reg_used %d)\n",
 				__FILE__, __func__, __LINE__, bitcount, (unsigned long long)availableBits, ctx->buflen_used, ctx->buflen, ctx->reg_used);
 #endif
-		ctx->overrun = 1;
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-		return 0;
+		/* This function's own doc promises peeking never changes the
+		 * original context -- unlike every other overrun site in this
+		 * file, this one must NOT set ctx->overrun on the real ctx. The
+		 * struct copy below still independently observes (and safely
+		 * handles) the same overrun via klbs_read_bits(), but only on
+		 * the copy, which is discarded when this function returns.
+		 */
+#if KLBITSTREAM_ASSERT_ON_OVERRUN
+		assert(bitcount <= availableBits);
 #endif
 	}
-#if KLBITSTREAM_ASSERT_ON_OVERRUN
-	assert(bitcount <= availableBits);
-#endif
 	struct klbs_context_s copy = *ctx; /* Implicit struct copy */
 	return klbs_read_bits(&copy, bitcount);
 }
@@ -619,6 +644,9 @@ static inline void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32_t b
 
 /**
  * @brief       Allocate a new bitstream context, for read or write use.
+ *              Unlike klbs_write_set_buffer()/klbs_read_set_buffer(), the
+ *              storage buffer is allocated here rather than supplied by the
+ *              caller; klbs_free() on the returned context will free it too.
  * @param[in]   uint32_t storageSizeBytes - Buffer size to allocate
  * @param[in]   int writeMode - indicate 1 for write mode buffer, or 0 for read mode.
  * @return      struct klbs_context_s *  The context itself, or NULL on error.
@@ -673,12 +701,21 @@ static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_
 #if KLBITSTREAM_DEBUG
 			fprintf(stderr, "KLBITSTREAM OVERRUN: Bitmove (%s:%s:%d) src->overrun %d dst->overrun %d\n", __FILE__, __func__, __LINE__, src->overrun, dst->overrun);
 #endif
-#if KLBITSTREAM_RETURN_ON_OVERRUN
-			return;
-#endif
 #if KLBITSTREAM_ASSERT_ON_OVERRUN
 			assert(src->overrun == 0 && dst->overrun == 0);
 #endif
+			/* Once overrun, klbs_read_bit()/klbs_write_bit() are safe
+			 * no-ops for any further call, so continuing this loop for
+			 * the remaining bits accomplishes nothing except wasted
+			 * cycles and, with KLBITSTREAM_DEBUG on, one duplicate log
+			 * line per remaining bit. Stop unconditionally -- this
+			 * loop's continuation was never actually gated by
+			 * KLBITSTREAM_RETURN_ON_OVERRUN (that macro controls whether
+			 * OTHER functions bail early on overrun they detect
+			 * themselves), so leaving it running past this point was
+			 * never intentional.
+			 */
+			break;
 		}
 	}
 }
