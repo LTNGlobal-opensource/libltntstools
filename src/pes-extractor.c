@@ -232,18 +232,31 @@ static struct item_s * _list_find_oldest(struct pes_extractor_s *ctx)
 
 static void updatePcrList(struct pes_extractor_s *ctx, int64_t pcr, unsigned int ringPos)
 {
+	if (xorg_list_is_empty(&ctx->pcrList)) {
+		/* xorg_list_last_entry() on an empty list computes a struct
+		 * pcr_item_s* via container_of() applied to the list head itself
+		 * (which lives inside struct pes_extractor_s, not a real
+		 * pcr_item_s allocation) -- the `if (item)` check that used to
+		 * guard this can never catch that, since the macro can't return
+		 * NULL. Guard explicitly instead. Not reachable through the
+		 * public API today (ltntstools_pes_extractor_alloc() now fails
+		 * the whole construction if it can't fully populate pcrList), but
+		 * this function shouldn't depend on that invariant holding forever.
+		 */
+		return;
+	}
+
 	/* Take the oldtest item, update and push to top of list. */
 	struct pcr_item_s *item = xorg_list_last_entry(&ctx->pcrList, struct pcr_item_s, list);
-	if (item) {
-		xorg_list_del(&item->list);
-		item->pcr = pcr;
+	xorg_list_del(&item->list);
+	item->pcr = pcr;
 
-		/* Remember the next ring insert point (its tail) */
-		item->ringPos = ringPos;
+	/* Remember the next ring insert point (its tail) */
+	item->ringPos = ringPos;
 
-		item->updateTime = time(0);
-		xorg_list_add(&item->list, &ctx->pcrList);
-	}
+	item->updateTime = time(0);
+	xorg_list_add(&item->list, &ctx->pcrList);
+
 #if LOCAL_DEBUG
 	printPcrList(ctx);
 #endif
