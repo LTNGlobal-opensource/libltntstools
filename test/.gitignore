@@ -62,3 +62,5 @@ test_klringbuffer
 test_klringbuffer.dSYM
 test_ac3
 test_ac3.dSYM
+test_clocks
+test_clocks.dSYM

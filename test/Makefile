@@ -16,8 +16,9 @@ endif
 
 .PHONY: test clean
 
-test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr test_probes test_smoother_rtp test_segmentwriter test_klbitstream_readwriter test_tr101290 test_nal_bitreader test_nal_h264 test_nal_h265 test_udp_receiver test_xorg_list test_vbv test_proc_net_udp test_klringbuffer test_ac3
+test: test_crc32 test_clocks test_history_metric test_ts test_reframer test_stats test_descriptor test_pes test_pat test_sectionextractor test_ts_packetizer test_throughput_hires test_time test_throughput test_streammodel test_streammodel_extractors test_pes_extractor test_sei_timestamp test_smoother_pcr test_probes test_smoother_rtp test_segmentwriter test_klbitstream_readwriter test_tr101290 test_nal_bitreader test_nal_h264 test_nal_h265 test_udp_receiver test_xorg_list test_vbv test_proc_net_udp test_klringbuffer test_ac3
 	./test_crc32
+	./test_clocks
 	./test_history_metric
 	./test_ts
 	./test_reframer
@@ -52,6 +53,9 @@ test: test_crc32 test_history_metric test_ts test_reframer test_stats test_descr
 
 test_crc32: test_crc32.c ../src/crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_crc32.c ../src/crc32.c
+
+test_clocks: test_clocks.c ../src/clocks.c
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_clocks.c ../src/clocks.c
 
 test_history_metric: test_history_metric.c ../src/history-metric.c
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ test_history_metric.c ../src/history-metric.c $(LDLIBS_HISTORY_METRIC)
