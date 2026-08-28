@@ -16,8 +16,50 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <sys/mman.h>
 
 #include "libltntstools/ts.h"
+
+/* Some regression tests below need to prove a fixed out-of-bounds read stays
+ * fixed, even on a build without ASan. A plain heap/stack buffer won't do
+ * that reliably (an over-read might land on unrelated-but-mapped memory and
+ * silently "succeed"). Instead we mmap the buffer so it butts up against an
+ * unmapped/PROT_NONE guard page: any read even one byte past the requested
+ * length faults immediately (SIGSEGV / SIGBUS) and the test binary crashes,
+ * making a reintroduced over-read impossible to miss. */
+struct guarded_buf {
+	uint8_t *ptr;    /* usable buffer, exactly `len` bytes, guard page follows */
+	uint8_t *base;   /* mmap() base, needed to unmap */
+	size_t   maplen; /* total mmap() length */
+};
+
+static int guarded_buf_alloc(struct guarded_buf *g, size_t len)
+{
+	long pagesize = sysconf(_SC_PAGESIZE);
+	size_t datapages = (len + (size_t)pagesize - 1) / (size_t)pagesize;
+	if (datapages == 0)
+		datapages = 1;
+	g->maplen = (datapages + 1) * (size_t)pagesize;
+
+	g->base = mmap(NULL, g->maplen, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (g->base == MAP_FAILED)
+		return -1;
+
+	if (mprotect(g->base + datapages * (size_t)pagesize, (size_t)pagesize, PROT_NONE) != 0) {
+		munmap(g->base, g->maplen);
+		return -1;
+	}
+
+	/* Butt the end of the caller's region against the guard page. */
+	g->ptr = g->base + (datapages * (size_t)pagesize) - len;
+	return 0;
+}
+
+static void guarded_buf_free(struct guarded_buf *g)
+{
+	munmap(g->base, g->maplen);
+}
 
 /* Not declared in ts.h (internal helper), but it's a real exported symbol
  * in ts.c -- prototype it ourselves so we can test it directly. */
@@ -503,6 +545,79 @@ static void test_pcr_position_append_grows_array(void)
 	free(arr);
 }
 
+/* Regression test: with pktAligned=1 and a small lengthBytes, the old bound
+ * `i < lengthBytes - offset` let the loop enter with a buffer far shorter
+ * than 188 bytes, and the RTP-header probe `pkt[12]` then read well past the
+ * end of the buffer. The fixed bound (`i <= lengthBytes - 188`) must refuse
+ * to enter the loop at all here. Buffer is mmap-guarded so any over-read
+ * faults immediately instead of silently succeeding. */
+static void test_queryPCR_pid_tiny_aligned_buffer_no_oob_read(void)
+{
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, 5) == 0);
+	memset(g.ptr, 0x47, 5);
+
+	struct ltntstools_pcr_position_s pos;
+	ltntstools_pcr_position_reset(&pos);
+
+	CHECK(ltntstools_queryPCR_pid(g.ptr, 5, &pos, 0x100, 1 /* pktAligned */) < 0);
+
+	guarded_buf_free(&g);
+}
+
+/* Regression test: a buffer holding N full packets plus a short trailing
+ * remainder (not a full 188 bytes) must not have that remainder inspected.
+ * The old bound would enter one extra iteration and read the RTP-header
+ * probe / ltntstools_scr() fields straight past the buffer end. */
+static void test_queryPCRs_trailing_partial_packet_no_oob_read(void)
+{
+	const int fullPackets = 3;
+	const int trailing = 5; /* far short of another 188-byte packet */
+	size_t len = fullPackets * 188 + trailing;
+
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, len) == 0);
+
+	memset(g.ptr, 0xff, len);
+	for (int i = 0; i < fullPackets; i++) {
+		set_header(g.ptr + (i * 188), 0x100 + i, 0, 0, 0, 0, 1, 0);
+	}
+	/* Trailing bytes intentionally left as short, unaligned junk. */
+
+	struct ltntstools_pcr_position_s *arr = NULL;
+	int arrLen = 0;
+	CHECK(ltntstools_queryPCRs(g.ptr, (int)len, 0, &arr, &arrLen) == 0);
+	CHECK(arrLen == 0); /* none of the packets built above carry a PCR */
+	free(arr);
+
+	guarded_buf_free(&g);
+}
+
+/* Same trailing-remainder scenario via ltntstools_queryPCR_pid(), forcing a
+ * full scan (no match) with pktAligned=0 so ltntstools_findSyncPosition()
+ * establishes a non-zero offset first. */
+static void test_queryPCR_pid_trailing_partial_packet_no_oob_read(void)
+{
+	const int fullPackets = 3;
+	const int trailing = 5;
+	size_t len = fullPackets * 188 + trailing;
+
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, len) == 0);
+
+	memset(g.ptr, 0xff, len);
+	for (int i = 0; i < fullPackets; i++) {
+		set_header(g.ptr + (i * 188), 0x100 + i, 0, 0, 0, 0, 1, 0);
+	}
+
+	struct ltntstools_pcr_position_s pos;
+	ltntstools_pcr_position_reset(&pos);
+
+	CHECK(ltntstools_queryPCR_pid(g.ptr, (int)len, &pos, 0x999 /* no match */, 0) < 0);
+
+	guarded_buf_free(&g);
+}
+
 /* -------- generate / update / verify 64-bit counter packets -------- */
 
 static void test_generate_verify_roundtrip(void)
@@ -605,6 +720,70 @@ static void test_pcr_to_ascii_matches_pts_to_ascii(void)
 	CHECK(strcmp(pts_buf, pcr_buf) == 0);
 }
 
+/* Regression test: the docs promise "pass a buffer of at least 16 bytes".
+ * INT64_MAX/INT64_MIN produce a day count (plus, for negatives, extra '-'
+ * signs on every field) that needs far more than 16 bytes of formatted text.
+ * The old sprintf() would write straight past a 16-byte buffer; the fix
+ * (snprintf(*buf, 16, ...)) must truncate instead. Buffer is mmap-guarded
+ * so any write past byte 16 faults immediately rather than silently
+ * corrupting adjacent memory. */
+static void test_pts_to_ascii_extreme_positive_value_stays_in_bounds(void)
+{
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, 16) == 0);
+
+	char *p = (char *)g.ptr;
+	ltntstools_pts_to_ascii(&p, INT64_MAX);
+
+	CHECK(p == (char *)g.ptr); /* caller-supplied buffer must not be replaced */
+	CHECK(memchr(g.ptr, '\0', 16) != NULL); /* nul terminator lands within bounds */
+	CHECK(strlen((char *)g.ptr) < 16);
+
+	guarded_buf_free(&g);
+}
+
+static void test_pts_to_ascii_extreme_negative_value_stays_in_bounds(void)
+{
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, 16) == 0);
+
+	char *p = (char *)g.ptr;
+	ltntstools_pts_to_ascii(&p, INT64_MIN);
+
+	CHECK(p == (char *)g.ptr);
+	CHECK(memchr(g.ptr, '\0', 16) != NULL);
+	CHECK(strlen((char *)g.ptr) < 16);
+
+	guarded_buf_free(&g);
+}
+
+static void test_pcr_to_ascii_extreme_value_stays_in_bounds(void)
+{
+	struct guarded_buf g;
+	CHECK(guarded_buf_alloc(&g, 16) == 0);
+
+	char *p = (char *)g.ptr;
+	ltntstools_pcr_to_ascii(&p, INT64_MAX);
+
+	CHECK(memchr(g.ptr, '\0', 16) != NULL);
+	CHECK(strlen((char *)g.ptr) < 16);
+
+	guarded_buf_free(&g);
+}
+
+/* Auto-allocation path (buf == NULL) must also stay within the 16 bytes it
+ * mallocs, even for a pts that needs far more digits than fit. */
+static void test_pts_to_ascii_autoalloc_extreme_value_stays_in_bounds(void)
+{
+	char *buf = NULL;
+	ltntstools_pts_to_ascii(&buf, INT64_MAX);
+	CHECK(buf != NULL);
+	if (buf) {
+		CHECK(strlen(buf) < 16);
+		free(buf);
+	}
+}
+
 int main(void)
 {
 	test_sync_present();
@@ -657,6 +836,9 @@ int main(void)
 	test_queryPCR_pid_unaligned_offset();
 	test_queryPCR_pid_no_match_returns_error();
 	test_pcr_position_append_grows_array();
+	test_queryPCR_pid_tiny_aligned_buffer_no_oob_read();
+	test_queryPCRs_trailing_partial_packet_no_oob_read();
+	test_queryPCR_pid_trailing_partial_packet_no_oob_read();
 
 	test_generate_verify_roundtrip();
 	test_verify_detects_wrong_pid();
@@ -667,6 +849,10 @@ int main(void)
 	test_pts_to_ascii_known_values();
 	test_pts_to_ascii_autoalloc();
 	test_pcr_to_ascii_matches_pts_to_ascii();
+	test_pts_to_ascii_extreme_positive_value_stays_in_bounds();
+	test_pts_to_ascii_extreme_negative_value_stays_in_bounds();
+	test_pcr_to_ascii_extreme_value_stays_in_bounds();
+	test_pts_to_ascii_autoalloc_extreme_value_stays_in_bounds();
 
 	if (g_failures == 0) {
 		printf("PASS: all ts tests passed\n");

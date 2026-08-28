@@ -370,7 +370,11 @@ int ltntstools_queryPCRs(const uint8_t *buf, int lengthBytes, uint64_t addr, str
 	int arrLength = 0;
 	uint64_t scr;
 
-	for (uint64_t i = offset; i < lengthBytes - offset; i += 188) {
+	/* Bound with signed arithmetic and require a full packet to remain,
+	 * else a small lengthBytes/large offset combination could underflow
+	 * and read far past the end of the buffer.
+	 */
+	for (int i = offset; i <= lengthBytes - 188; i += 188) {
 		const uint8_t *pkt = buf + i;
 
 		if (pkt[0] == 0x80 && pkt[12] == 0x47) {
@@ -421,7 +425,11 @@ int ltntstools_queryPCR_pid(const uint8_t *buf, int lengthBytes, struct ltntstoo
 	uint64_t scr;
 
 	int ret = -1;
-	for (uint64_t i = offset; i < lengthBytes - offset; i += 188) {
+	/* Bound with signed arithmetic and require a full packet to remain,
+	 * else a small lengthBytes/large offset combination could underflow
+	 * and read far past the end of the buffer.
+	 */
+	for (int i = offset; i <= lengthBytes - 188; i += 188) {
 		const uint8_t *pkt = buf + i;
 
 		if (pkt[0] == 0x80 && pkt[12] == 0x47) {
@@ -461,7 +469,11 @@ void ltntstools_pts_to_ascii(char **buf, int64_t pts)
 	int hrs  = (t / 3600) % 24;
 	int days = t / 86400;
 
-	sprintf(*buf, "%d.%02d:%02d:%02d.%03d",
+	/* Callers are documented to supply (or receive) a buffer of at least
+	 * 16 bytes. 'days' is derived from an int64_t and is otherwise unbounded,
+	 * so use snprintf() to truncate safely instead of overflowing that buffer.
+	 */
+	snprintf(*buf, 16, "%d.%02d:%02d:%02d.%03d",
 			days, hrs, mins, secs, ms);
 }
 
