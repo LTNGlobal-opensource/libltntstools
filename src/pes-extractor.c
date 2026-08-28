@@ -121,28 +121,56 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	xorg_list_init(&ctx->pcrList);
 	xorg_list_init(&ctx->listOrdered);
 	pthread_mutex_init(&ctx->listOrderedMutex, NULL);
-	ltntstools_pid_stats_alloc(&ctx->libstats);
+	if (ltntstools_pid_stats_alloc(&ctx->libstats) < 0) {
+		/* This framework's documented guarantee -- packet loss (CC errors)
+		 * on the chosen pid is tracked and corrupted streams discarded --
+		 * depends entirely on libstats. Treat its failure the same as any
+		 * other construction failure (eg. rb_new() above) rather than
+		 * silently returning a handle that can never detect loss. ctx is
+		 * in a state free() already knows how to tear down safely (rb
+		 * allocated, both lists initialized-but-empty, libstats NULL and
+		 * every teardown call on it already NULL-safe), so reuse it
+		 * instead of duplicating cleanup here.
+		 */
+		ltntstools_pes_extractor_free(ctx);
+		return -1;
+	}
 	ltntstools_notification_register_callback(ctx->libstats, EVENT_UPDATE_PID_PUSI_DELIVERY_TIME,
 		ctx, (ltntstools_notification_callback)notification_callback);
 
 	/* initialize a 10 item deep list */
 	for (int i = 0; i < ORDERED_LIST_DEPTH; i++) {
 		struct item_s *item = malloc(sizeof(*item));
-		if (item) {
-			item->correctedPTS = 0;
-			item->pes = NULL;
-			xorg_list_append(&item->list, &ctx->listOrdered);
-		} 
+		if (!item) {
+			/* Partial failure here previously went unreported: alloc()
+			 * still returned success with a short (or, on total OOM,
+			 * empty) listOrdered, silently degrading ordered-output mode
+			 * for the life of the context. Fail the whole construction
+			 * instead -- same rationale as the libstats check above.
+			 */
+			ltntstools_pes_extractor_free(ctx);
+			return -1;
+		}
+		item->correctedPTS = 0;
+		item->pes = NULL;
+		xorg_list_append(&item->list, &ctx->listOrdered);
 	}
 
 	for (int i = 0; i < MAX_PCR_ITEMS; i++) {
 		struct pcr_item_s *e = malloc(sizeof(*e));
-		if (e) {
-			e->updateTime = time(0);
-			e->pcr = 0;
-			e->ringPos = 0;
-			xorg_list_append(&e->list, &ctx->pcrList);
+		if (!e) {
+			/* Same rationale as the listOrdered loop above. A totally
+			 * empty pcrList here would also leave updatePcrList() to
+			 * operate on an empty list later -- failing fast here avoids
+			 * that state ever being reachable through this API.
+			 */
+			ltntstools_pes_extractor_free(ctx);
+			return -1;
 		}
+		e->updateTime = time(0);
+		e->pcr = 0;
+		e->ringPos = 0;
+		xorg_list_append(&e->list, &ctx->pcrList);
 	}
 
 	*hdl = ctx;
