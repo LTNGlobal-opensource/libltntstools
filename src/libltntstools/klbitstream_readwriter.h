@@ -73,9 +73,13 @@ struct klbs_context_s
  *              you're slowly draining a buffer and want to prevent peeking
  *              beyond the total allocate size.
  * @param[in]   struct klbs_context_s *ctx  bitstream context
- * @return      Number of unused/free bytes remaining in the buffer.
+ * @return      Number of unused/free bytes remaining in the buffer. Clamped
+ *              to 0 rather than underflowing if buflen_used ever exceeds
+ *              buflen (both are unsigned).
  */
-#define klbs_get_byte_count_free(ctx) (klbs_get_buffer_size(ctx) - klbs_get_byte_count(ctx))
+#define klbs_get_byte_count_free(ctx) \
+	(klbs_get_buffer_size(ctx) > klbs_get_byte_count(ctx) ? \
+		klbs_get_buffer_size(ctx) - klbs_get_byte_count(ctx) : 0)
 
 /**
  * @brief       Allocate a new bitstream context, for read or write use.
@@ -96,14 +100,26 @@ static inline struct klbs_context_s * klbs_alloc()
  */
 static inline int klbs_save(struct klbs_context_s *ctx, const char *fn)
 {
+	/* Check ctx/fn before fopen(): fopen() would otherwise run first,
+	 * creating/truncating fn on disk, only to then crash dereferencing
+	 * ctx -- leaving a stray empty file behind in addition to crashing.
+	 */
+	if (!ctx || !fn)
+		return -1;
+
 	FILE *fh = fopen(fn, "wb");
 	if (!fh)
 		return -1;
 
-	fwrite(ctx->buf, 1, ctx->buflen_used, fh);
+	/* fwrite()'s return value was previously ignored, so this always
+	 * reported success even if the write only partially completed (e.g.
+	 * a full disk) -- a caller had no way to know their data wasn't
+	 * actually saved.
+	 */
+	size_t w = fwrite(ctx->buf, 1, ctx->buflen_used, fh);
 	fclose(fh);
 
-	return 0;
+	return (w == ctx->buflen_used) ? 0 : -1;
 }
 
 /**
@@ -122,6 +138,9 @@ static inline void klbs_free(struct klbs_context_s *ctx)
  */
 static inline void klbs_init(struct klbs_context_s *ctx)
 {
+	if (!ctx)
+		return;
+
 	memset(ctx, 0, sizeof(*ctx));
 }
 
@@ -134,7 +153,19 @@ static inline void klbs_init(struct klbs_context_s *ctx)
  */
 static inline void klbs_write_set_buffer(struct klbs_context_s *ctx, uint8_t *buf, uint32_t lengthBytes)
 {
+	if (!ctx)
+		return;
+
 	klbs_init(ctx);
+
+	/* A NULL buf paired with a nonzero lengthBytes is an inconsistent
+	 * request -- every subsequent bit access would dereference NULL plus
+	 * some offset. Treat it as "no buffer" instead of accepting it and
+	 * deferring the crash to the first read/write.
+	 */
+	if (!buf)
+		lengthBytes = 0;
+
 	ctx->buf = buf;
 	ctx->buflen = lengthBytes;
 }
@@ -158,6 +189,9 @@ static inline void klbs_read_set_buffer(struct klbs_context_s *ctx, uint8_t *buf
  */
 static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
 {
+	if (!ctx)
+		return;
+
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (ctx->overrun)
 		return;
@@ -216,6 +250,9 @@ static inline void klbs_write_bit(struct klbs_context_s *ctx, uint32_t bit)
  */
 static inline void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bit)
 {
+	if (!ctx)
+		return;
+
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (ctx->overrun)
 		return;
@@ -244,6 +281,24 @@ static inline void klbs_write_byte_stuff(struct klbs_context_s *ctx, uint32_t bi
  */
 static inline void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, uint32_t bitcount)
 {
+	if (!ctx)
+		return;
+
+	/* This header's own top-of-file doc promises "1..64 bit writes".
+	 * bitcount==0 previously relied on (bitcount - 1) wrapping to
+	 * UINT32_MAX and then converting (implementation-defined, not
+	 * portable) to a negative int so the loop below happened to not run.
+	 * bitcount>64 is worse: `bits >> i` below reaches i>=64, which is
+	 * undefined behavior for a 64-bit shift amount. Reject both instead.
+	 */
+	if (bitcount == 0 || bitcount > 64) {
+#if KLBITSTREAM_DEBUG
+		fprintf(stderr, "KLBITSTREAM: (%s:%s:%d) bitcount %u outside the supported 1..64 range, ignoring write\n",
+			__FILE__, __func__, __LINE__, bitcount);
+#endif
+		return;
+	}
+
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (ctx->overrun)
 		return;
@@ -270,6 +325,9 @@ static inline void klbs_write_bits(struct klbs_context_s *ctx, uint64_t bits, ui
  */
 static inline void klbs_write_buffer_complete(struct klbs_context_s *ctx)
 {
+	if (!ctx)
+		return;
+
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (ctx->overrun)
 		return;
@@ -305,6 +363,9 @@ static inline void klbs_write_buffer_complete(struct klbs_context_s *ctx)
 static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 {
 	uint32_t bit = 0;
+
+	if (!ctx)
+		return bit;
 
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (ctx->overrun)
@@ -355,16 +416,30 @@ static inline uint32_t klbs_read_bit(struct klbs_context_s *ctx)
 		ctx->reg_used = 8;
 	}
 
-	if (ctx->reg_used <= 8) {
-		bit = ctx->reg & 0x80 ? 1 : 0;
-		ctx->reg <<= 1;
-		ctx->reg_used--;
-	}
+	/* reg_used is always in [1,8] here: the block above sets it to 8
+	 * whenever it was 0, and otherwise it was already nonzero on entry --
+	 * so `reg_used <= 8` (the previous guard here) can never be false.
+	 */
+	bit = ctx->reg & 0x80 ? 1 : 0;
+	ctx->reg <<= 1;
+	ctx->reg_used--;
+
 	return bit;
 }
 
-static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
+static inline uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 {
+	/* This helper (unlike every other function in this header) was
+	 * missing its own NULL guard, and was declared plain `static` instead
+	 * of `static inline` -- in this header-only library that means a
+	 * separate, non-inlined copy of it gets compiled into every
+	 * translation unit that includes this file, and it's a candidate for
+	 * a spurious -Wunused-function warning in any TU that doesn't happen
+	 * to reference it.
+	 */
+	if (!ctx)
+		return 0;
+
 	if (ctx->buflen_used >= ctx->buflen) {
 #if KLBITSTREAM_DEBUG
 		printf("KLBITSTREAM OVERRUN: (%s:%s:%d) Read Byte Aligned ctx->buflen_used %d >= ctx->buflen %d\n",
@@ -397,6 +472,23 @@ static uint64_t klbs_read_byte_aligned(struct klbs_context_s *ctx)
 static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitcount)
 {
 	uint64_t bits = 0;
+
+	if (!ctx)
+		return bits;
+
+	/* This header's own top-of-file doc promises "1..64 bit reads". A
+	 * bitcount outside that range doesn't corrupt memory here (each loop
+	 * iteration below is always a well-defined 1-bit shift), but it does
+	 * silently return a truncated/meaningless result with no indication
+	 * anything was wrong -- reject it instead, matching klbs_write_bits().
+	 */
+	if (bitcount == 0 || bitcount > 64) {
+#if KLBITSTREAM_DEBUG
+		fprintf(stderr, "KLBITSTREAM: (%s:%s:%d) bitcount %u outside the supported 1..64 range, returning 0\n",
+			__FILE__, __func__, __LINE__, bitcount);
+#endif
+		return bits;
+	}
 
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (ctx->overrun)
@@ -437,6 +529,21 @@ static inline uint64_t klbs_read_bits(struct klbs_context_s *ctx, uint32_t bitco
  */
 static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitcount)
 {
+	if (!ctx)
+		return 0;
+
+	/* This header's own top-of-file doc promises "1..64 bit" peeks; see
+	 * klbs_read_bits()'s identical check for why bitcount outside that
+	 * range is rejected rather than silently truncated.
+	 */
+	if (bitcount == 0 || bitcount > 64) {
+#if KLBITSTREAM_DEBUG
+		fprintf(stderr, "KLBITSTREAM: (%s:%s:%d) bitcount %u outside the supported 1..64 range, returning 0\n",
+			__FILE__, __func__, __LINE__, bitcount);
+#endif
+		return 0;
+	}
+
 	/* buflen/buflen_used are BYTE counts, bitcount is a BIT count -- the
 	 * previous check (`buflen_used + bitcount >= buflen`) compared them
 	 * directly without converting units, so it over-flagged overrun by
@@ -471,6 +578,9 @@ static inline uint64_t klbs_peek_bits(struct klbs_context_s *ctx, uint32_t bitco
  */
 static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
 {
+	if (!ctx)
+		return;
+
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (ctx->overrun)
 		return;
@@ -495,6 +605,9 @@ static inline void klbs_read_byte_stuff(struct klbs_context_s *ctx)
  */
 static inline void klbs_peek_print_binary(struct klbs_context_s *ctx, uint32_t bitcount)
 {
+	if (!ctx)
+		return;
+
 	const char *space = " ";
 	const char *nospace = "";
 	struct klbs_context_s copy = *ctx; /* Implicit struct copy */
@@ -546,6 +659,9 @@ static inline struct klbs_context_s * klbs_alloc_init_with_storage(uint32_t stor
 */
 static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
 {
+	if (!dst || !src)
+		return;
+
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (src->overrun)
 		return;
@@ -575,6 +691,9 @@ static inline void klbs_bitmove(struct klbs_context_s *dst, struct klbs_context_
 */
 static inline void klbs_bitcopy(struct klbs_context_s *dst, struct klbs_context_s *src, size_t bits)
 {
+	if (!dst || !src)
+		return;
+
 	struct klbs_context_s copy = *src; /* Implicit struct copy */
 #if KLBITSTREAM_RETURN_ON_OVERRUN
 	if (src->overrun)

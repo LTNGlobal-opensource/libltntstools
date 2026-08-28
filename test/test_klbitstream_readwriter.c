@@ -56,6 +56,43 @@
  *    capacity: (buflen - buflen_used) * 8 + reg_used.
  *    test_peek_bits_does_not_false_positive_on_small_buffers() is the
  *    regression test.
+ *
+ * Seven more fixes, each with its own test below:
+ *
+ * 4. klbs_write_bits()/klbs_read_bits()/klbs_peek_bits() had no validation
+ *    that 1 <= bitcount <= 64, despite this file's own top-of-file doc
+ *    promising exactly that range. bitcount > 64 in klbs_write_bits()
+ *    reached `bits >> i` for i >= 64 on a uint64_t -- undefined behavior
+ *    (shift amount >= operand width). The read/peek side didn't crash but
+ *    silently returned a meaningless truncated result. All three now
+ *    reject bitcount outside [1,64].
+ *
+ * 5. klbs_save() had no NULL check on ctx/fn -- and fopen() ran (creating/
+ *    truncating fn on disk) before the NULL-ctx crash, leaving a stray
+ *    empty file behind in addition to crashing. fwrite()'s return value
+ *    was also never checked, so it always reported success (0) even on a
+ *    partial write. Both fixed: NULL args now checked first, and the
+ *    return is -1 if fwrite() didn't write every requested byte.
+ *
+ * 6. klbs_write_set_buffer()/klbs_read_set_buffer() didn't validate that
+ *    buf was non-NULL when lengthBytes > 0 -- (NULL, 100) built a context
+ *    that believed it had 100 bytes, and the first bit access dereferenced
+ *    NULL plus an offset. A NULL buf now forces lengthBytes to 0.
+ *
+ * 7. klbs_read_byte_aligned() was declared plain `static` instead of
+ *    `static inline`, unlike every other function in this header-only
+ *    file -- now `static inline` too.
+ *
+ * 8. klbs_get_byte_count_free() (buflen - buflen_used) had no underflow
+ *    guard -- if buflen_used ever exceeded buflen, it would wrap to a huge
+ *    value instead of clamping to 0. Now clamped.
+ *
+ * 9. No function in this file except klbs_free() (safe: free(NULL) is a
+ *    no-op) checked its ctx/dst/src argument(s) for NULL before
+ *    dereferencing. Guards added throughout.
+ *
+ * 10. klbs_read_bit()'s `if (ctx->reg_used <= 8)` was always true at that
+ *     point in the code -- dead conditional, removed (no behavior change).
  */
 
 #include <assert.h>
@@ -64,6 +101,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "libltntstools/klbitstream_readwriter.h"
 
@@ -149,6 +187,20 @@ static void test_byte_count_macros(void)
 	CHECK(klbs_get_byte_count_free(&ctx) == 8);
 }
 
+/* Issue #8 (see file header): klbs_get_byte_count_free() used to compute
+ * buflen - buflen_used with no underflow guard. Force buflen_used > buflen
+ * directly (shouldn't happen via the normal API, but the macro should still
+ * be safe against it) and confirm it clamps to 0 instead of wrapping. */
+static void test_byte_count_free_clamps_instead_of_underflowing(void)
+{
+	struct klbs_context_s ctx;
+	klbs_init(&ctx);
+	ctx.buflen = 4;
+	ctx.buflen_used = 6;
+
+	CHECK(klbs_get_byte_count_free(&ctx) == 0);
+}
+
 /* -------- write bit packing -------- */
 
 static void test_write_bit_msb_first_packing(void)
@@ -183,6 +235,59 @@ static void test_write_bits_multi_byte_value(void)
 	CHECK(buf[0] == 0xAA);
 	CHECK(buf[1] == 0xBB);
 	CHECK(buf[2] == 0xCC);
+}
+
+/* Issue #6 (see file header): a NULL buf with a nonzero lengthBytes used to
+ * be accepted as-is, building a context that believed it had real bytes to
+ * work with -- the first bit access would then dereference NULL+offset. */
+static void test_write_set_buffer_rejects_null_buf_with_nonzero_length(void)
+{
+	struct klbs_context_s ctx;
+	klbs_init(&ctx);
+	klbs_write_set_buffer(&ctx, NULL, 100);
+
+	CHECK(klbs_get_buffer(&ctx) == NULL);
+	CHECK(klbs_get_buffer_size(&ctx) == 0);
+
+	/* Must not crash: byte_count_free is 0, so this should be a no-op overrun. */
+	klbs_write_bits(&ctx, 0xFF, 8);
+	CHECK(ctx.overrun == 1);
+}
+
+/* Issue #4 (see file header): bitcount outside [1,64] used to either rely
+ * on implementation-defined wraparound (bitcount==0) or trigger undefined
+ * behavior via a >=64-bit shift (bitcount>64) in klbs_write_bits(). Both
+ * must now be rejected safely, for all three of write/read/peek. */
+static void test_bitcount_out_of_range_is_rejected_safely(void)
+{
+	uint8_t buf[16];
+	struct klbs_context_s w;
+	klbs_init(&w);
+	klbs_write_set_buffer(&w, buf, sizeof(buf));
+
+	klbs_write_bits(&w, 0xFF, 0);
+	CHECK(klbs_get_byte_count(&w) == 0); /* rejected: nothing written */
+
+	klbs_write_bits(&w, 0xFF, 65);
+	CHECK(klbs_get_byte_count(&w) == 0); /* rejected: nothing written */
+
+	klbs_write_bits(&w, 0xAABBCCDDULL, 32); /* still works for a valid count */
+	CHECK(klbs_get_byte_count(&w) == 4);
+
+	struct klbs_context_s r;
+	klbs_init(&r);
+	klbs_read_set_buffer(&r, buf, sizeof(buf));
+
+	CHECK(klbs_read_bits(&r, 0) == 0);
+	CHECK(klbs_get_byte_count(&r) == 0); /* rejected: nothing consumed */
+
+	CHECK(klbs_read_bits(&r, 65) == 0);
+	CHECK(klbs_get_byte_count(&r) == 0); /* rejected: nothing consumed */
+
+	CHECK(klbs_peek_bits(&r, 0) == 0);
+	CHECK(klbs_peek_bits(&r, 65) == 0);
+
+	CHECK(klbs_read_bits(&r, 32) == 0xAABBCCDDULL); /* still works */
 }
 
 /* -------- write/read round trips -------- */
@@ -487,6 +592,55 @@ static void test_save_writes_used_bytes_to_file(void)
 	unlink(path);
 }
 
+/* Issue #5 (see file header): klbs_save() used to dereference ctx (via
+ * ctx->buf/buflen_used) with no NULL check, and fopen(fn, "wb") ran even
+ * earlier -- creating/truncating fn on disk before that crash. */
+static void test_save_rejects_null_args(void)
+{
+	uint8_t buf[4];
+	struct klbs_context_s ctx;
+	klbs_init(&ctx);
+	klbs_write_set_buffer(&ctx, buf, sizeof(buf));
+
+	CHECK(klbs_save(NULL, "/tmp/klbs_save_should_not_be_created") < 0);
+	CHECK(klbs_save(&ctx, NULL) < 0);
+
+	/* Confirm the NULL-ctx call didn't leave a stray file behind either. */
+	FILE *f = fopen("/tmp/klbs_save_should_not_be_created", "rb");
+	CHECK(f == NULL);
+	if (f) {
+		fclose(f);
+		unlink("/tmp/klbs_save_should_not_be_created");
+	}
+}
+
+/* Issue #5: klbs_save()'s only failure path reachable from outside (short of
+ * an actual full-disk fwrite() failure, not practical to force portably in
+ * a unit test) is fopen() itself failing -- confirm that's still correctly
+ * reported as -1 now that the function also checks fwrite()'s return value
+ * on the success path (see test_save_writes_used_bytes_to_file(), which
+ * already confirms a full, successful write reports 0). */
+static void test_save_reports_failure_when_fopen_fails(void)
+{
+	uint8_t buf[4];
+	struct klbs_context_s ctx;
+	klbs_init(&ctx);
+	klbs_write_set_buffer(&ctx, buf, sizeof(buf));
+	klbs_write_bits(&ctx, 0xAABB, 16);
+
+	char path[] = "/tmp/klbs_save_fail_test_XXXXXX";
+	int fd = mkstemp(path);
+	CHECK(fd >= 0);
+	if (fd >= 0)
+		close(fd);
+	chmod(path, 0444); /* read-only: fopen(path, "wb") itself will fail */
+
+	CHECK(klbs_save(&ctx, path) < 0);
+
+	chmod(path, 0644);
+	unlink(path);
+}
+
 /* -------- peek_print_binary: smoke test (console output, no assertions) -------- */
 
 static void test_peek_print_binary_does_not_crash(void)
@@ -500,6 +654,44 @@ static void test_peek_print_binary_does_not_crash(void)
 	CHECK(ctx.buflen_used == 0); /* peek variant, must not consume */
 }
 
+/* -------- NULL argument safety (issue #9) --------
+ * Every function below used to dereference its ctx/dst/src argument(s)
+ * unconditionally (klbs_free() is the one exception -- free(NULL) is
+ * already a well-defined no-op). A missed guard here crashes the whole
+ * test binary rather than failing a single CHECK(), so reaching each CHECK
+ * below is itself part of what's being verified.
+ */
+static void test_null_args_are_safe_everywhere(void)
+{
+	uint8_t buf[4] = { 0 };
+	struct klbs_context_s ctx;
+	klbs_read_set_buffer(&ctx, buf, sizeof(buf));
+
+	klbs_init(NULL);
+	klbs_write_set_buffer(NULL, buf, sizeof(buf));
+	klbs_read_set_buffer(NULL, buf, sizeof(buf));
+
+	klbs_write_bit(NULL, 1);
+	klbs_write_byte_stuff(NULL, 1);
+	klbs_write_bits(NULL, 0xFF, 8);
+	klbs_write_buffer_complete(NULL);
+
+	CHECK(klbs_read_bit(NULL) == 0);
+	CHECK(klbs_read_bits(NULL, 8) == 0);
+	CHECK(klbs_peek_bits(NULL, 8) == 0);
+	klbs_read_byte_stuff(NULL);
+	klbs_peek_print_binary(NULL, 8);
+
+	klbs_bitmove(NULL, &ctx, 8);
+	klbs_bitmove(&ctx, NULL, 8);
+	klbs_bitcopy(NULL, &ctx, 8);
+	klbs_bitcopy(&ctx, NULL, 8);
+
+	CHECK(klbs_save(NULL, NULL) < 0);
+
+	CHECK(1); /* reaching here without crashing is the point of this test */
+}
+
 int main(void)
 {
 	test_alloc_free_basic();
@@ -508,9 +700,12 @@ int main(void)
 	test_init_zeroes_context();
 
 	test_byte_count_macros();
+	test_byte_count_free_clamps_instead_of_underflowing();
 
 	test_write_bit_msb_first_packing();
 	test_write_bits_multi_byte_value();
+	test_write_set_buffer_rejects_null_buf_with_nonzero_length();
+	test_bitcount_out_of_range_is_rejected_safely();
 	test_write_read_roundtrip_various_bitcounts();
 
 	test_write_byte_stuff_pads_partial_register();
@@ -531,8 +726,12 @@ int main(void)
 	test_bitcopy_overrun_when_insufficient_room();
 
 	test_save_writes_used_bytes_to_file();
+	test_save_rejects_null_args();
+	test_save_reports_failure_when_fopen_fails();
 
 	test_peek_print_binary_does_not_crash();
+
+	test_null_args_are_safe_everywhere();
 
 	if (g_failures == 0) {
 		printf("PASS: all klbitstream_readwriter tests passed\n");
