@@ -54,6 +54,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <errno.h>
 
 #include "klringbuffer.h"
 
@@ -77,6 +79,20 @@ static void test_new_rejects_zero_size(void)
 static void test_new_rejects_size_greater_than_max(void)
 {
 	CHECK(rb_new(100, 10) == NULL);
+}
+
+/* Issue #11 (see file header): a single NULL return can't distinguish a bad
+ * size relationship (caller error) from a malloc() failure (OOM). errno now
+ * carries that distinction. */
+static void test_new_sets_einval_on_bad_size_relationship(void)
+{
+	errno = 0;
+	CHECK(rb_new(0, 100) == NULL);
+	CHECK(errno == EINVAL);
+
+	errno = 0;
+	CHECK(rb_new(100, 10) == NULL);
+	CHECK(errno == EINVAL);
 }
 
 static void test_new_accepts_size_equal_to_max(void)
@@ -115,6 +131,75 @@ static void test_free_null_is_noop(void)
 {
 	rb_free(NULL);
 	CHECK(1);
+}
+
+/* -------- NULL argument safety (issue #10) --------
+ * Every function below used to either dereference its KLRingBuffer* argument
+ * unconditionally, or (rb_write_with_state()/rb_reader(), which backs
+ * rb_read()/rb_peek()) rely solely on assert(), which compiles to nothing
+ * under NDEBUG. A missed guard here crashes the whole test binary rather
+ * than failing a single CHECK(), so reaching each CHECK below is itself
+ * part of what's being verified.
+ */
+
+static void test_is_empty_null_returns_true(void)
+{
+	CHECK(rb_is_empty(NULL) == true);
+}
+
+static void test_is_full_null_returns_false(void)
+{
+	CHECK(rb_is_full(NULL) == false);
+}
+
+static void test_used_and_unused_null_return_zero(void)
+{
+	CHECK(rb_used(NULL) == 0);
+	CHECK(rb_unused(NULL) == 0);
+}
+
+static void test_empty_and_discard_accept_null(void)
+{
+	rb_empty(NULL);
+	rb_discard(NULL, 10);
+	CHECK(1);
+}
+
+static void test_get_positions_null_return_zero(void)
+{
+	CHECK(rb_get_write_pos(NULL) == 0);
+	CHECK(rb_get_read_pos(NULL) == 0);
+}
+
+static void test_write_with_state_rejects_null_args(void)
+{
+	KLRingBuffer *rb = rb_new(8, 8);
+	int overflow = 1;
+
+	CHECK(rb_write_with_state(NULL, "x", 1, &overflow) == 0);
+	CHECK(overflow == 0); /* still initialized even though buf was NULL */
+
+	overflow = 1;
+	CHECK(rb_write_with_state(rb, NULL, 1, &overflow) == 0);
+	CHECK(overflow == 0);
+
+	rb_free(rb);
+}
+
+static void test_read_and_peek_reject_null_args(void)
+{
+	KLRingBuffer *rb = rb_new(8, 8);
+	int overflow = 0;
+	rb_write_with_state(rb, "hi", 2, &overflow);
+
+	char to[8] = { 0 };
+	CHECK(rb_read(NULL, to, 2) == 0);
+	CHECK(rb_read(rb, NULL, 2) == 0);
+	CHECK(rb_peek(NULL, to, 2) == 0);
+	CHECK(rb_peek(rb, NULL, 2) == 0);
+	CHECK(rb_used(rb) == 2); /* none of the above drained anything */
+
+	rb_free(rb);
 }
 
 /* -------- rb_is_empty() / rb_is_full() / rb_used() / rb_unused() -------- */
@@ -368,6 +453,31 @@ static void test_write_grows_buffer_within_max(void)
 	rb_free(rb);
 }
 
+/* rb_write_with_state() used to only ever ask _rb_grow() for the generous
+ * bytes*128 hint; if that alone didn't fit under size_max, it gave up and
+ * evicted real data even when the actual bytes requested would easily have
+ * fit with a smaller grow. size=4, size_max=5 gives exactly 1 byte of
+ * growable headroom: 1*128 doesn't fit, but the 1 actually needed does. */
+static void test_write_grows_with_minimal_increment_when_generous_hint_exceeds_max(void)
+{
+	KLRingBuffer *rb = rb_new(4, 5);
+	int overflow = 0;
+
+	rb_write_with_state(rb, "1234", 4, &overflow); /* fills initial allocation exactly */
+	CHECK(overflow == 0);
+
+	size_t w = rb_write_with_state(rb, "5", 1, &overflow);
+	CHECK(w == 1);
+	CHECK(overflow == 0); /* grew by the minimal amount instead of evicting data */
+	CHECK(rb_used(rb) == 5);
+
+	char out[5] = { 0 };
+	CHECK(rb_read(rb, out, 5) == 5);
+	CHECK(memcmp(out, "12345", 5) == 0);
+
+	rb_free(rb);
+}
+
 /* Regression test for bug #4: growth used to realloc() in place, which
  * preserves byte offsets but not the ring's logical order. If the ring was
  * wrapped (content split across the physical end) at the moment growth was
@@ -520,10 +630,58 @@ static void test_fwrite_empty_ring_writes_nothing(void)
 	FILE *tmp = tmpfile();
 	CHECK(tmp != NULL);
 
-	rb_fwrite(rb, tmp);
+	CHECK(rb_fwrite(rb, tmp) == 0);
 	CHECK(ftell(tmp) == 0);
 
 	fclose(tmp);
+	rb_free(rb);
+}
+
+/* Issue #9/#10 (see file header): rb_fwrite() used to be void and to
+ * dereference buf/fh unconditionally. */
+static void test_fwrite_rejects_null_args(void)
+{
+	KLRingBuffer *rb = rb_new(8, 8);
+	FILE *tmp = tmpfile();
+	CHECK(tmp != NULL);
+
+	CHECK(rb_fwrite(NULL, tmp) < 0);
+	CHECK(rb_fwrite(rb, NULL) < 0);
+
+	if (tmp) fclose(tmp);
+	rb_free(rb);
+}
+
+/* rb_fwrite() now peeks the ring non-destructively and only rb_discard()s it
+ * after every byte is confirmed written -- so a write failure must leave the
+ * ring's data completely intact, safe to retry, instead of having already
+ * drained (and lost) it via rb_read() as the old implementation did. Passing
+ * a FILE* opened read-only forces fwrite() to fail without needing to fill a
+ * real disk. */
+static void test_fwrite_leaves_ring_intact_on_write_failure(void)
+{
+	KLRingBuffer *rb = rb_new(16, 16);
+	int overflow = 0;
+	rb_write_with_state(rb, "HELLO", 5, &overflow);
+
+	char path[] = "/tmp/test_klringbuffer_fwrite_fail_XXXXXX";
+	int fd = mkstemp(path);
+	CHECK(fd >= 0);
+	if (fd >= 0)
+		close(fd);
+
+	FILE *ro = fopen(path, "r"); /* read-only: any fwrite() to it must fail */
+	CHECK(ro != NULL);
+
+	CHECK(rb_fwrite(rb, ro) < 0);
+	CHECK(rb_used(rb) == 5); /* data was NOT discarded on failure */
+
+	char out[5] = { 0 };
+	CHECK(rb_read(rb, out, 5) == 5);
+	CHECK(memcmp(out, "HELLO", 5) == 0);
+
+	if (ro) fclose(ro);
+	remove(path);
 	rb_free(rb);
 }
 
@@ -540,8 +698,8 @@ static void test_fwrite_format_and_drains_ring(void)
 		return;
 	}
 
-	rb_fwrite(rb, tmp);
-	CHECK(rb_is_empty(rb)); /* rb_fwrite() drains via rb_read() internally */
+	CHECK(rb_fwrite(rb, tmp) == 0);
+	CHECK(rb_is_empty(rb)); /* rb_fwrite() drains via rb_discard() on success */
 
 	long len = ftell(tmp);
 	CHECK(len == (long)(4 + 4 + 5 + 4)); /* "HEAD" + u32 length + payload + "TAIL" */
@@ -568,7 +726,16 @@ int main(void)
 	test_new_accepts_size_equal_to_max();
 	test_new_threadsafe_basic();
 	test_new_threadsafe_rejects_zero_size();
+	test_new_sets_einval_on_bad_size_relationship();
 	test_free_null_is_noop();
+
+	test_is_empty_null_returns_true();
+	test_is_full_null_returns_false();
+	test_used_and_unused_null_return_zero();
+	test_empty_and_discard_accept_null();
+	test_get_positions_null_return_zero();
+	test_write_with_state_rejects_null_args();
+	test_read_and_peek_reject_null_args();
 
 	test_is_empty();
 	test_is_full();
@@ -586,6 +753,7 @@ int main(void)
 	test_write_exact_capacity_after_rotation();
 
 	test_write_grows_buffer_within_max();
+	test_write_grows_with_minimal_increment_when_generous_hint_exceeds_max();
 	test_write_grows_correctly_while_wrapped();
 
 	test_write_overflow_evicts_oldest_data();
@@ -597,6 +765,8 @@ int main(void)
 	test_write_and_read_positions();
 
 	test_fwrite_empty_ring_writes_nothing();
+	test_fwrite_rejects_null_args();
+	test_fwrite_leaves_ring_intact_on_write_failure();
 	test_fwrite_format_and_drains_ring();
 
 	if (g_failures == 0) {

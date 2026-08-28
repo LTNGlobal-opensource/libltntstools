@@ -6,6 +6,7 @@
  */
 
 #include "klringbuffer.h"
+#include <errno.h>
 
 #define RB_LOCK(rb) \
 	if ((rb)->usingMutex) \
@@ -17,8 +18,17 @@
 
 KLRingBuffer *rb_new(size_t size, size_t size_max)
 {
-	if ((size == 0) || (size > size_max))
+	/* A single NULL return can't by itself tell a caller "you passed a bad
+	 * size relationship" (a programming error) apart from "malloc() itself
+	 * failed" (a runtime OOM) -- callers have historically had to guess
+	 * (see pes-extractor.c's own comment on this). Set errno to a distinct,
+	 * checkable value for the former; the latter already leaves errno as
+	 * malloc() set it (ENOMEM).
+	 */
+	if ((size == 0) || (size > size_max)) {
+		errno = EINVAL;
 		return 0;
+	}
 
 	KLRingBuffer *buf = (KLRingBuffer *)malloc(sizeof(*buf));
 	if (!buf)
@@ -51,6 +61,9 @@ KLRingBuffer *rb_new_threadsafe(size_t size, size_t size_max)
 
 bool rb_is_empty(KLRingBuffer *rb)
 {
+	if (!rb)
+		return true;
+
 	bool result = false;
 
 	RB_LOCK(rb);
@@ -63,6 +76,9 @@ bool rb_is_empty(KLRingBuffer *rb)
 
 bool rb_is_full(KLRingBuffer *rb)
 {
+	if (!rb)
+		return false;
+
 	bool result = false;
 
 	RB_LOCK(rb);
@@ -80,6 +96,9 @@ size_t _rb_used(KLRingBuffer *rb)
 
 size_t rb_used(KLRingBuffer *rb)
 {
+	if (!rb)
+		return 0;
+
 	size_t result;
 
 	RB_LOCK(rb);
@@ -91,6 +110,9 @@ size_t rb_used(KLRingBuffer *rb)
 
 size_t rb_unused(KLRingBuffer *rb)
 {
+	if (!rb)
+		return 0;
+
 	size_t result;
 
 	RB_LOCK(rb);
@@ -102,6 +124,9 @@ size_t rb_unused(KLRingBuffer *rb)
 
 void rb_empty(KLRingBuffer *rb)
 {
+	if (!rb)
+		return;
+
 	RB_LOCK(rb);
         rb->head = rb->fill = 0;
 	RB_UNLOCK(rb);
@@ -180,36 +205,58 @@ static inline void _advance_tail(KLRingBuffer *buf, size_t bytes)
 
 unsigned int rb_get_write_pos(KLRingBuffer *buf)
 {
+	if (!buf)
+		return 0;
+
 	return (buf->head + buf->fill) % buf->size;
 }
 
 unsigned int rb_get_read_pos(KLRingBuffer *buf)
 {
+	if (!buf)
+		return 0;
+
 	return buf->head;
 }
 
 size_t rb_write_with_state(KLRingBuffer *buf, const char *from, size_t bytes, int *didOverflow)
 {
-	assert(buf);
-	assert(from);
-
 	if (didOverflow)
 		*didOverflow = 0;
+
+	/* assert() alone (the previous guard here) compiles to nothing under
+	 * NDEBUG, leaving release builds with no protection at all against a
+	 * NULL buf/from -- RB_LOCK(buf) below would dereference buf immediately.
+	 */
+	if (!buf || !from)
+		return 0;
+
 	RB_LOCK(buf);
 	if (bytes > _rb_remain_in_seg(buf)) {
 		if (_rb_grow(buf, bytes * 128) < 0) {
-			RB_UNLOCK(buf);
-
-			/* Don't fail the write just because we've exceeded the maximum
-			 * amount of storage, instead, raise an overflow and store the data anyway.
-			 * Never discard more than the ring currently holds -- fill is
-			 * unsigned and would otherwise wrap.
+			/* The generous bytes*128 growth hint didn't fit under
+			 * size_max, but the ring may still have enough headroom left
+			 * for exactly what this write needs. Retry with the minimal
+			 * increment before giving up and reporting data loss that
+			 * wasn't actually necessary (e.g. size=1000, size_max=1010,
+			 * fill=1000, bytes=5: growing by 5*128=640 doesn't fit, but
+			 * growing by the 5 actually needed does).
 			 */
-			rb_discard(buf, bytes > buf->size ? buf->size : bytes);
-			if (didOverflow)
-				*didOverflow = 1;
+			size_t needed = bytes - _rb_remain_in_seg(buf);
+			if (_rb_grow(buf, needed) < 0) {
+				RB_UNLOCK(buf);
 
-			RB_LOCK(buf);
+				/* Don't fail the write just because we've exceeded the maximum
+				 * amount of storage, instead, raise an overflow and store the data anyway.
+				 * Never discard more than the ring currently holds -- fill is
+				 * unsigned and would otherwise wrap.
+				 */
+				rb_discard(buf, bytes > buf->size ? buf->size : bytes);
+				if (didOverflow)
+					*didOverflow = 1;
+
+				RB_LOCK(buf);
+			}
 		}
 	}
 
@@ -293,6 +340,9 @@ static inline void _advance_head(KLRingBuffer *buf, size_t bytes)
 
 void rb_discard(KLRingBuffer *rb, size_t bytes)
 {
+	if (!rb)
+		return;
+
 	RB_LOCK(rb);
 	/* Never discard more than is actually held -- fill is unsigned and
 	 * would otherwise wrap, permanently corrupting the ring's accounting. */
@@ -304,8 +354,12 @@ void rb_discard(KLRingBuffer *rb, size_t bytes)
 
 static size_t rb_reader(KLRingBuffer *buf, char *to, size_t bytes, int advance_read_head)
 {
-	assert(buf);
-	assert(to);
+	/* assert() alone (the previous guard here) compiles to nothing under
+	 * NDEBUG. This backs rb_read()/rb_peek() directly (neither has its own
+	 * check), so a real guard here protects both of them too.
+	 */
+	if (!buf || !to)
+		return 0;
 
 	if (bytes > rb_used(buf))
 		bytes = rb_used(buf);
@@ -443,32 +497,50 @@ void rb_free(KLRingBuffer *rb)
 	free(rb);
 }
 
-void rb_fwrite(KLRingBuffer *buf, FILE *fh)
+int rb_fwrite(KLRingBuffer *buf, FILE *fh)
 {
+	if (!buf || !fh)
+		return -1;
+
 	if (rb_is_empty(buf))
-		return;
+		return 0;
 
-	unsigned char head[4] = { 'H', 'E', 'A', 'D' };
-	fwrite(&head[0], 1, sizeof(head), fh);
+	/* Peek (non-destructively) the entire ring's content into a temporary
+	 * buffer and only rb_discard() it once every byte has been confirmed
+	 * written to fh. The previous version drained the ring via rb_read()
+	 * as it went, with no fwrite() return value checked anywhere -- a
+	 * write failure partway through (full disk, closed stream, ...) still
+	 * destroyed the ring's data, and the void return type gave the caller
+	 * no way to even know it happened.
+	 */
+	size_t rb_len = rb_used(buf);
+	unsigned char *body = (unsigned char *)malloc(rb_len);
+	if (!body)
+		return -1;
 
-	unsigned int rb_len = rb_used(buf);
-	unsigned char hdrlen[4];
-	hdrlen[0] = rb_len >> 24;
-	hdrlen[1] = rb_len >> 16;
-	hdrlen[2] = rb_len >>  8;
-	hdrlen[3] = rb_len;
-
-	fwrite(&hdrlen[0], 1, sizeof(hdrlen), fh);
-
-	unsigned char b[8192];
-	size_t len = 1;
-	while (len) {
-		len = rb_read(buf, (char *)&b[0], sizeof(b));
-		if (len)
-			fwrite(&b[0], 1, len, fh);
+	if (rb_peek(buf, (char *)body, rb_len) != rb_len) {
+		free(body);
+		return -1;
 	}
 
+	unsigned char head[4] = { 'H', 'E', 'A', 'D' };
+	unsigned char hdrlen[4] = {
+		(unsigned char)(rb_len >> 24), (unsigned char)(rb_len >> 16),
+		(unsigned char)(rb_len >> 8),  (unsigned char)(rb_len)
+	};
 	unsigned char tail[4] = { 'T', 'A', 'I', 'L' };
-	fwrite(&tail[0], 1, sizeof(tail), fh);
+
+	int ok = fwrite(head, 1, sizeof(head), fh) == sizeof(head) &&
+		fwrite(hdrlen, 1, sizeof(hdrlen), fh) == sizeof(hdrlen) &&
+		fwrite(body, 1, rb_len, fh) == rb_len &&
+		fwrite(tail, 1, sizeof(tail), fh) == sizeof(tail);
+
+	free(body);
+
+	if (!ok)
+		return -1;
+
+	rb_discard(buf, rb_len);
+	return 0;
 }
 

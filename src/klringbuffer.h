@@ -58,7 +58,10 @@ typedef struct
  *              multiple threads are expected to modify the buffer.
  * @param[in]   size_t size - Initial size of buffer in bytes.
  * @param[in]   size_t size_max - Maximum allowable growable size in bytes.
- * @return      pointer to object, or NULL on error.
+ * @return      pointer to object, or NULL on error. On NULL, check errno:
+ *              EINVAL means size was 0 or greater than size_max (a caller
+ *              error); anything else (typically ENOMEM) was left by the
+ *              failing malloc() call itself.
  */
 KLRingBuffer *rb_new(size_t size, size_t size_max);
 
@@ -68,7 +71,7 @@ KLRingBuffer *rb_new(size_t size, size_t size_max);
  *              concurrent threads.
  * @param[in]   size_t size - Initial size of buffer in bytes.
  * @param[in]   size_t size_max - Maximum allowable growable size in bytes.
- * @return      pointer to object, or NULL on error.
+ * @return      pointer to object, or NULL on error (see rb_new()'s errno contract).
  */
 KLRingBuffer *rb_new_threadsafe(size_t size, size_t size_max);
 
@@ -162,11 +165,16 @@ size_t rb_read_alloc(KLRingBuffer *buf, char **to, size_t bytes);
 size_t rb_peek(KLRingBuffer *buf, char *to, size_t bytes);
 
 /**
- * @brief       Write the entire contents of the ring, draining it, to file. A debug helper func.
+ * @brief       Write the entire contents of the ring to file, draining it only on success.
+ *              A debug helper func.
  * @param[in]   KLRingBuffer *buf - Object.
  * @param[in]   FILE *fh - A file already opened for write access.
+ * @return      0 on success (the ring has been drained). < 0 on error (buf or
+ *              fh is NULL, the temporary copy buffer couldn't be allocated,
+ *              or a write to fh failed) -- the ring's contents are left
+ *              intact in all error cases, safe to retry.
  */
-void rb_fwrite(KLRingBuffer *buf, FILE *fh);
+int rb_fwrite(KLRingBuffer *buf, FILE *fh);
 
 /**
  * @brief       Destroy/release all resources related to this object.
