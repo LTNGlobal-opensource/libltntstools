@@ -329,9 +329,19 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 		pkt->PES_CRC_flag = klbs_read_bits(bs, 1);
 		pkt->PES_extension_flag = klbs_read_bits(bs, 1);
 
-		/* Make sure something exists in the buffer, else abort early */
-		if (klbs_get_byte_count_free(bs) < 1)
+		/* Make sure something exists in the buffer, else abort early.
+		 * Unlike every other bounds check in this function, this one used
+		 * to bail without setting bs->overrun -- a caller checking
+		 * bs->overrun/bs->truncated (the reliable signal; see pes.h) had no
+		 * way to know this particular early return happened, and would
+		 * treat the resulting pkt (whose header fields up to here are
+		 * already mutated, but whose payload was never reached) as fully
+		 * parsed.
+		 */
+		if (PES_BYTE_COUNT_FREE(bs, pkt) < 1) {
+			bs->overrun = 1;
 			return bits;
+		}
 
 		pkt->PES_header_data_length = klbs_read_bits(bs, 8);
 
@@ -390,9 +400,15 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 			bits += 8;
 
 			if (pkt->PES_private_data_flag == 1) {
-				/* Make sure something exists in the buffer, else abort early */
-				if (klbs_get_byte_count_free(bs) < 16)
+				/* Make sure something exists in the buffer, else abort
+				 * early. See the same-shaped comment above on the
+				 * PES_header_data_length check for why bs->overrun must be
+				 * set here too.
+				 */
+				if (PES_BYTE_COUNT_FREE(bs, pkt) < 16) {
+					bs->overrun = 1;
 					return bits;
+				}
 
 				klbs_read_bits(bs, 32); /* private data */
 				klbs_read_bits(bs, 32); /* private data */
@@ -405,9 +421,15 @@ ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s
 				int len = klbs_read_bits(bs, 8);
 				bits += 8;
 
-				/* Make sure something exists in the buffer, else abort early */
-				if (klbs_get_byte_count_free(bs) < len)
+				/* Make sure something exists in the buffer, else abort
+				 * early. See the same-shaped comment above on the
+				 * PES_header_data_length check for why bs->overrun must be
+				 * set here too.
+				 */
+				if (PES_BYTE_COUNT_FREE(bs, pkt) < len) {
+					bs->overrun = 1;
 					return bits;
+				}
 
 				for (int i = 0; i < len; i++) {
 					klbs_read_bits(bs, 8); /* No support */

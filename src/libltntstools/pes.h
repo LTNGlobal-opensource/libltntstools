@@ -107,7 +107,22 @@ void ltn_pes_packet_free(struct ltn_pes_packet_s *pkt);
  * @param[in]   struct ltn_pes_packet_s *pkt - object
  * @param[in]   struct klbs_context_s *bs - existing bytestream container
  * @param[in]   int skipData - Boolean. Should the parse avoid (for performance reasons) parsing the associated payload data?
- * @return      number of bits parsed. 0 if the buffer didn't contain enough data to parse anything.
+ * @return      number of bits parsed. 0 if bs didn't contain enough data to
+ *              begin parsing at all (pkt is left completely untouched in
+ *              that case).
+ *              The returned bit count, including a 0 return, does NOT by
+ *              itself distinguish "nothing parsed" from "parsing began but
+ *              ran out of buffer partway through a required field" -- in
+ *              the latter case some of pkt's header fields may already be
+ *              mutated from this call, while pkt->data/dataLengthBytes were
+ *              never reached/populated. After calling this, check
+ *              bs->overrun: it is set to 1 whenever this call bailed out
+ *              before finishing, and is the reliable signal that pkt should
+ *              not be treated as fully parsed regardless of the bit count
+ *              returned. bs->truncated is set instead for the softer case
+ *              where the input was simply shorter than PES_packet_length
+ *              claimed but pkt was still populated consistently with the
+ *              truncated input (safe to use).
  */
 ssize_t ltn_pes_packet_parse(struct ltn_pes_packet_s *pkt, struct klbs_context_s *bs, int skipData);
 

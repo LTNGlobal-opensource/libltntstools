@@ -90,6 +90,20 @@
  *     every subsequent write had succeeded. Fixed: pack() now checks
  *     bs->overrun before returning and reports failure (-1) instead of a
  *     bit count that no longer matches the buffer's real contents.
+ *
+ * 11. Three "not enough buffer left" early returns inside
+ *     ltn_pes_packet_parse()'s extended-header branch (before reading
+ *     PES_header_data_length, before PES_private_data_flag's 16 bytes, and
+ *     before pack_header_field_flag's variable-length field) used to bail
+ *     with a bare `return bits;` -- unlike every other bounds check in the
+ *     function, which sets bs->overrun or bs->truncated first. A caller
+ *     relying on those flags (as src/pes-extractor.c does, to decide
+ *     whether a parsed pes is safe to deliver) had no way to detect these
+ *     three specific failures: the returned bit count can even be nonzero
+ *     here (header fields parsed so far are real), while pkt->data is never
+ *     reached/populated. Fixed: all three now set bs->overrun = 1 before
+ *     returning, matching pes.h's now-documented contract that bs->overrun
+ *     -- not the bit count -- is the reliable "don't trust this pkt" signal.
  */
 
 #include <assert.h>
@@ -442,6 +456,82 @@ static void test_parse_too_short_buffer_returns_zero_bits(void)
 	struct ltn_pes_packet_s pkt = { 0 };
 	ssize_t bits = ltn_pes_packet_parse(&pkt, &bs, 0);
 	CHECK(bits == 0);
+}
+
+/* Issue #11 (see file header): buffer runs out right after the two flags
+ * bytes, with nothing left for PES_header_data_length. This used to return
+ * 0 without setting bs.overrun -- identical to "nothing parsed at all" --
+ * even though packet_start_code_prefix/stream_id/the flags byte were
+ * already parsed into pkt. */
+static void test_parse_sets_overrun_when_header_data_length_missing(void)
+{
+	uint8_t buf[8] = { 0 }; /* stream_id 0x00: prefix+length+2 flags bytes, nothing left */
+	struct klbs_context_s bs;
+	klbs_init(&bs);
+	klbs_read_set_buffer(&bs, buf, sizeof(buf));
+
+	struct ltn_pes_packet_s pkt = { 0 };
+	ssize_t bits = ltn_pes_packet_parse(&pkt, &bs, 0);
+
+	CHECK(bits == 0);
+	CHECK(bs.overrun == 1);
+	CHECK(pkt.stream_id == 0); /* header fields up to here were still mutated */
+}
+
+/* Issue #11: PES_extension_flag and PES_private_data_flag both set, but the
+ * buffer runs out exactly at the point the 16 bytes of private data would
+ * be read. This used to return a nonzero bit count (the header parsed so
+ * far is real) with no way to tell that pkt->data was never reached. */
+static void test_parse_sets_overrun_when_private_data_missing(void)
+{
+	uint8_t buf[] = {
+		0x00, 0x00, 0x01, 0xE0, /* start code + stream_id */
+		0x00, 0x00,             /* PES_packet_length (unused once clamped) */
+		0x00,                   /* scrambling/priority/alignment/copyright/original */
+		0x01,                   /* PTS_DTS_flags=0, ..., PES_extension_flag=1 */
+		0x00,                   /* PES_header_data_length */
+		0x80                    /* PES_private_data_flag=1, rest 0 */
+	};
+	struct klbs_context_s bs;
+	klbs_init(&bs);
+	klbs_read_set_buffer(&bs, buf, sizeof(buf));
+
+	struct ltn_pes_packet_s pkt = { 0 };
+	ssize_t bits = ltn_pes_packet_parse(&pkt, &bs, 0);
+
+	CHECK(bits == 80); /* 72 (header) + 8 (extension flags byte) */
+	CHECK(bs.overrun == 1);
+	CHECK(pkt.PES_extension_flag == 1);
+	CHECK(pkt.PES_private_data_flag == 1);
+	CHECK(pkt.data == NULL);
+	CHECK(pkt.dataLengthBytes == 0);
+}
+
+/* Issue #11: same idea, but for pack_header_field_flag's variable-length
+ * field: the length byte claims 255 bytes follow, but the buffer is empty. */
+static void test_parse_sets_overrun_when_pack_header_field_missing(void)
+{
+	uint8_t buf[] = {
+		0x00, 0x00, 0x01, 0xE0,
+		0x00, 0x00,
+		0x00,
+		0x01, /* PES_extension_flag=1 */
+		0x00, /* PES_header_data_length */
+		0x40, /* pack_header_field_flag=1, rest 0 */
+		0xFF  /* claimed length: 255 bytes, none actually available */
+	};
+	struct klbs_context_s bs;
+	klbs_init(&bs);
+	klbs_read_set_buffer(&bs, buf, sizeof(buf));
+
+	struct ltn_pes_packet_s pkt = { 0 };
+	ssize_t bits = ltn_pes_packet_parse(&pkt, &bs, 0);
+
+	CHECK(bits == 88); /* 72 (header) + 8 (extension flags byte) + 8 (length byte) */
+	CHECK(bs.overrun == 1);
+	CHECK(pkt.pack_header_field_flag == 1);
+	CHECK(pkt.data == NULL);
+	CHECK(pkt.dataLengthBytes == 0);
 }
 
 static void test_parse_clamps_length_to_available_bytes(void)
@@ -1081,6 +1171,9 @@ int main(void)
 	test_parse_known_good_pts_only_header();
 	test_parse_corrupted_pts_marker_bit_yields_negative_one_pts();
 	test_parse_too_short_buffer_returns_zero_bits();
+	test_parse_sets_overrun_when_header_data_length_missing();
+	test_parse_sets_overrun_when_private_data_missing();
+	test_parse_sets_overrun_when_pack_header_field_missing();
 	test_parse_clamps_length_to_available_bytes();
 	test_parse_skip_data_true_omits_payload();
 
