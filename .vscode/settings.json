@@ -63,6 +63,9 @@
         "**/test_clocks": true,
         "**/test_klqueue": true,
         "**/test_utils": true,
+        "**/test_demux": true,
+        "**/test_igmp": true,
+        "**/test_rtp_analyzer": true,
     },
     "files.associations": {
         "*h*h*h*hfunctional": "cpp",

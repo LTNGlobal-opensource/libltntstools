@@ -68,3 +68,9 @@ test_klqueue
 test_klqueue.dSYM
 test_utils
 test_utils.dSYM
+test_rtp_analyzer
+test_rtp_analyzer.dSYM
+test_igmp
+test_igmp.dSYM
+test_demux
+test_demux.dSYM
