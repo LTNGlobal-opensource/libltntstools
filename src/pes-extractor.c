@@ -282,6 +282,10 @@ void _flushOrderedOutput(struct pes_extractor_s *ctx)
 
 void ltntstools_pes_extractor_free(void *hdl)
 {
+	if (!hdl) {
+		return;
+	}
+
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
 	/* Block any write() call that checks this flag from touching ctx->rb
@@ -325,6 +329,10 @@ void ltntstools_pes_extractor_free(void *hdl)
 
 int ltntstools_pes_extractor_set_ordered_output(void *hdl, int tf)
 {
+	if (!hdl) {
+		return -1;
+	}
+
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 	ctx->orderedOutput = tf;
 	return 0; /* Success */
@@ -332,6 +340,10 @@ int ltntstools_pes_extractor_set_ordered_output(void *hdl, int tf)
 
 int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf)
 {
+	if (!hdl) {
+		return -1;
+	}
+
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 	ctx->skipDataExtraction = tf;
 	return 0; /* Success */
@@ -522,6 +534,10 @@ static int _processRing(struct pes_extractor_s *ctx)
 
 int ltntstools_pes_extractor_set_pcr_pid(void *hdl, uint16_t pcrpidnr)
 {
+	if (!hdl) {
+		return -1;
+	}
+
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 	ltntstools_pid_stats_pid_set_contains_pcr(ctx->libstats, pcrpidnr & 0x1fff);
 
@@ -530,6 +546,13 @@ int ltntstools_pes_extractor_set_pcr_pid(void *hdl, uint16_t pcrpidnr)
 
 ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packetCount)
 {
+	if (!hdl || (!pkts && packetCount > 0)) {
+		/* Distinct from the -1 "closing down" rejection below: this is a
+		 * caller error (bad arguments), not a valid handle being torn down.
+		 */
+		return -2;
+	}
+
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
 	int didOverflow;

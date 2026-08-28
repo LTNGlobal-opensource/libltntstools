@@ -212,6 +212,29 @@ static void test_setters_return_success(void)
 	ltntstools_pes_extractor_free(hdl);
 }
 
+/* NULL/invalid-argument handling for the handle-based entry points. Before
+ * this was fixed, every one of these crashed (confirmed via a standalone
+ * repro: free(NULL) segfaulted immediately). */
+static void test_null_and_invalid_args_are_rejected_safely(void)
+{
+	ltntstools_pes_extractor_free(NULL); /* must be a safe no-op */
+
+	CHECK(ltntstools_pes_extractor_set_ordered_output(NULL, 1) == -1);
+	CHECK(ltntstools_pes_extractor_set_skip_data(NULL, 1) == -1);
+	CHECK(ltntstools_pes_extractor_set_pcr_pid(NULL, 0x100) == -1);
+
+	uint8_t pkt[188] = { 0 };
+	CHECK(ltntstools_pes_extractor_write(NULL, pkt, 1) == -2);
+
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1);
+
+	CHECK(ltntstools_pes_extractor_write(hdl, NULL, 1) == -2); /* NULL pkts, packetCount > 0 */
+	CHECK(ltntstools_pes_extractor_write(hdl, NULL, 0) == 0); /* NULL pkts but packetCount == 0 is legitimate */
+
+	ltntstools_pes_extractor_free(hdl);
+}
+
 /* -------- write() pid filtering -------- */
 
 static void test_write_ignores_other_pid_no_callback(void)
@@ -502,6 +525,7 @@ int main(void)
 {
 	test_alloc_free_basic();
 	test_setters_return_success();
+	test_null_and_invalid_args_are_rejected_safely();
 	test_alloc_rejects_invalid_buffer_range();
 
 	test_write_ignores_other_pid_no_callback();

@@ -56,7 +56,7 @@ typedef void (*pes_extractor_callback)(void *userContext, struct ltn_pes_packet_
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max);
 
 /**
- * @brief       Free a previously allocate context.
+ * @brief       Free a previously allocate context. Safe to call with hdl == NULL (no-op).
  * @param[in]   void *hdl - Handle / context.
  */
 void ltntstools_pes_extractor_free(void *hdl);
@@ -71,8 +71,8 @@ void ltntstools_pes_extractor_free(void *hdl);
  * @param[in]   int packetCount - number of packets
  * @return      number of packets in this batch that matched the configured
  *              pid (may be zero, eg. none of the packets belonged to this
- *              pid), else < 0 if the call was rejected (eg. the context is
- *              closing down).
+ *              pid), -1 if the call was rejected because the context is
+ *              closing down, or -2 if hdl or pkts is invalid (eg. NULL).
  */
 ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packetCount);
 
@@ -83,7 +83,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
  *              Not all use cases need the PES data. If you don't want it, skip it via this call.
  * @param[in]   void *hdl - Handle / context.
  * @param[in]   int tf - Boolean. 1) skip/don't add data 0) add data (default)
- * @return      0 - Always succeeds.
+ * @return      0 on success, -1 if hdl is NULL.
  */
 int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf);
 
@@ -99,10 +99,16 @@ int ltntstools_pes_extractor_set_skip_data(void *hdl, int tf);
  *              NOT be in temporal order.
  * @param[in]   void *hdl - Handle / context.
  * @param[in]   int tf - Boolean. 1) enable ordered (PTS-sorted) output 0) disable (default)
- * @return      0 - Always succeeds.
+ * @return      0 on success, -1 if hdl is NULL.
  */
 int ltntstools_pes_extractor_set_ordered_output(void *hdl, int tf);
 
+/**
+ * @brief       Identify which pid carries the PCR for this stream, so PES's can be tagged with it.
+ * @param[in]   void *hdl - Handle / context.
+ * @param[in]   uint16_t pcrpidnr - PCR-bearing transport pid.
+ * @return      0 on success, -1 if hdl is NULL.
+ */
 int ltntstools_pes_extractor_set_pcr_pid(void *hdl, uint16_t pcrpidnr);
 
 #ifdef __cplusplus
