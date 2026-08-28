@@ -217,7 +217,7 @@ int ltntstools_pmt_query_video_pid(struct ltntstools_pmt_s *pmt, uint16_t *pid, 
  * @brief      Finds audio pids.
  * @param[in]  pmt - the pmt entry.
  * @param[out] pid_count - a pointer to the count of discovered audio pids.
- * @return     An array[pid_count] of pmt_entry_t pointers. only the top-level pointer should be freed. Returns null on failure.
+ * @return     An array[pid_count] of pmt_entry_t pointers. only the top-level pointer should be freed. Returns null on failure, including if pmt or pid_count is NULL.
  */
 const struct ltntstools_pmt_entry_s **ltntstools_pmt_enum_services_audio(const struct ltntstools_pmt_s *pmt, int *pid_count);
 

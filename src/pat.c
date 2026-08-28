@@ -1006,6 +1006,9 @@ int ltntstools_pmt_create_packet_ts2(struct ltntstools_pmt_s *p, uint16_t pid, u
 
 const struct ltntstools_pmt_entry_s **ltntstools_pmt_enum_services_audio(const struct ltntstools_pmt_s *pmt, int *pid_count)
 {
+	if (!pmt || !pid_count)
+		return NULL;
+
 	*pid_count = 0;
 
 	if (pmt->stream_count == 0) {

@@ -774,6 +774,22 @@ static void test_pmt_enum_services_audio_array_zero_streams(void)
 	CHECK(pidCount == 0);
 }
 
+/* Regression test for issue #4: ltntstools_pmt_enum_services_audio()
+ * dereferenced both pmt (pmt->stream_count) and pid_count (*pid_count = 0)
+ * with no NULL check at all, unlike its sibling enum/get_services
+ * functions. Both a NULL pmt and a NULL pid_count must now be a safe
+ * no-op that returns NULL, not a crash. */
+static void test_pmt_enum_services_audio_array_null_args(void)
+{
+	struct ltntstools_pmt_s pmt = { 0 };
+	add_stream(&pmt, 0x03, 0x102); /* audio */
+
+	int pidCount = -1;
+	CHECK(ltntstools_pmt_enum_services_audio(NULL, &pidCount) == NULL);
+	CHECK(ltntstools_pmt_enum_services_audio(&pmt, NULL) == NULL);
+	CHECK(ltntstools_pmt_enum_services_audio(NULL, NULL) == NULL);
+}
+
 /* -------- create_packet_ts: structural correctness -------- */
 
 static void test_pat_create_packet_ts_structure_and_crc(void)
@@ -1039,6 +1055,7 @@ int main(void)
 
 	test_pmt_enum_services_audio_array();
 	test_pmt_enum_services_audio_array_zero_streams();
+	test_pmt_enum_services_audio_array_null_args();
 
 	test_pat_create_packet_ts_structure_and_crc();
 	test_pat_create_packet_ts_version_number();
