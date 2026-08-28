@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 
 #include <libltntstools/ltntstools.h>
 #include "klringbuffer.h"
@@ -58,7 +59,17 @@ struct pes_extractor_s
 	struct xorg_list pcrList;
 	uint32_t pusi_time_ms; /* Arrival duration of the entire pes */
 
-	int preventWrites; /* Used prevent write calls from modifying resources */
+	/* Blocks write() from touching resources that free() is tearing down.
+	 * Atomic so the flag itself can be safely set (by free()) and read (by
+	 * write()) from different threads without a data race. This narrows
+	 * the race window around a free() call but does not make write() and
+	 * free() safe to run fully concurrently on the same handle: a write()
+	 * that already passed this check before free() sets it can still be
+	 * using ctx->rb while free() releases it. Callers must still not call
+	 * write() and free() on the same handle from different threads without
+	 * their own external synchronization.
+	 */
+	atomic_int preventWrites;
 };
 
 struct item_s
@@ -105,7 +116,7 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->computedRingSize = 0;
 	ctx->lastCCCounter = 0;
 	ctx->largestRingFrame = 0;
-	ctx->preventWrites = 0;
+	atomic_init(&ctx->preventWrites, 0);
 	ltntstools_corrected_clock_init(&ctx->correctedClock, 90000);
 	xorg_list_init(&ctx->pcrList);
 	xorg_list_init(&ctx->listOrdered);
@@ -273,7 +284,14 @@ void ltntstools_pes_extractor_free(void *hdl)
 {
 	struct pes_extractor_s *ctx = (struct pes_extractor_s *)hdl;
 
-	ctx->preventWrites = 0;
+	/* Block any write() call that checks this flag from touching ctx->rb
+	 * (freed right below) or other resources torn down in this function.
+	 * This was previously (and backwards) `= 0`, which left the guard in
+	 * ltntstools_pes_extractor_write() permanently dead -- it was never
+	 * set to 1 anywhere in this file. See the preventWrites field comment
+	 * for what this atomic store does and does not guarantee.
+	 */
+	atomic_store(&ctx->preventWrites, 1);
 
 	rb_free(ctx->rb);
 
@@ -484,7 +502,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 
 	int didOverflow;
 
-	if (ctx->preventWrites) {
+	if (atomic_load(&ctx->preventWrites)) {
 		/* Library closing down */
 		return 0; /* Failed */
 	}
