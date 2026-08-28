@@ -48,6 +48,10 @@ struct ltntstools_pat_s *ltntstools_pat_clone(struct ltntstools_pat_s *pat)
 
 void ltntstools_pat_dprintf(struct ltntstools_pat_s *pat, int fd)
 {
+	if (!pat) {
+		return;
+	}
+
 	dprintf(fd, "pat.transport_stream_id = 0x%x\n", pat->transport_stream_id);
 	dprintf(fd, "pat.version_number = 0x%02x\n", pat->version_number);
 	dprintf(fd, "pat.current_next_indicator = %d\n", pat->current_next_indicator);
@@ -283,6 +287,15 @@ int ltntstools_pat_get_services_teletext(struct ltntstools_pat_s *pat, uint16_t 
 		}
 	}
 
+	if (cnt == 0) {
+		/* Nothing found -- a legitimate, successful outcome, not a
+		 * failure. Skip malloc(0), whose return value (NULL, or a
+		 * valid-but-unusable pointer) is implementation-defined and
+		 * shouldn't be conflated with a real allocation failure below.
+		 */
+		return 0;
+	}
+
 	/* Allocate memory for PIDs array */
 	*pid_array = (uint16_t *)malloc(cnt * sizeof(uint16_t));
 	if (!*pid_array)
@@ -325,6 +338,15 @@ int ltntstools_pat_enum_services_scte35(struct ltntstools_pat_s *pat, int *e, st
 
         if (ltntstools_descriptor_list_contains_scte35_cue_registration(&pmt->descr_list) == 0) {
 			(*e)++;
+            continue;
+        }
+
+        if (pmt->stream_count == 0) {
+            /* Nothing to allocate for -- avoid malloc(0), whose return
+             * value is implementation-defined and shouldn't be conflated
+             * with a real allocation failure below.
+             */
+            (*e)++;
             continue;
         }
 
@@ -560,6 +582,15 @@ int ltntstools_pat_enum_services_audio(struct ltntstools_pat_s *pat, int *e, str
 	for (int i = 0; i < pat->program_count; i++) {
 		struct ltntstools_pmt_s *pmt = &pat->programs[*e].pmt;
 
+		if (pmt->stream_count == 0) {
+			/* Nothing to allocate for -- avoid malloc(0), whose return
+			 * value is implementation-defined and shouldn't be conflated
+			 * with a real allocation failure below.
+			 */
+			(*e)++;
+			continue;
+		}
+
 		/* Allocate memory for PIDs array */
 		*pid_array = (uint16_t *)malloc(pmt->stream_count * sizeof(uint16_t));
 		if (!*pid_array)
@@ -712,6 +743,20 @@ int ltntstools_pat_create_packet_ts(struct ltntstools_pat_s *pat, uint8_t cc, ui
 {
 	if ((!pat) || (packetLength != 188) || (packet == NULL))
 		return -1;
+
+	/* This function (per its own long-standing "EXACTLY ONE packet, not
+	 * longer" contract) doesn't support spanning a PAT across multiple TS
+	 * packets. Without this check, a PAT with too many programs to fit --
+	 * 13 fixed header bytes + 4 bytes/program + 4 CRC bytes -- would
+	 * silently write past the end of the caller's packetLength buffer
+	 * instead of failing cleanly. Reject up front, before writing anything.
+	 */
+	int contentBytes = 13 + (pat->program_count * 4) + 4;
+	if (contentBytes > packetLength) {
+		fprintf(stderr, "%s() program_count %d needs %d bytes, which does not fit in a single %d byte packet\n",
+			__func__, pat->program_count, contentBytes, packetLength);
+		return -1;
+	}
 
 	uint8_t *p = packet;
 	int i = 0;
@@ -888,6 +933,14 @@ int ltntstools_pmt_create_packet_ts2(struct ltntstools_pmt_s *p, uint16_t pid, u
 const struct ltntstools_pmt_entry_s **ltntstools_pmt_enum_services_audio(const struct ltntstools_pmt_s *pmt, int *pid_count)
 {
 	*pid_count = 0;
+
+	if (pmt->stream_count == 0) {
+		/* Nothing to allocate for -- avoid malloc(0), whose return value
+		 * is implementation-defined and shouldn't be conflated with a
+		 * real allocation failure below.
+		 */
+		return NULL;
+	}
 
 	/* Allocate memory for PIDs array */
 	const struct ltntstools_pmt_entry_s **streams = malloc(pmt->stream_count * sizeof(struct ltntstools_pmt_entry_s*));

@@ -131,7 +131,9 @@ void ltntstools_pat_add_from_existing(struct ltntstools_pat_s *pat, dvbpsi_pmt_t
  * @param[in]   uint8_t cc - desired initial continuity counter value
  * @param[in]   uint8_t *packet - Buffer where packet will be created
  * @param[in]   int packetLengthBytes - Buffer length, must be exactly 188 bytes.
- * @return      0 - Success or, < 0 on error.
+ * @return      0 - Success or, < 0 on error, including if pat->program_count
+ *              is too large for the PAT to fit within a single packet
+ *              (13 + program_count*4 + 4 bytes must not exceed packetLengthBytes).
  */
 int ltntstools_pat_create_packet_ts(struct ltntstools_pat_s *pat, uint8_t cc, uint8_t *packet, int packetLengthBytes);
 

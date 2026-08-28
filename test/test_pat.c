@@ -114,6 +114,11 @@ static void test_dprintf_does_not_crash(void)
 	int fd = open("/dev/null", 1 /* O_WRONLY */);
 	if (fd >= 0) {
 		ltntstools_pat_dprintf(pat, fd);
+
+		/* Regression test for issue #5: dprintf() dereferenced pat with
+		 * no NULL check at all. Must be a safe no-op. */
+		ltntstools_pat_dprintf(NULL, fd);
+
 		close(fd);
 	}
 	CHECK(1);
@@ -295,12 +300,14 @@ static void test_get_services_teletext_found(void)
 	ltntstools_pat_free(pat);
 }
 
-/* Exercises the cnt==0 path: this is the malloc(0) edge case -- on this
- * platform malloc(0) returns a non-NULL pointer, so the function correctly
- * reports success with an empty list. Documented here rather than assumed,
- * since malloc(0)'s return value is implementation-defined by the C
- * standard and a NULL-returning platform would make this function
- * incorrectly report -1 for the common "no teletext streams" case. */
+/* Exercises the cnt==0 path -- issue #6: this used to call malloc(0), whose
+ * return value is implementation-defined by the C standard (NULL, or a
+ * valid-but-unusable pointer). On this platform malloc(0) happens to
+ * return non-NULL, so this "worked" before the fix, but a NULL-returning
+ * platform would have made this function incorrectly report -1 for the
+ * common "no teletext streams" case. Now returns early before ever calling
+ * malloc(0), so this is deterministic on any platform, not platform-lucky --
+ * pids is asserted NULL, not just "whatever malloc(0) happened to return". */
 static void test_get_services_teletext_none_found(void)
 {
 	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
@@ -311,6 +318,7 @@ static void test_get_services_teletext_none_found(void)
 	int ret = ltntstools_pat_get_services_teletext(pat, &pids, &count);
 	CHECK(ret == 0);
 	CHECK(count == 0);
+	CHECK(pids == NULL);
 
 	free(pids);
 	ltntstools_pat_free(pat);
@@ -348,6 +356,37 @@ static void test_enum_services_scte35_finds_and_terminates(void)
 
 	/* No more matches. */
 	CHECK(ltntstools_pat_enum_services_scte35(pat, &e, &pmt, &pids, &pidCount) < 0);
+
+	ltntstools_pat_free(pat);
+}
+
+/* Regression test for issue #6: a program whose PMT carries the SCTE35
+ * CUEI registration descriptor but has zero elementary streams (degenerate
+ * but a valid combination of the struct fields) used to call
+ * malloc(0 * sizeof(uint16_t)) -- see the teletext test above for why
+ * that's a real risk, not just a style nit. Must skip past it (not report
+ * a spurious allocation failure) and keep enumerating. */
+static void test_enum_services_scte35_skips_zero_stream_program(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+
+	struct ltntstools_pat_program_s *p1 = add_program(pat, 1, 0x100);
+	ltntstools_descriptor_list_add(&p1->pmt.descr_list, 0x05, (uint8_t *)"CUEI", 4);
+	/* p1 deliberately has zero streams. */
+
+	struct ltntstools_pat_program_s *p2 = add_program(pat, 2, 0x200);
+	ltntstools_descriptor_list_add(&p2->pmt.descr_list, 0x05, (uint8_t *)"CUEI", 4);
+	add_stream(&p2->pmt, 0x86, 0x201);
+
+	int e = 0;
+	struct ltntstools_pmt_s *pmt = NULL;
+	uint16_t *pids = NULL;
+	int pidCount = 0;
+	CHECK(ltntstools_pat_enum_services_scte35(pat, &e, &pmt, &pids, &pidCount) == 0);
+	CHECK(pmt == &p2->pmt);
+	CHECK(pidCount == 1);
+	CHECK(pids && pids[0] == 0x201);
+	free(pids);
 
 	ltntstools_pat_free(pat);
 }
@@ -444,6 +483,35 @@ static void test_enum_services_audio_multi_pid_single_program(void)
 	ltntstools_pat_free(pat);
 }
 
+/* Regression test for issue #6: a program with zero elementary streams
+ * used to call malloc(0 * sizeof(...)) for both the pid and stream-type
+ * arrays -- see the teletext test above for why that's a real risk, not
+ * just a style nit. Must skip past it and keep enumerating rather than
+ * reporting a spurious allocation failure. */
+static void test_enum_services_audio_skips_zero_stream_program(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+	add_program(pat, 1, 0x100); /* zero streams */
+
+	struct ltntstools_pat_program_s *p2 = add_program(pat, 2, 0x200);
+	add_stream(&p2->pmt, 0x03, 0x201); /* audio */
+
+	int e = 0;
+	struct ltntstools_pmt_s *pmt = NULL;
+	uint32_t *streamTypes = NULL;
+	uint16_t *pids = NULL;
+	int pidCount = 0;
+	CHECK(ltntstools_pat_enum_services_audio(pat, &e, &pmt, &streamTypes, &pids, &pidCount) == 0);
+	CHECK(pmt == &p2->pmt);
+	CHECK(pidCount == 1);
+	CHECK(pids && pids[0] == 0x201);
+	CHECK(streamTypes && streamTypes[0] == 0x03);
+	free(pids);
+	free(streamTypes);
+
+	ltntstools_pat_free(pat);
+}
+
 /* -------- enum_services (generic, by PMT pid) -------- */
 
 static void test_enum_services_by_pid(void)
@@ -517,6 +585,21 @@ static void test_pmt_enum_services_audio_array(void)
 		CHECK(streams[1]->elementary_PID == 0x103);
 		free(streams);
 	}
+}
+
+/* Regression test for issue #6: a PMT with zero elementary streams used to
+ * call malloc(0 * sizeof(...)) -- see the teletext test above for why
+ * that's a real risk, not just a style nit. Must return NULL (this
+ * function's existing, documented "nothing found" contract) without ever
+ * attempting the malloc(0). */
+static void test_pmt_enum_services_audio_array_zero_streams(void)
+{
+	struct ltntstools_pmt_s pmt = { 0 };
+
+	int pidCount = -1;
+	const struct ltntstools_pmt_entry_s **streams = ltntstools_pmt_enum_services_audio(&pmt, &pidCount);
+	CHECK(streams == NULL);
+	CHECK(pidCount == 0);
 }
 
 /* -------- create_packet_ts: structural correctness -------- */
@@ -614,6 +697,44 @@ static void test_pmt_create_packet_ts_version_number(void)
 	CHECK(versionByte == (0xC0 | (9 << 1) | 1));
 }
 
+/* Regression test for issue #1: ltntstools_pat_create_packet_ts() writes a
+ * fixed 13-byte header + 4 bytes/program + 4 CRC bytes with no check that
+ * the total fits within the caller's packetLength -- a PAT with more than
+ * 42 programs needs 189+ bytes, overflowing the documented-and-required
+ * 188-byte buffer. Boundary-tests both sides: 42 programs (185 bytes)
+ * must still succeed, 43 (189 bytes) must be rejected. Uses a buffer
+ * larger than 188 bytes, filled with a sentinel pattern, to directly prove
+ * the rejected call doesn't write anything at all (not just that it
+ * returns an error code) -- the strongest possible confirmation that this
+ * doesn't silently overflow into whatever follows the caller's buffer. */
+static void test_pat_create_packet_ts_rejects_too_many_programs_to_fit(void)
+{
+	struct ltntstools_pat_s *pat = ltntstools_pat_alloc();
+	for (int i = 0; i < 42; i++) {
+		add_program(pat, i + 1, 0x100 + i);
+	}
+	CHECK(pat->program_count == 42);
+
+	uint8_t pkt[188];
+	CHECK(ltntstools_pat_create_packet_ts(pat, 0, pkt, 188) == 0); /* 185 bytes: fits exactly */
+
+	add_program(pat, 43, 0x100 + 42); /* now 43 programs: 189 bytes, one too many */
+	CHECK(pat->program_count == 43);
+
+	uint8_t guarded[188 + 16];
+	memset(guarded, 0xAA, sizeof(guarded));
+	int ret = ltntstools_pat_create_packet_ts(pat, 0, guarded, 188);
+	CHECK(ret < 0);
+
+	/* The whole buffer, not just the trailing guard region, must be
+	 * untouched -- the check must happen before anything is written. */
+	uint8_t untouched[188 + 16];
+	memset(untouched, 0xAA, sizeof(untouched));
+	CHECK(memcmp(guarded, untouched, sizeof(guarded)) == 0);
+
+	ltntstools_pat_free(pat);
+}
+
 static void test_create_packet_ts_rejects_invalid_args(void)
 {
 	uint8_t pkt[188];
@@ -652,19 +773,23 @@ int main(void)
 	test_get_services_teletext_null_args();
 
 	test_enum_services_scte35_finds_and_terminates();
+	test_enum_services_scte35_skips_zero_stream_program();
 	test_enum_services_smpte2038_finds_and_terminates();
 	test_enum_services_video_multi_program();
 	test_enum_services_teletext_multi_program();
 	test_enum_services_audio_multi_pid_single_program();
+	test_enum_services_audio_skips_zero_stream_program();
 	test_enum_services_by_pid();
 
 	test_pmt_remove_es_for_pid_start_middle_end();
 	test_pmt_remove_es_for_pid_not_found();
 
 	test_pmt_enum_services_audio_array();
+	test_pmt_enum_services_audio_array_zero_streams();
 
 	test_pat_create_packet_ts_structure_and_crc();
 	test_pat_create_packet_ts_version_number();
+	test_pat_create_packet_ts_rejects_too_many_programs_to_fit();
 	test_pmt_create_packet_ts_structure_and_crc();
 	test_pmt_create_packet_ts_version_number();
 	test_create_packet_ts_rejects_invalid_args();
