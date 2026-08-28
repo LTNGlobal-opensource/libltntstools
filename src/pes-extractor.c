@@ -100,6 +100,28 @@ static void notification_callback(void *userContext, enum ltntstools_notificatio
 	}
 }
 
+/* Return codes:
+ *   0  Success.
+ *  -1  hdl is NULL.
+ *  -2  buffer_min or buffer_max is negative and not exactly -1 (the only
+ *      valid "use default" sentinel), or rb_new() itself rejected the
+ *      resulting sizes (buffer_min > buffer_max, or either is exactly 0).
+ *      rb_new() doesn't distinguish "bad size relationship" from "malloc()
+ *      itself failed" in its own return value, so a real OOM on the ring
+ *      buffer's backing allocation also surfaces as this code -- see the
+ *      logged message for the size arguments actually used.
+ *  -3  calloc() of the context itself failed (OOM).
+ *  -4  ltntstools_pid_stats_alloc() failed (OOM). This framework's
+ *      documented guarantee -- packet loss (CC errors) on the chosen pid
+ *      is tracked and corrupted streams discarded -- depends entirely on
+ *      this subsystem, so its failure fails the whole construction rather
+ *      than returning a handle that can never detect loss.
+ *  -5  Could not fully populate the ORDERED_LIST_DEPTH-deep ordered-output
+ *      cache list (OOM).
+ *  -6  Could not fully populate the MAX_PCR_ITEMS-deep PCR cache list
+ *      (OOM). A totally empty pcrList would otherwise leave
+ *      updatePcrList() to operate on an empty list later.
+ */
 int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, pes_extractor_callback cb, void *userContext, int buffer_min, int buffer_max)
 {
 	if (!hdl) {
@@ -118,12 +140,15 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 		 * malloc() failure to fail safe rather than rejecting bad input
 		 * explicitly.
 		 */
-		return -1;
+		fprintf(stderr, "%s() buffer_min %d / buffer_max %d: negative and not -1, rejecting\n",
+			__func__, buffer_min, buffer_max);
+		return -2;
 	}
 
 	struct pes_extractor_s *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
-		return -1;
+		fprintf(stderr, "%s() calloc() of the context failed (OOM)\n", __func__);
+		return -3;
 	}
 
 	/* buffer_min is eagerly malloc()'d by rb_new() below, right now, for
@@ -146,8 +171,10 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 
 	ctx->rb = rb_new(buffer_min, buffer_max);
 	if (!ctx->rb) {
+		fprintf(stderr, "%s() rb_new(%d, %d) failed (invalid size relationship, or OOM)\n",
+			__func__, buffer_min, buffer_max);
 		free(ctx);
-		return -1;
+		return -2;
 	}
 	ctx->pid = pid;
 	ctx->streamId = streamId;
@@ -174,8 +201,9 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 		 * every teardown call on it already NULL-safe), so reuse it
 		 * instead of duplicating cleanup here.
 		 */
+		fprintf(stderr, "%s() ltntstools_pid_stats_alloc() failed (OOM)\n", __func__);
 		ltntstools_pes_extractor_free(ctx);
-		return -1;
+		return -4;
 	}
 	ltntstools_notification_register_callback(ctx->libstats, EVENT_UPDATE_PID_PUSI_DELIVERY_TIME,
 		ctx, notification_callback);
@@ -190,8 +218,10 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 			 * for the life of the context. Fail the whole construction
 			 * instead -- same rationale as the libstats check above.
 			 */
+			fprintf(stderr, "%s() ordered-output cache list malloc() failed at item %d/%d (OOM)\n",
+				__func__, i, ORDERED_LIST_DEPTH);
 			ltntstools_pes_extractor_free(ctx);
-			return -1;
+			return -5;
 		}
 		item->correctedPTS = 0;
 		item->pes = NULL;
@@ -206,8 +236,10 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 			 * operate on an empty list later -- failing fast here avoids
 			 * that state ever being reachable through this API.
 			 */
+			fprintf(stderr, "%s() PCR cache list malloc() failed at item %d/%d (OOM)\n",
+				__func__, i, MAX_PCR_ITEMS);
 			ltntstools_pes_extractor_free(ctx);
-			return -1;
+			return -6;
 		}
 		e->updateTime = time(0);
 		e->pcr = 0;
