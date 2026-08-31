@@ -575,6 +575,353 @@ static void test_slice_counter_malformed_slice_does_not_crash(void)
 	h264_slice_counter_free(ctx);
 }
 
+/* -------- ltn_nal_h264_parse_pic_timing -------- */
+
+/* Minimal MSB-first bit packer, used to build synthetic PIC_TIMING SEI
+ * payloads with known field values so the decoder's output can be checked
+ * exactly, without hand-deriving expected hex bytes.
+ */
+struct testbits_s
+{
+	uint8_t buf[64];
+	int bitpos;
+};
+
+static void testbits_push(struct testbits_s *bw, uint32_t value, int nbits)
+{
+	for (int i = nbits - 1; i >= 0; i--) {
+		int bit = (value >> i) & 1;
+		int byteIdx = bw->bitpos / 8;
+		int bitIdx = 7 - (bw->bitpos % 8);
+		if (bit) {
+			bw->buf[byteIdx] |= (1 << bitIdx);
+		} else {
+			bw->buf[byteIdx] &= ~(1 << bitIdx);
+		}
+		bw->bitpos++;
+	}
+}
+
+/* Builds a full NAL buffer (5-byte start code/type/payloadType header,
+ * matching what ltn_nal_h264_parse_pic_timing() expects at buf[0..4],
+ * followed by the bit-packed SEI payload) and returns its length.
+ */
+static int build_pic_timing_nal(uint8_t *out, struct testbits_s *bw)
+{
+	out[0] = 0x00;
+	out[1] = 0x00;
+	out[2] = 0x01;
+	out[3] = 0x06; /* nal_unit_type = SEI */
+	out[4] = 0x01; /* SEI payloadType = pic_timing */
+	int paylen = (bw->bitpos + 7) / 8;
+	memcpy(&out[5], bw->buf, paylen);
+	return 5 + paylen;
+}
+
+static void test_pic_timing_null_args_rejected(void)
+{
+	uint8_t buf[16] = { 0 };
+	struct ltn_nal_h264_pic_timing_s result;
+
+	CHECK(ltn_nal_h264_parse_pic_timing(NULL, sizeof(buf), 0, 0, -1, &result) < 0);
+	CHECK(ltn_nal_h264_parse_pic_timing(buf, sizeof(buf), 0, 0, -1, NULL) < 0);
+}
+
+static void test_pic_timing_too_short_rejected(void)
+{
+	uint8_t buf[4] = { 0x00, 0x00, 0x01, 0x06 }; /* lengthBytes < 5 */
+	struct ltn_nal_h264_pic_timing_s result;
+
+	CHECK(ltn_nal_h264_parse_pic_timing(buf, sizeof(buf), 0, 0, -1, &result) < 0);
+}
+
+static void test_pic_timing_exhausted_bitstream_rejected(void)
+{
+	/* Exactly 5 bytes -- header only, zero payload bits available, so the
+	 * pic_struct read runs off the end of the buffer and must be treated
+	 * as an error rather than silently returning garbage.
+	 */
+	uint8_t buf[5] = { 0x00, 0x00, 0x01, 0x06, 0x01 };
+	struct ltn_nal_h264_pic_timing_s result;
+
+	CHECK(ltn_nal_h264_parse_pic_timing(buf, sizeof(buf), 0, 0, -1, &result) < 0);
+}
+
+static void test_pic_timing_invalid_override_rejected(void)
+{
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 0, 4); /* pic_struct = 0 (unused, overridden below) */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 0, 0, 99, &result) < 0);
+}
+
+static void test_pic_timing_full_timestamp_flag_path(void)
+{
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 0, 4);   /* pic_struct = 0 -> NumClockTS = 1 */
+	testbits_push(&bw, 1, 1);   /* clock_timestamp_flag = 1 */
+	testbits_push(&bw, 1, 2);   /* ct_type */
+	testbits_push(&bw, 1, 1);   /* nuit_field_based_flag */
+	testbits_push(&bw, 5, 5);   /* counting_type */
+	testbits_push(&bw, 1, 1);   /* full_timestamp_flag = 1 */
+	testbits_push(&bw, 1, 1);   /* discontinuity_flag */
+	testbits_push(&bw, 0, 1);   /* cnt_dropped_flag */
+	testbits_push(&bw, 25, 8);  /* n_frames */
+	testbits_push(&bw, 45, 6);  /* seconds */
+	testbits_push(&bw, 30, 6);  /* minutes */
+	testbits_push(&bw, 12, 5);  /* hours */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 0, 0, -1, &result) == 0);
+	CHECK(result.pic_struct == 0);
+	CHECK(result.clockCount == 1);
+	CHECK(result.clocks[0].present == 1);
+	CHECK(result.clocks[0].ct_type == 1);
+	CHECK(result.clocks[0].nuit_field_based_flag == 1);
+	CHECK(result.clocks[0].counting_type == 5);
+	CHECK(result.clocks[0].full_timestamp_flag == 1);
+	CHECK(result.clocks[0].discontinuity_flag == 1);
+	CHECK(result.clocks[0].cnt_dropped_flag == 0);
+	CHECK(result.clocks[0].n_frames == 25);
+	CHECK(result.clocks[0].seconds == 45);
+	CHECK(result.clocks[0].minutes == 30);
+	CHECK(result.clocks[0].hours == 12);
+}
+
+static void test_pic_timing_nested_seconds_minutes_hours_path(void)
+{
+	/* full_timestamp_flag = 0 but seconds_flag/minutes_flag/hours_flag
+	 * all set -- must decode identically to the full_timestamp_flag = 1
+	 * path via the nested branch.
+	 */
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 0, 4);   /* pic_struct = 0 -> NumClockTS = 1 */
+	testbits_push(&bw, 1, 1);   /* clock_timestamp_flag = 1 */
+	testbits_push(&bw, 2, 2);   /* ct_type */
+	testbits_push(&bw, 0, 1);   /* nuit_field_based_flag */
+	testbits_push(&bw, 10, 5);  /* counting_type */
+	testbits_push(&bw, 0, 1);   /* full_timestamp_flag = 0 */
+	testbits_push(&bw, 0, 1);   /* discontinuity_flag */
+	testbits_push(&bw, 1, 1);   /* cnt_dropped_flag */
+	testbits_push(&bw, 200, 8); /* n_frames */
+	testbits_push(&bw, 1, 1);   /* seconds_flag = 1 */
+	testbits_push(&bw, 33, 6);  /* seconds */
+	testbits_push(&bw, 1, 1);   /* minutes_flag = 1 */
+	testbits_push(&bw, 22, 6);  /* minutes */
+	testbits_push(&bw, 1, 1);   /* hours_flag = 1 */
+	testbits_push(&bw, 7, 5);   /* hours */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 0, 0, -1, &result) == 0);
+	CHECK(result.clocks[0].full_timestamp_flag == 0);
+	CHECK(result.clocks[0].discontinuity_flag == 0);
+	CHECK(result.clocks[0].cnt_dropped_flag == 1);
+	CHECK(result.clocks[0].n_frames == 200);
+	CHECK(result.clocks[0].seconds == 33);
+	CHECK(result.clocks[0].minutes == 22);
+	CHECK(result.clocks[0].hours == 7);
+}
+
+static void test_pic_timing_seconds_only_path(void)
+{
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 0, 4);  /* pic_struct = 0 -> NumClockTS = 1 */
+	testbits_push(&bw, 1, 1);  /* clock_timestamp_flag = 1 */
+	testbits_push(&bw, 0, 2);  /* ct_type */
+	testbits_push(&bw, 0, 1);  /* nuit_field_based_flag */
+	testbits_push(&bw, 0, 5);  /* counting_type */
+	testbits_push(&bw, 0, 1);  /* full_timestamp_flag = 0 */
+	testbits_push(&bw, 0, 1);  /* discontinuity_flag */
+	testbits_push(&bw, 0, 1);  /* cnt_dropped_flag */
+	testbits_push(&bw, 0, 8);  /* n_frames */
+	testbits_push(&bw, 1, 1);  /* seconds_flag = 1 */
+	testbits_push(&bw, 50, 6); /* seconds */
+	testbits_push(&bw, 0, 1);  /* minutes_flag = 0 */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 0, 0, -1, &result) == 0);
+	CHECK(result.clocks[0].seconds == 50);
+	CHECK(result.clocks[0].minutes == -1);
+	CHECK(result.clocks[0].hours == -1);
+}
+
+static void test_pic_timing_no_seconds_path(void)
+{
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 0, 4); /* pic_struct = 0 -> NumClockTS = 1 */
+	testbits_push(&bw, 1, 1); /* clock_timestamp_flag = 1 */
+	testbits_push(&bw, 0, 2); /* ct_type */
+	testbits_push(&bw, 0, 1); /* nuit_field_based_flag */
+	testbits_push(&bw, 0, 5); /* counting_type */
+	testbits_push(&bw, 0, 1); /* full_timestamp_flag = 0 */
+	testbits_push(&bw, 0, 1); /* discontinuity_flag */
+	testbits_push(&bw, 0, 1); /* cnt_dropped_flag */
+	testbits_push(&bw, 0, 8); /* n_frames */
+	testbits_push(&bw, 0, 1); /* seconds_flag = 0 */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 0, 0, -1, &result) == 0);
+	CHECK(result.clocks[0].seconds == -1);
+	CHECK(result.clocks[0].minutes == -1);
+	CHECK(result.clocks[0].hours == -1);
+}
+
+static void test_pic_timing_multi_clock_advances_correctly(void)
+{
+	/* pic_struct = 3 -> NumClockTS = 2. First clock absent, second
+	 * present -- verifies the loop advances past an absent clock entry
+	 * without consuming bits meant for the next one.
+	 */
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 3, 4);   /* pic_struct = 3 -> NumClockTS = 2 */
+	testbits_push(&bw, 0, 1);   /* clocks[0].clock_timestamp_flag = 0 */
+	testbits_push(&bw, 1, 1);   /* clocks[1].clock_timestamp_flag = 1 */
+	testbits_push(&bw, 3, 2);   /* ct_type */
+	testbits_push(&bw, 1, 1);   /* nuit_field_based_flag */
+	testbits_push(&bw, 31, 5);  /* counting_type */
+	testbits_push(&bw, 1, 1);   /* full_timestamp_flag = 1 */
+	testbits_push(&bw, 0, 1);   /* discontinuity_flag */
+	testbits_push(&bw, 1, 1);   /* cnt_dropped_flag */
+	testbits_push(&bw, 59, 8);  /* n_frames */
+	testbits_push(&bw, 59, 6);  /* seconds */
+	testbits_push(&bw, 59, 6);  /* minutes */
+	testbits_push(&bw, 23, 5);  /* hours */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 0, 0, -1, &result) == 0);
+	CHECK(result.pic_struct == 3);
+	CHECK(result.clockCount == 2);
+	CHECK(result.clocks[0].present == 0);
+	CHECK(result.clocks[1].present == 1);
+	CHECK(result.clocks[1].ct_type == 3);
+	CHECK(result.clocks[1].nuit_field_based_flag == 1);
+	CHECK(result.clocks[1].counting_type == 31);
+	CHECK(result.clocks[1].n_frames == 59);
+	CHECK(result.clocks[1].seconds == 59);
+	CHECK(result.clocks[1].minutes == 59);
+	CHECK(result.clocks[1].hours == 23);
+}
+
+static void test_pic_timing_cpb_dpb_lengths_are_skipped_correctly(void)
+{
+	/* Non-zero cpb/dpb_removal_delay_length values, with garbage bits in
+	 * those fields, must be fully consumed (and ignored) so the following
+	 * pic_struct/clock fields still decode at the correct bit offset.
+	 */
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 0xAB, 8); /* cpb_removal_delay (garbage) */
+	testbits_push(&bw, 0x5, 4);  /* dpb_removal_delay (garbage) */
+	testbits_push(&bw, 0, 4);    /* pic_struct = 0 -> NumClockTS = 1 */
+	testbits_push(&bw, 1, 1);    /* clock_timestamp_flag = 1 */
+	testbits_push(&bw, 0, 2);    /* ct_type */
+	testbits_push(&bw, 0, 1);    /* nuit_field_based_flag */
+	testbits_push(&bw, 0, 5);    /* counting_type */
+	testbits_push(&bw, 1, 1);    /* full_timestamp_flag = 1 */
+	testbits_push(&bw, 0, 1);    /* discontinuity_flag */
+	testbits_push(&bw, 0, 1);    /* cnt_dropped_flag */
+	testbits_push(&bw, 1, 8);    /* n_frames */
+	testbits_push(&bw, 2, 6);    /* seconds */
+	testbits_push(&bw, 3, 6);    /* minutes */
+	testbits_push(&bw, 4, 5);    /* hours */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 8, 4, -1, &result) == 0);
+	CHECK(result.clocks[0].n_frames == 1);
+	CHECK(result.clocks[0].seconds == 2);
+	CHECK(result.clocks[0].minutes == 3);
+	CHECK(result.clocks[0].hours == 4);
+}
+
+static void test_pic_timing_pic_struct_override_forces_value(void)
+{
+	/* pic_struct read from the bitstream is 0 (-> NumClockTS 1), but the
+	 * caller forces pic_struct = 8 (-> NumClockTS 3), matching how
+	 * pes_inspector.c overrides pic_struct for encoders known to
+	 * populate it incorrectly.
+	 */
+	struct testbits_s bw = { 0 };
+	testbits_push(&bw, 0, 4); /* pic_struct = 0 in the bitstream */
+	testbits_push(&bw, 0, 1); /* clocks[0].clock_timestamp_flag = 0 */
+	testbits_push(&bw, 0, 1); /* clocks[1].clock_timestamp_flag = 0 */
+	testbits_push(&bw, 0, 1); /* clocks[2].clock_timestamp_flag = 0 */
+
+	uint8_t nal[64];
+	int len = build_pic_timing_nal(nal, &bw);
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, len, 0, 0, 8, &result) == 0);
+	CHECK(result.pic_struct == 8);
+	CHECK(result.clockCount == 3);
+	CHECK(result.clocks[0].present == 0);
+	CHECK(result.clocks[1].present == 0);
+	CHECK(result.clocks[2].present == 0);
+}
+
+static void test_pic_timing_real_capture_matches_ltn_encoder(void)
+{
+	/* A real PIC_TIMING SEI captured from an LTN encoder (see the comment
+	 * dump in ltntstools/src/pes_inspector.c's _parse_PIC_TIMING()),
+	 * decoded by hand against this exact bit layout to confirm it
+	 * produces "15:18:52.31 disc:0 ct:0 counting_type:0 nuit:1
+	 * full_timestamp:1 cnt_dropped:0" with the default cpb/dpb lengths
+	 * (15/11) and pic_struct forced to 8, matching the "Video Engine"
+	 * pid override in pes_inspector.c.
+	 */
+	uint8_t nal[16] = {
+		0x00, 0x00, 0x01, 0x06, 0x01, 0x08, 0x02, 0x60,
+		0x80, 0x90, 0x41, 0xfd, 0x12, 0x7c, 0x80, 0x00,
+	};
+
+	struct ltn_nal_h264_pic_timing_s result;
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, sizeof(nal), 15, 11, 8, &result) == 0);
+	CHECK(result.pic_struct == 8);
+	CHECK(result.clockCount == 3);
+	CHECK(result.clocks[0].present == 0);
+	CHECK(result.clocks[1].present == 0);
+	CHECK(result.clocks[2].present == 1);
+	CHECK(result.clocks[2].ct_type == 0);
+	CHECK(result.clocks[2].nuit_field_based_flag == 1);
+	CHECK(result.clocks[2].counting_type == 0);
+	CHECK(result.clocks[2].full_timestamp_flag == 1);
+	CHECK(result.clocks[2].discontinuity_flag == 0);
+	CHECK(result.clocks[2].cnt_dropped_flag == 0);
+	CHECK(result.clocks[2].n_frames == 31);
+	CHECK(result.clocks[2].hours == 15);
+	CHECK(result.clocks[2].minutes == 18);
+	CHECK(result.clocks[2].seconds == 52);
+
+	/* Same capture, but without the pid override -- pic_struct is read
+	 * as 0 straight from the bitstream (-> NumClockTS 1), and that lone
+	 * clock entry is absent.
+	 */
+	CHECK(ltn_nal_h264_parse_pic_timing(nal, sizeof(nal), 15, 11, -1, &result) == 0);
+	CHECK(result.pic_struct == 0);
+	CHECK(result.clockCount == 1);
+	CHECK(result.clocks[0].present == 0);
+}
+
 int main(void)
 {
 	test_findHeader_finds_start_code();
@@ -621,6 +968,19 @@ int main(void)
 	test_slice_counter_reset_pid_changes_tracked_pid();
 	test_slice_counter_history_wraps_without_corruption();
 	test_slice_counter_malformed_slice_does_not_crash();
+
+	test_pic_timing_null_args_rejected();
+	test_pic_timing_too_short_rejected();
+	test_pic_timing_exhausted_bitstream_rejected();
+	test_pic_timing_invalid_override_rejected();
+	test_pic_timing_full_timestamp_flag_path();
+	test_pic_timing_nested_seconds_minutes_hours_path();
+	test_pic_timing_seconds_only_path();
+	test_pic_timing_no_seconds_path();
+	test_pic_timing_multi_clock_advances_correctly();
+	test_pic_timing_cpb_dpb_lengths_are_skipped_correctly();
+	test_pic_timing_pic_struct_override_forces_value();
+	test_pic_timing_real_capture_matches_ltn_encoder();
 
 	if (g_failures == 0) {
 		printf("PASS: all nal_h264 tests passed\n");

@@ -561,3 +561,85 @@ int ltn_sei_h264_find_headers(struct ltn_nal_headers_s *nals, int nalArrayLength
 
 	return 0; /* Success */
 }
+
+int ltn_nal_h264_parse_pic_timing(const uint8_t *buf, int lengthBytes,
+	int cpb_removal_delay_length, int dpb_removal_delay_length, int pic_struct_override,
+	struct ltn_nal_h264_pic_timing_s *result)
+{
+	if (!buf || !result) {
+		return -1;
+	}
+
+	if (lengthBytes < 5) {
+		return -1;
+	}
+
+	memset(result, 0, sizeof(*result));
+
+	NALBitReader br;
+	NALBitReader_init(&br, &buf[5], (lengthBytes - 5) * 8);
+
+	/* This parser assumes CpbDpbDelaysPresentFlag and pic_struct_present_flag are both true,
+	 * and time_offset_length is 0 -- see the header comment for ltn_nal_h264_parse_pic_timing().
+	 */
+	NALBitReader_read_bits(&br, cpb_removal_delay_length);
+	NALBitReader_read_bits(&br, dpb_removal_delay_length);
+
+	/* Per ISO-14496-10 Table D-1: NumClockTS as a function of pic_struct. */
+	static const int numClockTSTable[16] = { 1, 1, 1, 2, 2, 3, 3, 2, 3, 0, 0, 0, 0, 0, 0, 0 };
+
+	int pic_struct = NALBitReader_read_bits(&br, 4);
+	if (pic_struct_override >= 0) {
+		pic_struct = pic_struct_override;
+	}
+	if (pic_struct < 0 || pic_struct > 15) {
+		return -1;
+	}
+
+	result->pic_struct = pic_struct;
+	result->clockCount = numClockTSTable[pic_struct];
+
+	for (int i = 0; i < result->clockCount; i++) {
+		struct ltn_nal_h264_pic_timing_clock_s *c = &result->clocks[i];
+
+		c->present = NALBitReader_read_bits(&br, 1);
+		if (!c->present) {
+			continue;
+		}
+
+		c->ct_type               = NALBitReader_read_bits(&br, 2);
+		c->nuit_field_based_flag = NALBitReader_read_bits(&br, 1);
+		c->counting_type         = NALBitReader_read_bits(&br, 5);
+		c->full_timestamp_flag   = NALBitReader_read_bits(&br, 1);
+		c->discontinuity_flag    = NALBitReader_read_bits(&br, 1);
+		c->cnt_dropped_flag      = NALBitReader_read_bits(&br, 1);
+		c->n_frames              = NALBitReader_read_bits(&br, 8);
+
+		c->seconds = 0;
+		c->minutes = -1;
+		c->hours   = -1;
+
+		if (c->full_timestamp_flag) {
+			c->seconds = NALBitReader_read_bits(&br, 6);
+			c->minutes = NALBitReader_read_bits(&br, 6);
+			c->hours   = NALBitReader_read_bits(&br, 5);
+		} else {
+			int seconds_flag = NALBitReader_read_bits(&br, 1);
+			if (seconds_flag) {
+				c->seconds = NALBitReader_read_bits(&br, 6);
+				int minutes_flag = NALBitReader_read_bits(&br, 1);
+				if (minutes_flag) {
+					c->minutes = NALBitReader_read_bits(&br, 6);
+					int hours_flag = NALBitReader_read_bits(&br, 1);
+					if (hours_flag) {
+						c->hours = NALBitReader_read_bits(&br, 5);
+					}
+				}
+			} else {
+				c->seconds = -1;
+			}
+		}
+	}
+
+	return 0; /* Success */
+}
