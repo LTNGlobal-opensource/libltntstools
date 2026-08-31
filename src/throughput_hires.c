@@ -59,6 +59,8 @@ struct throughput_hires_item_s *itemAlloc()
 void throughput_hires_free(void *hdl)
 {
 	struct throughput_hires_context_s *ctx = (struct throughput_hires_context_s *)hdl;
+	if (!ctx)
+		return;
 
 	while (!xorg_list_is_empty(&ctx->itemsFree)) {
 		struct throughput_hires_item_s *item = xorg_list_first_entry(&ctx->itemsFree, struct throughput_hires_item_s, list);
@@ -76,7 +78,11 @@ void throughput_hires_free(void *hdl)
 
 int throughput_hires_alloc(void **hdl, int itemsPerSecond)
 {
+	*hdl = NULL;
+
 	struct throughput_hires_context_s *ctx = calloc(1, sizeof(*ctx));
+	if (!ctx)
+		return -1;
 
 	xorg_list_init(&ctx->itemsFree);
 	xorg_list_init(&ctx->itemsBusy);

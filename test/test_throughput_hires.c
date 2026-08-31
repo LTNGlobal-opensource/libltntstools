@@ -95,6 +95,12 @@ static void test_free_with_populated_lists_no_crash(void)
 	CHECK(1);
 }
 
+static void test_free_null_handle_is_safe(void)
+{
+	throughput_hires_free(NULL);
+	CHECK(1);
+}
+
 static void test_write_grows_pool_when_exhausted(void)
 {
 	/* Tiny initial pool (2 items); writing well beyond that must not lose
@@ -432,6 +438,7 @@ int main(void)
 {
 	test_alloc_free_basic();
 	test_free_with_populated_lists_no_crash();
+	test_free_null_handle_is_safe();
 	test_write_grows_pool_when_exhausted();
 
 	test_write_and_sumtotal_single_item();
