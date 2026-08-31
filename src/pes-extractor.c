@@ -1,7 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdatomic.h>
 
 #include <libltntstools/ltntstools.h>
 #include "klringbuffer.h"
@@ -69,7 +68,7 @@ struct pes_extractor_s
 	 * write() and free() on the same handle from different threads without
 	 * their own external synchronization.
 	 */
-	atomic_int preventWrites;
+	int preventWrites;
 };
 
 struct item_s
@@ -185,7 +184,7 @@ int ltntstools_pes_extractor_alloc(void **hdl, uint16_t pid, uint8_t streamId, p
 	ctx->computedRingSize = 0;
 	ctx->lastCCCounter = 0;
 	ctx->largestRingFrame = 0;
-	atomic_init(&ctx->preventWrites, 0);
+	ctx->preventWrites = 0;
 	ltntstools_corrected_clock_init(&ctx->correctedClock, 90000);
 	xorg_list_init(&ctx->pcrList);
 	xorg_list_init(&ctx->listOrdered);
@@ -410,7 +409,7 @@ void ltntstools_pes_extractor_free(void *hdl)
 	 * set to 1 anywhere in this file. See the preventWrites field comment
 	 * for what this atomic store does and does not guarantee.
 	 */
-	atomic_store(&ctx->preventWrites, 1);
+	__atomic_store_n(&ctx->preventWrites, 1, __ATOMIC_SEQ_CST);
 
 	rb_free(ctx->rb);
 
@@ -677,7 +676,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 
 	int didOverflow;
 
-	if (atomic_load(&ctx->preventWrites)) {
+	if (__atomic_load_n(&ctx->preventWrites, __ATOMIC_SEQ_CST)) {
 		/* Library closing down. 0 is also a legitimate "processed zero
 		 * matching packets" result below, so this must be distinguishable
 		 * from that -- use a negative value, consistent with this file's
