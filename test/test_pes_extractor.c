@@ -36,13 +36,20 @@
  * track CC errors and derive a synthesized PCR/STC). Links -lpthread
  * (stats.c and pes-extractor.c both use pthread mutexes).
  *
- * Framing note: ltntstools_pes_extractor_write() only ever hands a PES to
- * the callback when the *next* payload_unit_start_indicator=1 TS packet for
- * the same pid arrives (that's what triggers _processRing() on the
- * previously-accumulated ring). So every test below appends one extra
- * "trailer" TS packet (PUSI=1, throwaway single-byte payload) after the
- * real PES packet(s) purely to flush it through -- its own content is never
- * asserted on.
+ * Framing note: ltntstools_pes_extractor_write() delivers a PES to the
+ * callback as soon as the ring holds as many bytes as the PES's own
+ * PES_packet_length header field says it needs -- it does not wait for the
+ * next payload_unit_start_indicator=1 TS packet for the same pid to trigger
+ * _processRing() on the previously-accumulated ring, unless PES_packet_length
+ * is the spec's 0 "unbounded" sentinel (video ES only). Most tests below
+ * still append one extra "trailer" TS packet (PUSI=1, throwaway single-byte
+ * payload) after the real PES packet(s) anyway, both to keep the fixtures
+ * uniform and because it exercises the same flush path once more; its own
+ * content is never asserted on.
+ * test_write_single_pes_delivered_without_trailer_packet() below is the
+ * regression test for the early-delivery behavior itself: a lone PES with no
+ * follow-up PES on its pid at all (eg. an intermittent SCTE-35
+ * splice_info_section) must still reach the callback.
  *
  * DOC DISCREPANCY (not fixed, since it's the header comment that's wrong,
  * not the code -- see ltntstools_pes_extractor_set_skip_data()'s doc in
@@ -305,6 +312,124 @@ static void test_write_default_attaches_data_test_skip_data_true_omits_it(void)
 		free_captured();
 		ltntstools_pes_extractor_free(hdl);
 	}
+}
+
+/* -------- write() delivers a lone PES without waiting for a follow-up PES -------- */
+
+/* Regression test for the pes-extractor's core "one PES ejected when the
+ * next PES arrives" model: it silently stalled whenever a pid carries PES's
+ * only intermittently and no follow-up PES ever arrives on that pid at all
+ * (eg. a SCTE-35 splice_info_section pid that goes quiet after a single
+ * splice event). Before the PES_packet_length-aware early-delivery fix, such
+ * a PES would never reach the callback via write() -- only a later,
+ * unrelated PES on the same pid (which might never come), or
+ * ltntstools_pes_extractor_free()'s flush (and only in ordered-output mode),
+ * would ever surface it. Deliberately does NOT append a trailer packet,
+ * unlike every other test in this file -- that's the whole point here. */
+static void test_write_single_pes_delivered_without_trailer_packet(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xBD /* private_stream_1, eg. SCTE-35 */, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t payload[16];
+	for (int i = 0; i < (int)sizeof(payload); i++)
+		payload[i] = (uint8_t)(i + 1);
+
+	uint8_t buf[64];
+	int totalBytes = pack_pes(0xBD, payload, sizeof(payload), buf, sizeof(buf));
+	CHECK(totalBytes <= 184); /* sanity: fits in a single TS packet's payload */
+
+	uint8_t packets[2][188];
+	uint8_t cc = 0;
+	int n = build_ts_packets(buf, totalBytes, 0x100, &cc, packets, 2);
+	CHECK(n == 1); /* sanity: exactly one TS packet, no trailer */
+
+	ssize_t ret = ltntstools_pes_extractor_write(hdl, &packets[0][0], n);
+	CHECK(ret == 1);
+
+	/* The callback must have already fired, from inside this single write()
+	 * call -- there's no follow-up PES to ever trigger it otherwise. */
+	CHECK(g_capturedCount == 1);
+	if (g_capturedCount == 1) {
+		struct ltn_pes_packet_s *pes = g_captured[0];
+		CHECK(pes->stream_id == 0xBD);
+		CHECK(pes->dataLengthBytes == sizeof(payload));
+		CHECK(pes->data != NULL && memcmp(pes->data, payload, sizeof(payload)) == 0);
+	}
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
+/* Same scenario but spanning multiple TS packets -- the early-delivery check
+ * runs after every packet append, so this confirms it correctly waits until
+ * the ring actually holds the whole PES before firing, not just the
+ * single-packet case above. */
+static void test_write_multi_packet_pes_delivered_without_trailer_packet(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xBD, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t payload[400];
+	for (int i = 0; i < (int)sizeof(payload); i++)
+		payload[i] = (uint8_t)i;
+
+	uint8_t buf[512];
+	int totalBytes = pack_pes(0xBD, payload, sizeof(payload), buf, sizeof(buf));
+	CHECK(totalBytes > 184); /* sanity: must actually span >1 TS packet */
+
+	uint8_t packets[8][188];
+	uint8_t cc = 0;
+	int n = build_ts_packets(buf, totalBytes, 0x100, &cc, packets, 8);
+	CHECK(n > 1);
+
+	ssize_t ret = ltntstools_pes_extractor_write(hdl, &packets[0][0], n);
+	CHECK(ret == n);
+
+	CHECK(g_capturedCount == 1);
+	if (g_capturedCount == 1) {
+		struct ltn_pes_packet_s *pes = g_captured[0];
+		CHECK(pes->dataLengthBytes == sizeof(payload));
+		CHECK(pes->data != NULL && memcmp(pes->data, payload, sizeof(payload)) == 0);
+	}
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
+}
+
+/* A PES_packet_length wire value of 0 is the spec's "unbounded length"
+ * sentinel (video ES packetized directly into a TS). The early-delivery
+ * check must not misinterpret that as "0 more bytes needed" and fire
+ * immediately -- it must keep waiting for the next PUSI, same as before this
+ * feature existed. */
+static void test_write_zero_pes_packet_length_waits_for_next_pusi(void)
+{
+	void *hdl = NULL;
+	ltntstools_pes_extractor_alloc(&hdl, 0x100, 0xE0, capture_cb, NULL, -1, -1);
+	reset_capture();
+
+	uint8_t payload[16];
+	memset(payload, 0x42, sizeof(payload));
+	uint8_t buf[64];
+	int totalBytes = pack_pes(0xE0, payload, sizeof(payload), buf, sizeof(buf));
+	buf[4] = 0x00; /* force PES_packet_length = 0, overriding pack_pes()'s real value */
+	buf[5] = 0x00;
+
+	uint8_t packets[4][188];
+	uint8_t cc = 0;
+	int n = build_ts_packets(buf, totalBytes, 0x100, &cc, packets, 4);
+
+	CHECK(ltntstools_pes_extractor_write(hdl, &packets[0][0], n) == n);
+	CHECK(g_capturedCount == 0); /* must not have fired yet -- length is "unbounded" */
+
+	build_trailer_packet(0x100, &cc, packets[0]);
+	ltntstools_pes_extractor_write(hdl, &packets[0][0], 1);
+	CHECK(g_capturedCount == 1); /* only the next PUSI flushes it */
+
+	free_captured();
+	ltntstools_pes_extractor_free(hdl);
 }
 
 /* pes->rawBuffer is populated by _processRing() itself (independently of
@@ -797,6 +922,9 @@ int main(void)
 
 	test_write_ignores_other_pid_no_callback();
 	test_write_default_attaches_data_test_skip_data_true_omits_it();
+	test_write_single_pes_delivered_without_trailer_packet();
+	test_write_multi_packet_pes_delivered_without_trailer_packet();
+	test_write_zero_pes_packet_length_waits_for_next_pusi();
 	test_write_rawBuffer_matches_original_packed_bytes();
 	test_write_large_pes_spanning_multiple_ts_packets_reassembles();
 	test_write_cc_error_discards_partial_pes_but_recovers();

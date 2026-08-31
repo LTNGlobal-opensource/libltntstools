@@ -651,6 +651,66 @@ static int _processRing(struct pes_extractor_s *ctx)
 	return 0; /* Success */
 }
 
+/* Peek the PES header's PES_packet_length field directly from the ring,
+ * without a full ltn_pes_packet_parse(). Per ISO13818-1 2.4.3.7, a PES
+ * packet is: 3 byte start code (00 00 01), 1 byte stream_id, then this
+ * 2 byte big-endian length -- the byte count of everything that follows
+ * the length field itself.
+ *
+ * Returns the total byte count a complete PES occupies (6 + PES_packet_length),
+ * or 0 if that isn't yet knowable: fewer than 6 bytes buffered so far, the
+ * start code doesn't match (ring doesn't actually start on a PES boundary,
+ * shouldn't happen but don't act on garbage), or PES_packet_length is the
+ * spec's 0 "unbounded" sentinel (only valid for video ES packetized directly
+ * into a TS, where the real length genuinely isn't known until the next
+ * payload_unit_start_indicator). Callers must keep waiting for the next PUSI
+ * in all of those cases, same as before this function existed.
+ */
+static int _pesExpectedTotalLength(struct pes_extractor_s *ctx)
+{
+	unsigned char hdr[6];
+	if (rb_used(ctx->rb) < (size_t)sizeof(hdr))
+		return 0;
+
+	rb_peek(ctx->rb, (char *)hdr, sizeof(hdr));
+
+	if (hdr[0] != 0x00 || hdr[1] != 0x00 || hdr[2] != 0x01)
+		return 0;
+
+	int pesPacketLength = (hdr[4] << 8) | hdr[5];
+	if (pesPacketLength == 0)
+		return 0;
+
+	return 6 + pesPacketLength;
+}
+
+/* Parse whatever is currently in the ring as a complete PES, deliver it to
+ * the callback (or cache it, in ordered-output mode), then reset the ring
+ * and state ready for the next PES. Shared by both the "next PES's PUSI
+ * arrived" path and the "current PES is already complete, don't wait for
+ * the next PUSI" early-delivery path below -- the two need to do exactly
+ * the same cleanup.
+ */
+static void _completePesAndReset(struct pes_extractor_s *ctx)
+{
+	/* Process the ring, might be empty */
+	_processRing(ctx);
+
+	/* Clean the ring */
+	rb_empty(ctx->rb);
+	ctx->computedRingSize = 0;
+
+	int64_t pcr;
+	ltntstools_bitrate_calculator_query_stc(ctx->libstats, &pcr);
+
+	/* The need to put rongpos and pcr on a list might be redundant, during
+	 * testing the ring pos was always zero for any pcr.
+	 * However, when the PCR isn't on the PES then we'll need this mechanism,
+	 * so, keep it for now - future improvement.
+	 */
+	updatePcrList(ctx, pcr, rb_get_write_pos(ctx->rb));
+}
+
 int ltntstools_pes_extractor_set_pcr_pid(void *hdl, uint16_t pcrpidnr)
 {
 	if (!hdl) {
@@ -796,24 +856,7 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 			 * This also applies to private streams of stream_type 6 (refer to Table 2-29).
 			 */
 
-			/* Process the ring, might be empty */
-			_processRing(ctx);
-
-			/* Clean the ring */
-			rb_empty(ctx->rb);
-			ctx->computedRingSize = 0;
-
-			if (1) {
-				int64_t pcr;
-				ltntstools_bitrate_calculator_query_stc(ctx->libstats, &pcr);
-
-				/* The need to put rongpos and pcr on a list might be redundant, during
-				 * testing the ring pos was always zero for any pcr.
-				 * However, when the PCR isn't on the PES then we'll need this mechanism,
-				 * so, keep it for now - future improvement.
-				 */
-				updatePcrList(ctx, pcr, rb_get_write_pos(ctx->rb));
-			}
+			_completePesAndReset(ctx);
 
 			/* Write new leading pes data into ring */
 			int wsize = 188 - offset;
@@ -830,6 +873,22 @@ ssize_t ltntstools_pes_extractor_write(void *hdl, const uint8_t *pkts, int packe
 				fprintf(stderr, "%s() ring buffer overflow on pid 0x%04x (buffer_max reached), PES will be discarded\n",
 					__func__, ctx->pid);
 			}
+		}
+
+		/* Don't wait for the next PES's PUSI to deliver this one. A pid that
+		 * carries PES's only intermittently (eg. SCTE-35 splice_info_section
+		 * messages) may never send another PES on this pid, so waiting for
+		 * "the next one arrives" can stall delivery indefinitely -- the
+		 * previous PES would only ever surface via
+		 * ltntstools_pes_extractor_free()'s flush, if orderedOutput even
+		 * caches it, or never at all otherwise. Once the ring holds a full
+		 * PES per its own PES_packet_length header field, emit it right here
+		 * instead of waiting on a PUSI that may not come.
+		 */
+		int expectedLength = _pesExpectedTotalLength(ctx);
+		if (expectedLength > 0 && ctx->computedRingSize >= expectedLength) {
+			_completePesAndReset(ctx);
+			ctx->appending = 0;
 		}
 	}
 
