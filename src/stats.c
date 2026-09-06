@@ -448,6 +448,10 @@ void ltntstools_pid_stats_update(struct ltntstools_stream_statistics_s *stream, 
 			stream->iat_hwm_us_last_nsecond_time = now;
 			stream->iat_hwm_us_last_nsecond = stream->iat_hwm_us_last_nsecond_accumulator;
 			stream->iat_hwm_us_last_nsecond_accumulator = 0;
+			if (stream->notifications[EVENT_UPDATE_STREAM_IAT_HWM].cb) {
+				stream->notifications[EVENT_UPDATE_STREAM_IAT_HWM].cb(stream->notifications[EVENT_UPDATE_STREAM_IAT_HWM].userContext,
+					EVENT_UPDATE_STREAM_IAT_HWM, stream, NULL);
+			}
 		}
 
 		ltn_histogram_interval_update_with_value(stream->packetIntervals, stream->iat_cur_us / 1000);
