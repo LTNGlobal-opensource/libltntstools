@@ -70,6 +70,10 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 	int packetSize, uint8_t *cc, uint16_t pid, int64_t pcr, int random_access_indicator,
 	int elementary_stream_priority_indicator);
 
+int ltntstools_ts_packetizer_build_sdt(const char *providerName, const char *serviceName,
+	uint16_t transport_stream_id, uint16_t original_network_id, uint16_t service_id,
+	uint8_t cc, uint8_t *packet, int packetLength);
+
 #ifdef __cplusplus
 };
 #endif

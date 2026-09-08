@@ -19,11 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "libltntstools/ts_packetizer.h"
+#include "libltntstools/crc32.h"
 
 /* Convert PES data into a series of TS packets */
 int ltntstools_ts_packetizer(const uint8_t *buf, unsigned int byteCount,
@@ -226,5 +228,97 @@ int ltntstools_ts_packetizer_with_pcr(const uint8_t *buf, unsigned int byteCount
 
 	*pkts = arr;
 	*packetCount = cnt;
+	return 0;
+}
+
+/**
+ * Build a single-service DVB SDT (actual_transport_stream, table_id 0x42) transport
+ * packet, containing exactly one service_descriptor (tag 0x48) built from providerName
+ * and serviceName. Follows the same "one packet only" convention as
+ * ltntstools_pat_create_packet_ts()/ltntstools_pmt_create_packet_ts(): fails if the
+ * section doesn't fit in a single 188 byte packet.
+ *
+ * transport_stream_id, original_network_id and service_id aren't exposed on the
+ * bitrate_smoother command line (only provider/service name are) -- callers needing
+ * different values should hardcode them here.
+ */
+int ltntstools_ts_packetizer_build_sdt(const char *providerName, const char *serviceName,
+	uint16_t transport_stream_id, uint16_t original_network_id, uint16_t service_id,
+	uint8_t cc, uint8_t *packet, int packetLength)
+{
+	if (!providerName || !serviceName || !packet || packetLength != 188)
+		return -1;
+
+	size_t providerLen = strlen(providerName);
+	size_t serviceLen = strlen(serviceName);
+	if (providerLen > 255 || serviceLen > 255)
+		return -1;
+
+	int descLen = 3 + (int)providerLen + (int)serviceLen; /* service_type(1) + 2 length bytes + strings */
+	int loopLen = 2 + descLen;                             /* descriptor_tag(1) + descriptor_length(1) + descLen */
+	int sectionLen = 17 + loopLen;                          /* 8 fixed fields + 5 service fields + loopLen + 4 CRC */
+
+	int contentBytes = 8 + sectionLen; /* 5 byte TS header/pointer + table_id(1) + length(2) + sectionLen */
+	if (contentBytes > packetLength) {
+		fprintf(stderr, "%s() provider/service names need %d bytes, which does not fit in a single %d byte packet\n",
+			__func__, contentBytes, packetLength);
+		return -1;
+	}
+
+	uint8_t *p = packet;
+	int i = 0;
+
+	memset(p, 0xFF, packetLength);
+
+#define SDT_PID 0x0011
+	p[i++] = 0x47;
+	p[i++] = 0x40 | ((SDT_PID >> 8) & 0x1f);
+	p[i++] = SDT_PID & 0xff;
+	p[i++] = 0x10 | (cc & 0x0f);
+	p[i++] = 0x00; /* pointer field */
+
+	p[i++] = 0x42; /* table_id: service_description_section, actual_transport_stream */
+	p[i++] = 0xF0 | ((sectionLen >> 8) & 0x0f); /* section_syntax_indicator=1, reserved_future_use=1, reserved=11 */
+	p[i++] = sectionLen & 0xff;
+
+	p[i++] = transport_stream_id >> 8;
+	p[i++] = transport_stream_id & 0xff;
+
+	p[i++] = 0xC1; /* reserved(2)=11, version_number(5)=0, current_next_indicator(1)=1 */
+	p[i++] = 0x00; /* section_number */
+	p[i++] = 0x00; /* last_section_number */
+
+	p[i++] = original_network_id >> 8;
+	p[i++] = original_network_id & 0xff;
+
+	p[i++] = 0xFF; /* reserved_future_use */
+
+	p[i++] = service_id >> 8;
+	p[i++] = service_id & 0xff;
+	p[i++] = 0xFC; /* reserved_future_use(6)=111111, EIT_schedule_flag=0, EIT_present_following_flag=0 */
+
+	uint8_t running_status = 4; /* running */
+	uint8_t free_ca_mode = 0;   /* not scrambled */
+	p[i++] = (running_status << 5) | (free_ca_mode << 4) | ((loopLen >> 8) & 0x0f);
+	p[i++] = loopLen & 0xff;
+
+	p[i++] = 0x48; /* descriptor_tag: service_descriptor */
+	p[i++] = descLen;
+	p[i++] = 0x01; /* service_type: digital television service */
+	p[i++] = (uint8_t)providerLen;
+	memcpy(&p[i], providerName, providerLen);
+	i += providerLen;
+	p[i++] = (uint8_t)serviceLen;
+	memcpy(&p[i], serviceName, serviceLen);
+	i += serviceLen;
+
+	uint32_t crc;
+	ltntstools_getCRC32(&p[5], i - 5, &crc);
+
+	p[i++] = (crc >> 24) & 0xff;
+	p[i++] = (crc >> 16) & 0xff;
+	p[i++] = (crc >> 8) & 0xff;
+	p[i++] = crc & 0xff;
+
 	return 0;
 }

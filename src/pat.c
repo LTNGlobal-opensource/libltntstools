@@ -1067,3 +1067,17 @@ const struct ltntstools_pmt_entry_s **ltntstools_pmt_enum_services_audio(const s
 
 	return streams;
 }
+
+/* Find the ES stream entry for a given elementary PID within a PMT object, or NULL if absent. */
+struct ltntstools_pmt_entry_s *ltntstools_pmt_find_stream(struct ltntstools_pmt_s *pmt, uint16_t pid)
+{
+	if (!pmt || !pid) {
+		return NULL;
+	}
+
+	for (unsigned int i = 0; i < pmt->stream_count; i++) {
+		if (pmt->streams[i].elementary_PID == pid)
+			return &pmt->streams[i];
+	}
+	return NULL;
+}

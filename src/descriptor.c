@@ -186,6 +186,31 @@ int ltntstools_descriptor_list_add(struct ltntstools_descriptor_list_s *list,
 	return 0;
 }
 
+/* Remove all descriptors matching tag from a descriptor list, compacting the array in place. */
+int ltntstools_descriptor_list_remove_entry(struct ltntstools_descriptor_list_s *list, uint8_t tag)
+{
+	if (!list || tag == 0) {
+		return -1;
+	}
+	
+	int ret = -1;
+
+	uint32_t w = 0;
+	for (uint32_t r = 0; r < list->count; r++) {
+		if (list->array[r].tag == tag) {
+			continue;
+		}
+		if (w != r) {
+			list->array[w] = list->array[r];
+			ret = 0;
+		}
+		w++;
+	}
+	list->count = w;
+
+	return ret;
+}
+
 int ltntstools_descriptor_list_contains_smpte2064_registration(struct ltntstools_descriptor_list_s *list)
 {
 	int found = 0;

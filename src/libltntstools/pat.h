@@ -253,6 +253,8 @@ int ltntstools_pmt_entry_is_scte35(const struct ltntstools_pmt_s *pmt, const str
  */
 int ltntstools_pmt_entry_is_smpte2038(const struct ltntstools_pmt_entry_s *pe);
 
+struct ltntstools_pmt_entry_s *ltntstools_pmt_find_stream(struct ltntstools_pmt_s *pmt, uint16_t pid);
+
 #ifdef __cplusplus
 };
 #endif
