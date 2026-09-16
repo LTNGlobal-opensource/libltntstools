@@ -59,7 +59,6 @@ static ssize_t ltntstools_sectionextractor_write_packet(struct sectionextractor_
 	const uint8_t *pkt, int *complete, int *crcValid)
 {
 	int section_offset = 4;
-	*crcValid = 0;
 
 	/* Limitations. The entire section has to fit within a single packet. */
 
@@ -181,6 +180,7 @@ ssize_t ltntstools_sectionextractor_write(void *hdl, const uint8_t *pkt, size_t 
 	struct sectionextractor_ctx_s *ctx = (struct sectionextractor_ctx_s *)hdl;
 
 	*complete = 0;
+	*crcValid = 0;
 
 	ssize_t ret = 0;
 	for (int i = 0; i < packetCount; i++) {

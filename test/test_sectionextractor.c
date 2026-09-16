@@ -21,6 +21,21 @@
  *    CRC). The extra +3 copied 3 bytes past the end of the real section,
  *    exposing uninitialized/stale bytes from the 4096-byte internal
  *    buffer. Fixed to use ctx->sectionLength directly.
+ *
+ * 3. crcValid clobbered within a single write() call: write_packet() used
+ *    to unconditionally reset *crcValid = 0 on entry, every time it ran.
+ *    ltntstools_sectionextractor_write() calls write_packet() once per
+ *    matching-PID TS packet in the batch it's handed. If packet N completed
+ *    a section with a valid CRC, but packet N+1 in that same batch hit the
+ *    "a section is already complete and pending query" early-return branch
+ *    (fix #1), that later call still reset *crcValid = 0 first, clobbering
+ *    the true result from packet N even though *complete correctly stayed
+ *    1. Callers that batch multiple TS packets per write() call (e.g. a
+ *    whole file read in one shot) would see complete==1 with crcValid==0
+ *    for a section whose CRC actually checked out. Fixed by only writing
+ *    *crcValid when a section actually completes, with the caller
+ *    initializing it to 0 once per write() call (matching how *complete is
+ *    already handled).
  */
 
 #include <assert.h>
@@ -413,6 +428,43 @@ static void test_multiple_sections_with_query_between_each(void)
 	ltntstools_sectionextractor_free(hdl);
 }
 
+/* Two packets for the same PID/table, both complete standalone sections,
+ * delivered in a SINGLE ltntstools_sectionextractor_write() call (as
+ * happens when a caller reads/decodes more than one TS packet at a time).
+ * The first packet completes section A with a valid CRC; the second packet
+ * -- processed within that same write() call, before the caller has any
+ * chance to query() -- hits the "already complete, pending query" branch.
+ * That must not clobber the valid CRC result already recorded for A. */
+static void test_crcvalid_not_clobbered_by_later_packet_in_same_batch(void)
+{
+	uint16_t pid = 0x100;
+	uint8_t tableId = 0xFC;
+	uint8_t payloadA[6] = { 'A', 'A', 'A', 'A', 'A', 'A' };
+	uint8_t payloadB[6] = { 'B', 'B', 'B', 'B', 'B', 'B' };
+
+	uint8_t pkts[2][188];
+	build_section_packet(pkts[0], pid, tableId, 0, payloadA, sizeof(payloadA));
+	build_section_packet(pkts[1], pid, tableId, 1, payloadB, sizeof(payloadB));
+
+	void *hdl;
+	ltntstools_sectionextractor_alloc(&hdl, pid, tableId);
+
+	int complete = 0, crcValid = 0;
+	ssize_t ret = ltntstools_sectionextractor_write(hdl, &pkts[0][0], 2, &complete, &crcValid);
+	CHECK(ret == section_total_len(sizeof(payloadA)));
+	CHECK(complete == 1);
+	CHECK(crcValid == 1);
+
+	uint8_t out[64];
+	int qret = ltntstools_sectionextractor_query(hdl, out, sizeof(out));
+	CHECK(qret > 0);
+	if (qret > 0) {
+		CHECK(memcmp(&out[3], payloadA, sizeof(payloadA)) == 0);
+	}
+
+	ltntstools_sectionextractor_free(hdl);
+}
+
 static void test_write_without_query_between_calls_loses_section(void)
 {
 	uint16_t pid = 0x100;
@@ -470,6 +522,7 @@ int main(void)
 
 	test_multiple_sections_with_query_between_each();
 	test_write_without_query_between_calls_loses_section();
+	test_crcvalid_not_clobbered_by_later_packet_in_same_batch();
 
 	if (g_failures == 0) {
 		printf("PASS: all sectionextractor tests passed\n");
