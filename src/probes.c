@@ -42,6 +42,8 @@
 struct ltnencoder_sei_ctx_s
 {
 	int64_t latencyMs;
+	uint32_t frameNumber;
+	int frameNumberValid;
 };
 
 struct scheduler_probe_ctx_s
@@ -61,6 +63,16 @@ int64_t ltntstools_probe_ltnencoder_get_total_latency(void *hdl)
 		return -1;
 
 	return ctx->latencyMs;
+}
+
+int ltntstools_probe_ltnencoder_get_frame_number(void *hdl, uint32_t *frameNumber)
+{
+	struct ltnencoder_sei_ctx_s *ctx = (struct ltnencoder_sei_ctx_s *)hdl;
+	if (!ctx || !frameNumber || !ctx->frameNumberValid)
+		return -1;
+
+	*frameNumber = ctx->frameNumber;
+	return 0;
 }
 
 void ltntstools_probe_ltnencoder_free(void *hdl)
@@ -87,6 +99,15 @@ static int _ltnencoder_sei_timestamp_query(struct ltnencoder_sei_ctx_s *ctx, con
 	struct timeval walltimeEncoderFrameEntry;
 	if (sei_timestamp_value_timeval_query(buf + offset, lengthBytes - offset, 2, &walltimeEncoderFrameEntry) < 0)
 		return -1;
+
+	/* Field 1, the encoder's incrementing frame counter. It precedes the timestamp
+	 * fields read above, so it is always present when they are.
+	 */
+	uint32_t frameNumber;
+	if (sei_timestamp_field_get(buf + offset, lengthBytes - offset, 1, &frameNumber) < 0)
+		return -1;
+	ctx->frameNumber = frameNumber;
+	ctx->frameNumberValid = 1;
 
 	struct timeval walltimeLocal;
 	gettimeofday(&walltimeLocal, NULL);

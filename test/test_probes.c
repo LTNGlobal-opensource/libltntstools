@@ -94,6 +94,22 @@ static void test_ltnencoder_get_total_latency_default_is_negative_one(void)
 	ltntstools_probe_ltnencoder_free(hdl);
 }
 
+static void test_ltnencoder_get_frame_number_rejects_bad_args_and_default(void)
+{
+	uint32_t frameNumber = 0xdeadbeef;
+	CHECK(ltntstools_probe_ltnencoder_get_frame_number(NULL, &frameNumber) == -1);
+
+	void *hdl = NULL;
+	ltntstools_probe_ltnencoder_alloc(&hdl);
+
+	CHECK(ltntstools_probe_ltnencoder_get_frame_number(hdl, NULL) == -1);
+	/* Nothing queried yet, so no frame number, and the output is left alone. */
+	CHECK(ltntstools_probe_ltnencoder_get_frame_number(hdl, &frameNumber) == -1);
+	CHECK(frameNumber == 0xdeadbeef);
+
+	ltntstools_probe_ltnencoder_free(hdl);
+}
+
 /* -------- ltnencoder probe: SEI timestamp query -------- */
 
 static void test_ltnencoder_query_no_uuid_fails(void)
@@ -134,6 +150,7 @@ static void test_ltnencoder_query_success_computes_latency(void)
 		frameEntry.tv_usec -= 300000;
 	}
 	sei_timestamp_value_timeval_set(payload, sizeof(payload), 2, &frameEntry);
+	sei_timestamp_field_set(payload, sizeof(payload), 1, 0x12345678);
 
 	unsigned char buf[sizeof(prefix) + sizeof(payload)];
 	memcpy(buf, prefix, sizeof(prefix));
@@ -144,6 +161,10 @@ static void test_ltnencoder_query_success_computes_latency(void)
 	int ret = ltntstools_probe_ltnencoder_sei_timestamp_query(hdl, buf, sizeof(buf));
 	gettimeofday(&after, NULL);
 	CHECK(ret == 0);
+
+	uint32_t frameNumber = 0;
+	CHECK(ltntstools_probe_ltnencoder_get_frame_number(hdl, &frameNumber) == 0);
+	CHECK(frameNumber == 0x12345678);
 
 	int64_t latencyMs = ltntstools_probe_ltnencoder_get_total_latency(hdl);
 	/* Loosely bracket: at least ~250ms (allowing scheduling slop below
@@ -180,6 +201,8 @@ static void test_ltnencoder_query_uuid_too_close_to_end_fails_cleanly(void)
 	/* Must still report the documented "no timing information detected"
 	 * default, not garbage derived from uninitialized memory. */
 	CHECK(ltntstools_probe_ltnencoder_get_total_latency(hdl) == -1);
+	uint32_t frameNumber = 0;
+	CHECK(ltntstools_probe_ltnencoder_get_frame_number(hdl, &frameNumber) == -1);
 
 	ltntstools_probe_ltnencoder_free(hdl);
 }
@@ -236,6 +259,7 @@ int main(void)
 	test_ltnencoder_alloc_free_basic();
 	test_ltnencoder_get_total_latency_null_hdl_returns_negative();
 	test_ltnencoder_get_total_latency_default_is_negative_one();
+	test_ltnencoder_get_frame_number_rejects_bad_args_and_default();
 
 	test_ltnencoder_query_no_uuid_fails();
 	test_ltnencoder_query_success_computes_latency();
