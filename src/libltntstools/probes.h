@@ -63,6 +63,18 @@ int  ltntstools_probe_ltnencoder_sei_timestamp_query(void *hdl, const unsigned c
 int64_t ltntstools_probe_ltnencoder_get_total_latency(void *hdl);
 
 /**
+ * @brief       Query the encoder's incrementing frame counter, from the most recent buffer
+ *              for which ltntstools_probe_ltnencoder_sei_timestamp_query() returned success.
+ *              The counter identifies a frame across the points of a system, so the same
+ *              frame can be matched between two probes. It may wrap or restart.
+ * @param[in]   void *hdl - Context returned from ltntstools_probe_ltnencoder_alloc()
+ * @param[out]  uint32_t *frameNumber - Frame counter.
+ * @return      0 - Success
+ * @return      < 0 - Error, no timing information detected, or invalid arguments.
+ */
+int  ltntstools_probe_ltnencoder_get_frame_number(void *hdl, uint32_t *frameNumber);
+
+/**
  * @brief       Allocate a new scheduler probe, for use with all other calls.
  * @param[out]  void **hdl - returned object.
  * @return      0 - Success
