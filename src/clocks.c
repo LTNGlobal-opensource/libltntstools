@@ -126,10 +126,25 @@ void ltntstools_clock_establish_wallclock(struct ltntstools_clock_s *clk, int64_
 	clk->pendingDiscontinuity = 0;
 }
 
+/* A step from the top of the clock's range to the bottom is only a wrap if the previous value was
+ * within this many seconds of the top and the new one is within this many seconds of the bottom.
+ * Anything else that goes backwards is a timestamp restart or reset, not a wrap.
+ */
+#define WRAP_PROXIMITY_SECONDS 10
+
+static int64_t _wrap_proximity_ticks(struct ltntstools_clock_s *clk)
+{
+	int64_t slack = clk->ticks_per_second > 0 ? clk->ticks_per_second * WRAP_PROXIMITY_SECONDS : clk->clockWrapValue / 1000;
+
+	/* Never so wide that the top and bottom zones meet. */
+	if (slack > clk->clockWrapValue / 4)
+		slack = clk->clockWrapValue / 4;
+
+	return slack;
+}
+
 void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 {
-	int wrapped = 0;
-
 	if (clk->pendingDiscontinuity) {
 		clk->pendingDiscontinuity = 0;
 		clk->clockWrapOccurences = 0;
@@ -142,29 +157,45 @@ void ltntstools_clock_set_ticks(struct ltntstools_clock_s *clk, int64_t ticks)
 		return;
 	}
 
-	/* If the new tick value jumps the clock backwards by more than 50%, assume it naturally wrapped */
-	if (ticks < (clk->currentTime_ticks / 50)) {
-		clk->clockWrapOccurences++;
-		wrapped = 1;
-	}
+	int64_t ref = clk->monotonicReference_ticks;
+	int64_t slack = clk->clockWrapValue > 0 ? _wrap_proximity_ticks(clk) : 0;
 
-	if (wrapped && clk->clockWrapValue > 0) {
-		clk->monotonicTime_ticks += ltntstools_clock_compute_delta(clk,
-			ticks, clk->monotonicReference_ticks);
+	if (clk->clockWrapValue > 0 && ref > clk->clockWrapValue - slack && ticks < slack) {
+		/* The previous value was just below the top of the range and this one is just above the bottom:
+		 * the counter wrapped. Keep the monotonic timeline climbing.
+		 */
+		clk->clockWrapOccurences++;
+		clk->monotonicTime_ticks += ltntstools_clock_compute_delta(clk, ticks, ref);
 		clk->monotonicReference_ticks = ticks;
 	} else
-	if (ticks > clk->monotonicReference_ticks) {
-		if (clk->ticks_per_second > 0 && (ticks - clk->monotonicReference_ticks) > (clk->ticks_per_second / 5)) {
+	if (clk->clockWrapValue > 0 && ref < slack && ticks > clk->clockWrapValue - slack) {
+		/* The counter has just wrapped and this value is from just before that, arriving late
+		 * (B frames reorder timestamps). It is behind the reference, so there is nothing to add.
+		 */
+		clk->backwardJumpUnder500msCount++;
+	} else
+	if (ticks > ref) {
+		if (clk->ticks_per_second > 0 && (ticks - ref) > (clk->ticks_per_second / 5)) {
 			clk->forwardJumpOver200msCount++;
 		}
-		clk->monotonicTime_ticks += ticks - clk->monotonicReference_ticks;
+		clk->monotonicTime_ticks += ticks - ref;
 		clk->monotonicReference_ticks = ticks;
 	} else
-	if (ticks < clk->currentTime_ticks &&
-		clk->ticks_per_second > 0 &&
-		(clk->currentTime_ticks - ticks) < (clk->ticks_per_second / 2))
-	{
-		clk->backwardJumpUnder500msCount++;
+	if (ticks < ref) {
+		if (clk->ticks_per_second > 0 && (ref - ticks) >= (clk->ticks_per_second / 2)) {
+			/* A large step backwards that is not a wrap: the timestamps restarted or were reset.
+			 * It carries no information about how much time passed, so take the new value as the
+			 * reference and leave the monotonic timeline where it is. The old behaviour, to wait
+			 * for the new values to climb back past the old high-water mark, made the clock
+			 * stall by the size of the step; and a drop to under 2% of the old value was taken
+			 * for a wrap, and added the rest of the range, which is hours.
+			 */
+			clk->discontinuityCount++;
+			clk->monotonicReference_ticks = ticks;
+		} else
+		if (ticks < clk->currentTime_ticks && clk->ticks_per_second > 0) {
+			clk->backwardJumpUnder500msCount++;
+		}
 	}
 	clk->currentTime_ticks = ticks;
 }

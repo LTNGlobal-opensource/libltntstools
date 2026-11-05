@@ -83,7 +83,7 @@ struct ltntstools_clock_s
 	int64_t clockWrapOccurences; /* Number of times this clock as past us "clockWrapValue" upper limit */
 	uint64_t backwardJumpUnder500msCount; /* Number of non-wrap backward jumps under 500 ms. */
 	uint64_t forwardJumpOver200msCount; /* Number of forward jumps over 200 ms. */
-	uint64_t discontinuityCount; /* Number of caller-marked clock discontinuities. */
+	uint64_t discontinuityCount; /* Number of clock discontinuities: caller-marked, or a large step backwards that was not a wrap. */
 	int pendingDiscontinuity; /* Next tick update should rebase the clock instead of counting anomalies. */
 	int64_t establishedTime_ticks;
 	struct timeval establishedWalltime; /* Walltime when we establish the 'establishedTime' field value. */
@@ -172,6 +172,15 @@ int  ltntstools_clock_is_established_wallclock(struct ltntstools_clock_s *clk);
  *              For example, after you've extracted a PTS from the PES, or a PCR clock from a frame,
  *              you should call this method to syncronize the timebase to walltime.
  *              In all cases, 'ticks' should be a positive value.
+ *
+ *              A step from just below clockWrapValue to just above zero is a wrap, and the monotonic
+ *              timeline keeps climbing. A value from just before a wrap that arrives after one from
+ *              just after it (B frames) is behind the reference, and adds nothing.
+ *              Any other step backwards of half a second or more is a restart or a reset of the
+ *              timestamps: it is counted as a discontinuity, the new value becomes the reference, and
+ *              the monotonic timeline stays where it is. A step forwards might be a real gap in the
+ *              stream, so it adds the time; if the caller knows it was a reset, use
+ *              ltntstools_clock_mark_discontinuity().
  * @param[in]   struct ltntstools_clock_s *clk - context
  * @param[in]   int64_t ticks - absolute value
  */
