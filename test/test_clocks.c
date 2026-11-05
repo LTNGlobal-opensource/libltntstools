@@ -255,8 +255,8 @@ static void test_set_ticks_wrap_detection(void)
 	ltntstools_clock_set_metadata(&clk, ltntstools_CLOCK_TYPE_PTS, NULL); /* 90kHz, MAX_PTS_VALUE wrap */
 	ltntstools_clock_establish_wallclock(&clk, MAX_PTS_VALUE - 1000);
 
-	/* A tick value under current/50 looks like the 33-bit PTS counter wrapping,
-	 * not a random backward jump -- the monotonic timeline should keep climbing. */
+	/* The previous value is just below the top of the 33-bit range and this one is just above zero:
+	 * the counter wrapped, and the monotonic timeline should keep climbing. */
 	ltntstools_clock_set_ticks(&clk, 500);
 
 	CHECK_EQ_I64(ltntstools_clock_get_ticks(&clk), 500);
@@ -264,6 +264,82 @@ static void test_set_ticks_wrap_detection(void)
 	CHECK_EQ_I64(ltntstools_clock_get_monotonic_ticks(&clk), MAX_PTS_VALUE + 500);
 	/* A genuine wrap must not also be counted as a plain backward jump. */
 	CHECK_EQ_U64(ltntstools_clock_get_backward_jump_under_500ms_count(&clk), 0);
+}
+
+/* A restart or reset of the timestamps is not a wrap, whatever the new value is relative to the old one:
+ * the monotonic timeline stays where it is and the step is counted as a discontinuity. This used to be
+ * taken for a wrap when the new value was under 2% of the old one, and so added the rest of the range
+ * (hours), and to stall the clock for the size of the step otherwise.
+ */
+static void test_set_ticks_restart_is_not_a_wrap(void)
+{
+	struct {
+		int64_t before, after;
+	} cases[] = {
+		{ 3000000000LL, 0 },              /* restart to zero from 9 hours in */
+		{ 6500000000LL, 0 },              /* ... from 20 hours in: further than half the range */
+		{ 3000000000LL, 1200000000LL },   /* restart to 40% of the old value */
+		{ 1000000000LL, 1000000000LL - 450000 }, /* a 5 second step back */
+	};
+
+	for (unsigned int i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+		struct ltntstools_clock_s clk;
+
+		ltntstools_clock_initialize(&clk);
+		ltntstools_clock_set_metadata(&clk, ltntstools_CLOCK_TYPE_PTS, NULL);
+		ltntstools_clock_establish_wallclock(&clk, cases[i].before);
+
+		ltntstools_clock_set_ticks(&clk, cases[i].after);
+		CHECK_EQ_I64(ltntstools_clock_get_ticks(&clk), cases[i].after);
+		CHECK_EQ_I64(ltntstools_clock_get_wrap_occurences(&clk), 0);
+		CHECK_EQ_I64(ltntstools_clock_get_monotonic_ticks(&clk), cases[i].before);
+		CHECK_EQ_U64(ltntstools_clock_get_discontinuity_count(&clk), 1);
+
+		/* Time carries on from the new value. */
+		ltntstools_clock_set_ticks(&clk, cases[i].after + 3003);
+		CHECK_EQ_I64(ltntstools_clock_get_monotonic_ticks(&clk), cases[i].before + 3003);
+		CHECK_EQ_U64(ltntstools_clock_get_discontinuity_count(&clk), 1);
+	}
+}
+
+/* B frames: a timestamp from just before a wrap can arrive after one from just after it. */
+static void test_set_ticks_reorder_across_wrap(void)
+{
+	struct ltntstools_clock_s clk;
+
+	ltntstools_clock_initialize(&clk);
+	ltntstools_clock_set_metadata(&clk, ltntstools_CLOCK_TYPE_PTS, NULL);
+	ltntstools_clock_establish_wallclock(&clk, MAX_PTS_VALUE - 100);
+
+	ltntstools_clock_set_ticks(&clk, 300); /* wraps */
+	CHECK_EQ_I64(ltntstools_clock_get_wrap_occurences(&clk), 1);
+	CHECK_EQ_I64(ltntstools_clock_get_monotonic_ticks(&clk), MAX_PTS_VALUE + 300);
+
+	ltntstools_clock_set_ticks(&clk, MAX_PTS_VALUE - 50); /* from before the wrap, late */
+	CHECK_EQ_I64(ltntstools_clock_get_ticks(&clk), MAX_PTS_VALUE - 50);
+	CHECK_EQ_I64(ltntstools_clock_get_wrap_occurences(&clk), 1);
+	CHECK_EQ_I64(ltntstools_clock_get_monotonic_ticks(&clk), MAX_PTS_VALUE + 300);
+	CHECK_EQ_U64(ltntstools_clock_get_backward_jump_under_500ms_count(&clk), 1);
+	CHECK_EQ_U64(ltntstools_clock_get_discontinuity_count(&clk), 0);
+
+	ltntstools_clock_set_ticks(&clk, 600);
+	CHECK_EQ_I64(ltntstools_clock_get_wrap_occurences(&clk), 1);
+	CHECK_EQ_I64(ltntstools_clock_get_monotonic_ticks(&clk), MAX_PTS_VALUE + 600);
+}
+
+/* A forward jump might be a real gap in the stream, and the clock cannot tell, so it still adds the time. */
+static void test_set_ticks_large_forward_jump_still_counts(void)
+{
+	struct ltntstools_clock_s clk;
+
+	ltntstools_clock_initialize(&clk);
+	ltntstools_clock_set_metadata(&clk, ltntstools_CLOCK_TYPE_PTS, NULL);
+	ltntstools_clock_establish_wallclock(&clk, 1000000);
+
+	ltntstools_clock_set_ticks(&clk, 1000000 + (90000 * 30));
+	CHECK_EQ_I64(ltntstools_clock_get_monotonic_ticks(&clk), 1000000 + (90000 * 30));
+	CHECK_EQ_U64(ltntstools_clock_get_forward_jump_over_200ms_count(&clk), 1);
+	CHECK_EQ_U64(ltntstools_clock_get_discontinuity_count(&clk), 0);
 }
 
 static void test_clock_compute_delta(void)
@@ -292,14 +368,14 @@ static void test_mark_discontinuity_rebases_next_set_ticks(void)
 
 	ltntstools_clock_initialize(&clk);
 	ltntstools_clock_set_metadata(&clk, ltntstools_CLOCK_TYPE_PTS, NULL);
-	ltntstools_clock_establish_wallclock(&clk, 1000);
+	ltntstools_clock_establish_wallclock(&clk, MAX_PTS_VALUE - 60000);
 
 	/* Rack up a forward jump and a wrap first, so we can tell what
 	 * mark_discontinuity() does and doesn't reset. */
-	ltntstools_clock_set_ticks(&clk, 1000 + 50000); /* forward jump: threshold is 90000/5 == 18000 */
+	ltntstools_clock_set_ticks(&clk, (MAX_PTS_VALUE - 60000) + 50000); /* forward jump: threshold is 90000/5 == 18000 */
 	CHECK_EQ_U64(ltntstools_clock_get_forward_jump_over_200ms_count(&clk), 1);
 
-	ltntstools_clock_set_ticks(&clk, 10); /* current/50 is large, 10 looks like a wrap */
+	ltntstools_clock_set_ticks(&clk, 10); /* just below the top of the range, then just above zero: a wrap */
 	CHECK_EQ_I64(ltntstools_clock_get_wrap_occurences(&clk), 1);
 
 	CHECK_EQ_U64(ltntstools_clock_get_discontinuity_count(&clk), 0);
@@ -629,6 +705,9 @@ int main(void)
 	test_set_ticks_forward_progress();
 	test_set_ticks_backward_jump_boundary();
 	test_set_ticks_wrap_detection();
+	test_set_ticks_restart_is_not_a_wrap();
+	test_set_ticks_reorder_across_wrap();
+	test_set_ticks_large_forward_jump_still_counts();
 	test_clock_compute_delta();
 
 	test_mark_discontinuity_rebases_next_set_ticks();
